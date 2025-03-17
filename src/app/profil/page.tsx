@@ -1,6 +1,7 @@
 'use client';
 
 import { signOut, useSession } from 'next-auth/react';
+import Image from 'next/image';
 import React from 'react';
 
 const ProfilePage = () => {
@@ -29,7 +30,7 @@ const ProfilePage = () => {
       <div className="bg-white shadow-lg rounded-lg p-6 w-96 text-center">
         {/* Imaginea utilizatorului */}
         <div className="mb-4">
-          <img
+          <Image
             src={image || '/default-avatar.png'}
             alt="Profile"
             className="w-24 h-24 rounded-full mx-auto border-4 border-primaryColor shadow-md"
