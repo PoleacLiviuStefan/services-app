@@ -1,6 +1,5 @@
 import React from 'react';
-import { FaPhoneVolume, FaVideo } from 'react-icons/fa';
-import { MdMessage } from 'react-icons/md';
+
 
 
 
