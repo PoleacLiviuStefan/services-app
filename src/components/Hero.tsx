@@ -3,6 +3,7 @@ import Button from './atoms/button';
 import Image from 'next/image';
 import element from '../../public/hero_element.png';
 import { FaArrowAltCircleRight } from "react-icons/fa";
+import Link from 'next/link';
 
 const Hero = () => {
   return (
@@ -26,7 +27,7 @@ const Hero = () => {
         ))}
       </div>
 
-      <div className="flex flex-col lg:flex-row items-center lg:gap-16 z-50">
+      <div className="flex flex-col lg:flex-row items-center lg:gap-16 z-40">
         <div className='flex flex-col lg:items-start items-center justify-center space-y-4 lg:space-y-8 text-left'>
           <h1 className="text-2xl lg:text-5xl font-extrabold">
             Lorem ipsum <span className='text-buttonSecondaryColor underline underline-offset-1 italic'>dolor sit</span>
@@ -36,12 +37,14 @@ const Hero = () => {
             Nemo fugiat adipisci asperiores harum suscipit cum cupiditate accusantium possimus nostrum ea!
           </p>
           <div className='flex space-x-2'>
-            <Button hero={true} className='px-6 lg:px-12 py-2 lg:py-3 gap-3 lg:gap-6 shadow-lg shadow-buttonPrimaryColor/70 bg-gradient-to-t from-buttonPrimaryColor to-buttonSecondaryColor text-md lg:text-lg hover:text-white hover:bg-primaryColor font-semibold'>
+            <Link href="/psihologi">
+            <Button horizontal={true} className='px-6 lg:px-12 py-2 lg:py-3 gap-3 lg:gap-6 shadow-lg shadow-buttonPrimaryColor/70 bg-gradient-to-t from-buttonPrimaryColor to-buttonSecondaryColor text-md lg:text-lg hover:text-white hover:bg-primaryColor font-semibold'>
               CONSULTAȚIE
               <span className='text-white text-lg lg:text-2xl'>
                 <FaArrowAltCircleRight />
               </span>
             </Button>
+            </Link>
             {/* alte elemente */}
           </div>
         </div>

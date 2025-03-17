@@ -97,7 +97,7 @@ const Slider = () => {
       <div className="flex items-center space-x-4">
         <button 
           onClick={goToPrevious} 
-          className="flex justify-center items-center bg-gradient-to-t from-buttonPrimaryColor to-buttonSecondaryColor text-4xl w-12 h-12 rounded-full text-white"
+           className="flex justify-center items-center bg-gradient-to-t from-buttonPrimaryColor to-buttonSecondaryColor text-2xl lg:text-4xl w-10 lg:w-12 h-10 lg:h-12 rounded-full text-white"
         >
           <FaCaretLeft />
         </button>
@@ -114,14 +114,14 @@ const Slider = () => {
         
         <button 
           onClick={goToNext} 
-          className="flex justify-center items-center bg-gradient-to-t from-buttonPrimaryColor to-buttonSecondaryColor text-4xl w-12 h-12 rounded-full text-white"
+           className="flex justify-center items-center bg-gradient-to-t from-buttonPrimaryColor to-buttonSecondaryColor text-2xl lg:text-4xl w-10 lg:w-12 h-10 lg:h-12 rounded-full text-white"
         >
           <FaCaretRight />
         </button>
       </div>
       
       <div className="flex justify-center w-full">
-        <Button className="bg-gradient-to-t border-2 border-buttonPrimaryColor/20 shadow-lg shadow-buttonPrimaryColor/40 from-buttonPrimaryColor to-buttonSecondaryColor px-8 py-4 text-md text-white font-semibold">
+        <Button className="bg-gradient-to-t border-2 border-buttonPrimaryColor/20 shadow-lg shadow-buttonPrimaryColor/40 from-buttonPrimaryColor to-buttonSecondaryColor px-4 lg:px-8 py-2 lg:py-4 text-md text-white font-semibold">
           VEZI TOTI ASTROLOGII
         </Button>
       </div>
