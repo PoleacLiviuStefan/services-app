@@ -5,7 +5,7 @@ import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcrypt";
 
-// Extend the built-in types using module augmentation
+// ✅ Extindem tipurile pentru a include rolurile și genul
 declare module "next-auth" {
   interface User {
     id: string;
@@ -32,6 +32,7 @@ declare module "next-auth/jwt" {
   }
 }
 
+// ✅ Definim opțiunile NextAuth
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
   providers: [
@@ -106,7 +107,10 @@ export const authOptions: NextAuthOptions = {
   },
 };
 
-// ✅ Adăugăm handler corect pentru Next.js 15
-const handler = NextAuth(authOptions);
-export const GET = handler;
-export const POST = handler;
+export async function GET(req: Request) {
+    return NextAuth(authOptions)(req);
+  }
+  
+  export async function POST(req: Request) {
+    return NextAuth(authOptions)(req);
+  }
