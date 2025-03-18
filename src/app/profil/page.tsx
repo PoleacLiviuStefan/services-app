@@ -30,11 +30,14 @@ const ProfilePage = () => {
       <div className="bg-white shadow-lg rounded-lg p-6 w-96 text-center">
         {/* Imaginea utilizatorului */}
         <div className="mb-4">
-          <Image
-            src={image || '/default-avatar.png'}
+          {
+            image ? 
+            <Image
+            src={image}
             alt="Profile"
             className="w-24 h-24 rounded-full mx-auto border-4 border-primaryColor shadow-md"
-          />
+          /> : null
+          }
         </div>
 
         {/* Informații utilizator */}

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from 'next/link';
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import Button from './atoms/button';
 import { signIn, useSession } from 'next-auth/react';
 import google from '../../public/google.svg';
@@ -25,10 +25,12 @@ const SignUpForm = () => {
 
   const [error, setError] = useState("");
 
-  // Dacă utilizatorul este deja autentificat, îl redirecționăm
-  if (user) {
-    router.push('/profil');
-  }
+  // 🔥 Redirecționează utilizatorul doar DUPĂ randare
+  useEffect(() => {
+    if (user) {
+      router.push('/profil');
+    }
+  }, [user, router]); // Se execută doar când `user` se schimbă
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
