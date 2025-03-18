@@ -12,7 +12,7 @@ declare module "next-auth" {
     role?: string;
     gender?: string;
   }
-  
+
   interface Session {
     user: {
       id: string;
@@ -88,7 +88,7 @@ export const authOptions: NextAuthOptions = {
       return {
         ...session,
         user: {
-          id: token.sub,
+          id: token.sub!,
           name: session.user?.name ?? "Utilizator",
           email: session.user?.email ?? "",
           image: session.user?.image ?? "",
@@ -106,5 +106,7 @@ export const authOptions: NextAuthOptions = {
   },
 };
 
+// ✅ Adăugăm handler corect pentru Next.js 15
 const handler = NextAuth(authOptions);
-export { handler as GET, handler as POST };
+export const GET = handler;
+export const POST = handler;
