@@ -79,7 +79,7 @@ const NavbarMobile = () => {
               onClick={togglePsychologists}
               className="flex items-center justify-center w-full text-white font-bold px-4 py-2 focus:outline-none"
             >
-              <span>PSIHOLOGI</span>
+              <span>ASTROLOGI</span>
               <FaChevronDown className={`ml-2 transition-transform duration-300 ${isPsychologistsOpen ? 'rotate-180' : ''}`} />
             </button>
 
@@ -90,7 +90,7 @@ const NavbarMobile = () => {
             >
               <ul className="mt-2 bg-white text-primaryColor text-center rounded-lg shadow-lg">
                 {specialities.map((speciality, index) => (
-                  <Link key={index} href="/psihologi" onClick={() => {setIsOpen(false); setIsPsychologistsOpen(false)}} className="block w-full">
+                  <Link key={index} href="/astrologi" onClick={() => {setIsOpen(false); setIsPsychologistsOpen(false)}} className="block w-full">
                     <li className="py-2 px-4 hover:bg-primaryColor/10 cursor-pointer">
                       {speciality}
                     </li>

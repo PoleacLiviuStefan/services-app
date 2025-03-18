@@ -37,7 +37,7 @@ const Hero = () => {
             Nemo fugiat adipisci asperiores harum suscipit cum cupiditate accusantium possimus nostrum ea!
           </p>
           <div className='flex space-x-2'>
-            <Link href="/psihologi">
+            <Link href="/astrologi">
             <Button horizontal={true} className='px-6 lg:px-12 py-2 lg:py-3 gap-3 lg:gap-6 shadow-lg shadow-buttonPrimaryColor/70 bg-gradient-to-t from-buttonPrimaryColor to-buttonSecondaryColor text-md lg:text-lg hover:text-white hover:bg-primaryColor font-semibold'>
               CONSULTAȚIE
               <span className='text-white text-lg lg:text-2xl'>
