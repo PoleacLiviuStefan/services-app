@@ -1,27 +1,28 @@
-import { NextApiRequest, NextApiResponse } from "next";
-import { getSession } from "next-auth/react";
+import { NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+
 import { prisma } from "@/lib/prisma";
+import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 
-export default async function handler(req: NextApiRequest,res: NextApiResponse){
-    const session =await getSession({req});
+export async function GET() {
+  const session = await getServerSession(authOptions);
 
-    if(!session || !session.user?.email){
-        return res.status(401).json({error:'Not authenticated'});
-    }
+  if (!session || !session.user?.email) {
+    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  }
 
-    const user =await prisma.user.findUnique({
-        where: {email: session.user.email},
-        include: {provider: true},
-    })
+  const user = await prisma.user.findUnique({
+    where: { email: session.user.email },
+    include: { provider: true },
+  });
 
-    if(!user || !user.provider){
-        return res.status(404).json({error:'Provider data not found for this user'})
-    }
+  if (!user || !user.provider) {
+    return NextResponse.json({ error: "Provider data not found for this user" }, { status: 404 });
+  }
 
-    const tools= await prisma.tool.findMany({
-        where: {providerId: user.provider.id},
-    })
+  const tools = await prisma.tool.findMany({
+    where: { providerId: user.provider.id },
+  });
 
-    return res.status(200).json({tools});
-
+  return NextResponse.json({ tools }, { status: 200 });
 }

@@ -1,29 +1,28 @@
-// pages/api/my-services.ts
-import type { NextApiRequest, NextApiResponse } from 'next';
-import { getSession } from 'next-auth/react';
-import { prisma } from "@/lib/prisma";
+import { NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  // Obținem sesiunea curentă
-  const session = await getSession({ req });
+import { prisma } from "@/lib/prisma";
+import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+
+export async function GET() {
+  const session = await getServerSession(authOptions);
+
   if (!session || !session.user?.email) {
-    return res.status(401).json({ error: 'Not authenticated' });
+    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
-  // Căutăm utilizatorul după email și includem câmpul provider
   const user = await prisma.user.findUnique({
     where: { email: session.user.email },
     include: { provider: true },
   });
 
   if (!user || !user.provider) {
-    return res.status(404).json({ error: 'Provider data not found for this user' });
+    return NextResponse.json({ error: "Provider data not found for this user" }, { status: 404 });
   }
 
-  // Obținem serviciile asociate provider-ului curent
   const services = await prisma.service.findMany({
     where: { providerId: user.provider.id },
   });
 
-  return res.status(200).json({ services });
+  return NextResponse.json({ services }, { status: 200 });
 }

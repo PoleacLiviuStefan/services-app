@@ -1,26 +1,28 @@
-import { NextApiRequest, NextApiResponse } from "next";
-import { getSession } from "next-auth/react";
+import { NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+
 import { prisma } from "@/lib/prisma";
+import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse){
-    const session = await getSession({req});
-    if(!session || !session.user?.email){
-        return res.status(401).json({error:'Not authenticated'});
-    }
+export async function GET() {
+  const session = await getServerSession(authOptions);
 
-    const user =await prisma?.user.findUnique({
-        where: {email: session.user.email},
-        include: {provider: true},
-    })
+  if (!session || !session.user?.email) {
+    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  }
 
-    if(!user || !user.provider){
-        return res.status(404).json({error:'Provider data not found for this user'})
-    }
+  const user = await prisma?.user.findUnique({
+    where: { email: session.user.email },
+    include: { provider: true },
+  });
 
-    const reviews = await prisma?.review.findMany({
-        where: {providerId: user.provider.id},
-    })
+  if (!user || !user.provider) {
+    return NextResponse.json({ error: "Provider data not found for this user" }, { status: 404 });
+  }
 
-    return res.status(200).json({reviews})
+  const reviews = await prisma?.review.findMany({
+    where: { providerId: user.provider.id },
+  });
 
+  return NextResponse.json({ reviews }, { status: 200 });
 }
