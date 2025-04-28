@@ -1,16 +1,14 @@
 "use client";
-import React, { useState } from "react";
+import React from "react";
 
 import CategorySelector from "./CategorySelector";
+import { useCatalogStore } from "@/store/catalog";
 
 export const SortPsychics = () => {
 
-  const [selectedSortOption, setSelectedSortOption] = useState("");
-  const [selectedSpecialityOption, setSelectedSpecialityOption] = useState("");
-  const [selectedToolsOption, setSelectedToolsOption] = useState("");
-  const [selectedReadingOption, setSelectedReadingOption] = useState("");
-
-
+  const specialities=useCatalogStore((s) => s.specialities);
+  const tools=useCatalogStore((s) => s.tools);
+  const readings=useCatalogStore((s) => s.readings);
   const sortOptions = [
     "Numar Recenzii",
     "Pret - descrescator",
@@ -18,56 +16,31 @@ export const SortPsychics = () => {
     "Pret - Crescator",
   ];
 
-  const specialityOptions= [
-    "Specialitate 1",
-    "Specialitate 2",
-    "Specialitate 3",
-    "Specialitate 4",
-  ]
-  
-  const toolsOptions= [
-    "Unealta 1",
-    "Unealta 2",
-    "Unealta 3",
-    "Unealta 4",
-  ]
-
-  const readingOptions= [
-    "Citire 1",
-    "Citire 2",
-    "Citire 3",
-    "Citire 4",
-  ]
-
   
 
   return (
     <div className="flex flex-col space-y-4 lg:mt-12">
         <CategorySelector
-        setSelectOption={setSelectedSortOption}
+        filterKey="sort"
         options={sortOptions}
-        title={selectedSortOption || "Sorteaza Dupa"}
-        selectedOption={selectedSortOption}
+        title={"Sorteaza Dupa"}
         />
 
         <CategorySelector
-        setSelectOption={setSelectedSpecialityOption}
-        options={specialityOptions}
-        title={selectedSpecialityOption || "Specialitate"}
-        selectedOption={selectedSpecialityOption}
+        filterKey="speciality"
+        options={specialities}
+        title={"Specialitate"}
         />
  
         <CategorySelector
-        setSelectOption={setSelectedToolsOption}
-        options={toolsOptions}
-        title={selectedToolsOption || "Unelte"}
-        selectedOption={selectedToolsOption}
+        filterKey="tool"
+        options={tools}
+        title={"Unelte"}
         />
-                <CategorySelector
-        setSelectOption={setSelectedReadingOption}
-        options={readingOptions}
-        title={selectedReadingOption || "Citire"}
-        selectedOption={selectedReadingOption}
+        <CategorySelector
+        filterKey="reading"
+        options={readings}
+        title={"Citire"}
         />
 
     </div>

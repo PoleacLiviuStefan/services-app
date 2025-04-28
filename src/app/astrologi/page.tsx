@@ -1,15 +1,34 @@
-import FilteredPsychics from '@/components/FilteredPsychics'
-import React from 'react'
+'use client';
+import React, { useEffect } from 'react';
+import FilteredPsychics from '@/components/FilteredPsychics';
+import { useCatalogStore } from '@/store/catalog';
 
-const page = () => {
+const Page = () => {
+
+  const fetchCatalog   = useCatalogStore((s) => s.fetchCatalog);
+  const selectedFilters   = useCatalogStore((s) => s.selectedFilters);
+  useEffect(() => {
+    fetchCatalog();
+    
+  }, [fetchCatalog]);
+  useEffect(() => {
+    console.log('Selected filters:', selectedFilters);
+  }, [selectedFilters]);
   return (
-    <div className='flex flex-col items-center   min-h-screen w-full h-full   px-4 py-20  bg-gradient-to-t from-primaryColor to-secondaryColor  '>
-            <div className='flex flex-col items-center lg:items-start w-full lg:w-[67rem] space-y-8 '>
-            <h1 className='text-white font-semibold  text-2xl lg:text-4xl'>Astrologi Lorem Ipsum</h1>
-            <FilteredPsychics />
-            </div>
-    </div>
-  )
-}
+    <div className="flex flex-col items-center min-h-screen w-full px-4 py-20 bg-gradient-to-t from-primaryColor to-secondaryColor">
+      <div className="flex flex-col items-center lg:items-start w-full lg:w-[67rem] space-y-8">
+        <h1 className="text-white font-semibold text-2xl lg:text-4xl">
+          Astrologi Lorem Ipsum
+        </h1>
 
-export default page 
+
+
+
+
+        <FilteredPsychics />
+      </div>
+    </div>
+  );
+};
+
+export default Page;

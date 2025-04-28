@@ -20,8 +20,8 @@ export default {
       colors: {
         background: "var(--background)",
         foreground: "var(--foreground)",
-        primaryColor: "#064089",
-        secondaryColor: "#0A61C9",
+        primaryColor: "#480689",
+        secondaryColor: "#5805aa",
         buttonPrimaryColor : "#F36A35",
         buttonSecondaryColor : "#F38C3B",
         textPrimaryColor: "#e6f7fc"
@@ -29,7 +29,12 @@ export default {
       backgroundImage: {
         'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
       },
-      
+      width: {
+        card: 'var(--card-width)',
+      },
+      height:{
+        card: 'var(--card-height)',
+      },
     },
   },
   plugins: [],

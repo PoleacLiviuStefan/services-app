@@ -1,9 +1,16 @@
-import React from 'react'
+import React, { forwardRef } from 'react';
 
-const SearchInput = () => {
+const SearchInput = forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>((props, ref) => {
   return (
-    <input className='border border-gray-400 p-2 rounded-md w-full text-sm lg:text-md lg:w-80 py-3 focus:outline-gray-500' placeholder='Cauta un psiholog ' />
-  )
-}
+    <input
+      {...props}
+      ref={ref}
+      className='border border-gray-400 p-2 rounded-md w-full text-sm lg:text-md lg:w-50 py-3 focus:outline-primaryColor'
+      placeholder={props.placeholder || 'Cauta un psiholog'}
+    />
+  );
+});
 
-export default SearchInput
+SearchInput.displayName = 'SearchInput';
+
+export default SearchInput;

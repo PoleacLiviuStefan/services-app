@@ -82,7 +82,7 @@ const Slider = () => {
             >
               <ProviderCard 
                 name={`Provider ${item}`} 
-                photo={person} 
+                image={person} 
                 rating={4.5} 
                 description="Lorem ipsum dolor sit amet, consectetur adipiscing elit." 
                 reviews={Math.floor(Math.random() * 100)}

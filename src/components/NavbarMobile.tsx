@@ -4,6 +4,9 @@ import Link from 'next/link';
 import { FaUserAlt, FaChevronDown } from 'react-icons/fa';
 import Button from './atoms/button';
 import { useSession, signOut } from 'next-auth/react';
+import mysticLogo from '../../public/mysticnoblack.svg';
+import Image from 'next/image';
+import { useCatalogStore } from '@/store/catalog';
 
 const NavbarMobile = () => {
   const { data: session, status } = useSession();
@@ -14,7 +17,7 @@ const NavbarMobile = () => {
   const toggleMenu = () => setIsOpen(!isOpen);
   const togglePsychologists = () => setIsPsychologistsOpen(!isPsychologistsOpen);
 
-  const specialities = ["Specializare1", "Specializare2", "Specializare3", "Specializare4", "Specializare5"];
+  const specialities = useCatalogStore((state) => state.specialities);
 
   return (
     <nav className="lg:hidden fixed top-0 left-0 w-full h-[50px] z-50 bg-primaryColor">
@@ -31,7 +34,7 @@ const NavbarMobile = () => {
         {/* Logo in absolute position for perfect centering */}
         <div className="absolute z-10 left-1/2 transform -translate-x-1/2">
           <Link href="/" onClick={toggleMenu}>
-            <span className="text-white font-bold">LOGO</span>
+            <Image src={mysticLogo} alt="Mystic Gold Logo" className="w-[60px] h-full" />
           </Link>
         </div>
 
@@ -92,7 +95,7 @@ const NavbarMobile = () => {
                 {specialities.map((speciality, index) => (
                   <Link key={index} href="/astrologi" onClick={() => {setIsOpen(false); setIsPsychologistsOpen(false)}} className="block w-full">
                     <li className="py-2 px-4 hover:bg-primaryColor/10 cursor-pointer">
-                      {speciality}
+                      {speciality.name}
                     </li>
                   </Link>
                 ))}

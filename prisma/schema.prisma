@@ -1,12 +1,10 @@
-// prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
-}
-
-generator client {
-  provider = "prisma-client-js"
 }
 
 enum Role {
@@ -14,61 +12,92 @@ enum Role {
   STANDARD
 }
 
-model Service {
-  id            Int      @id @default(autoincrement())
-  name          String     
-  call_price    Float?
-  message_price Float?
-  video_price   Float?
-  // Fiecare serviciu aparține unui provider
-  provider      Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
-  providerId    String
-}
-
-model Tool {
-  id         Int      @id @default(autoincrement())
-  name       String   
-  // Fiecare tool aparține unui provider
-  provider   Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
-  providerId String
-}
-
-model Review {
-  id         Int      @id @default(autoincrement())
-  stars      Int      
-  date       DateTime
-  comment    String?
-  fromUser   User     @relation("ReviewFromUser", fields: [fromUserId], references: [id], onDelete: Cascade)
-  fromUserId String
-  provider   Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
-  providerId String
-}
-
 model User {
-  id            String    @id @default(uuid())
-  name          String?
-  email         String?   @unique
-  emailVerified DateTime?
-  image         String?
-  password      String?   
-  birthDate     DateTime?
-  gender        String?
-  role          Role      @default(STANDARD)
-  accounts      Account[]
-  sessions      Session[]
-  // Dacă acest câmp este null, utilizatorul este client; dacă există o relație, utilizatorul este furnizor.
-  provider      Provider?
-  reviewsGiven  Review[]  @relation("ReviewFromUser")
+  id                  String               @id @default(uuid())
+  name                String?
+  email               String?              @unique
+  emailVerified       DateTime?
+  image               String?
+  password            String?
+  birthDate           DateTime?
+  gender              String?
+  role                Role                 @default(STANDARD)
+  consultingSessions  ConsultingSession[]  @relation("ClientSessions")
+  accounts            Account[]
+  sessions            Session[]            @relation("UserSessions")
+  provider            Provider?            @relation("UserToProvider")
+  reviewsFrom         Review[]             @relation("ReviewFromUser")
+  groupUsers          GroupUsers[]
+  chatGroups          ChatGroup[]
 }
 
 model Provider {
-  id          String    @id @default(uuid())
-  userId      String    @unique
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id               String       @id @default(uuid())
+  userId           String       @unique
+  user             User         @relation("UserToProvider", fields: [userId], references: [id], onDelete: Cascade)
+  description      String?
+  grossVolume      Int?
+  tools            Tool[]       
+  sessions         ConsultingSession[] @relation("ProviderSessions")
+  specialities     Speciality[] 
+  readingId        String?                                // Foreign key
+  reading          Reading?     @relation("ProviderReading")
+  mainSpecialityId String?     
+  mainToolId       String?       
+  mainSpeciality   Speciality?  @relation("MainSpeciality", fields: [mainSpecialityId], references: [id])
+  mainTool         Tool?        @relation("MainTool", fields: [mainToolId], references: [id])
+}
+
+
+model Speciality {
+  id                     String        @id @default(uuid())
+  providerId             String
+  name                   String
+  description            String?
+  price                  Float
+  provider               Provider      @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  mainSpecialityProvider Provider[]    @relation("MainSpeciality")
+  sessions               ConsultingSession[]
+}
+
+model Tool {
+  id                String       @id @default(uuid())
+  providerId        String
+  name              String
+  description       String?
+  provider          Provider     @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  mainToolProvider  Provider[]   @relation("MainTool")
+}
+
+model ConsultingSession {
+  id           String      @id @default(uuid())
+  providerId   String
+  clientId     String
+  specialityId String
+
+  startDate    DateTime?
+  endDate      DateTime?
+  price        Int?
+  isFinished   Boolean     @default(false)
+
+  provider     Provider    @relation("ProviderSessions", fields: [providerId], references: [id], onDelete: Cascade)
+  client       User        @relation("ClientSessions", fields: [clientId], references: [id], onDelete: Cascade)
+  speciality   Speciality  @relation(fields: [specialityId], references: [id], onDelete: Cascade)
+}
+
+model Reading {
+  id          String   @id @default(uuid())
+  providerId  String   @unique
+  name        String
   description String?
-  services    Service[]
-  tools       Tool[]
-  reviews     Review[]
+  provider    Provider @relation("ProviderReading", fields: [providerId], references: [id], onDelete: Cascade)
+}
+
+model Review {
+  id         String   @id @default(uuid())
+  comment    String?
+  fromUser   User     @relation("ReviewFromUser", fields: [fromUserId], references: [id], onDelete: Cascade)
+  fromUserId String
 }
 
 model Account {
@@ -90,16 +119,29 @@ model Account {
 }
 
 model Session {
-  id           Int      @id @default(autoincrement())
+  id           String   @id @default(uuid())
   sessionToken String   @unique
   userId       String
+  user         User     @relation("UserSessions", fields: [userId], references: [id], onDelete: Cascade)
   expires      DateTime
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
-model VerificationToken {
-  identifier String
-  token      String   @unique
-  expires    DateTime
-  @@unique([identifier, token])
+model GroupUsers {
+  id         Int        @id @default(autoincrement())
+  group      ChatGroup  @relation(fields: [group_id], references: [id], onDelete: Cascade)
+  group_id   String
+  user       User       @relation(fields: [user_id], references: [id])
+  user_id    String
+  createdAt  DateTime   @default(now())
+}
+
+model ChatGroup {
+  id         String     @id @default(uuid())
+  user       User       @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  user_id    String
+  name       String
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  groupUsers GroupUsers[]
 }
