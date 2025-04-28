@@ -39,7 +39,7 @@ const AdminPsychics: React.FC<AdminPsychicsProps> = ({physics}) => {
               image={physic.image}
               role={physic.role}
               email={physic.email}
-              isProvider={physic.provider ? true : false}
+              isProvider={physic.isProvider ? true : false}
               rating={4.5}
               description="Lorem ipsum dolor sit amet, consectetur adipiscing elit."
               reviews={Math.floor(Math.random() * 100)}

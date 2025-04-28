@@ -1,6 +1,7 @@
 import { getServerSession } from "next-auth";
 import { prisma } from "@/lib/prisma";
 import { authOptions } from "@/lib/auth";
+import { Provider } from "@prisma/client";
 
 export async function PATCH(req: Request) {
   const session = await getServerSession(authOptions);
@@ -51,13 +52,14 @@ export async function PATCH(req: Request) {
     } = await req.json();
 
     // Construim obiectul de update din câmpurile trimise (dacă sunt prezente)
-    const updateData: any = {};
+    const updateData: Partial<Provider> = {};
+
 
     if (description) updateData.description = description;
     if (mainToolId) updateData.mainToolId = mainToolId;
     if (mainSpecialityId) updateData.mainSpecialityId = mainSpecialityId;
     if (mainSpecialityId) updateData.mainSpecialityId = mainSpecialityId;
-    if (reading) updateData.reading = reading;
+    if (reading) updateData.readingId = reading;
     // Actualizarea providerului
     const updatedProvider = await prisma.provider.update({
       where: { id: providerId },

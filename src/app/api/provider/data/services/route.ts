@@ -20,7 +20,7 @@ export async function GET() {
     return NextResponse.json({ error: "Provider data not found for this user" }, { status: 404 });
   }
 
-  const services = await prisma.service.findMany({
+  const services = await prisma.speciality.findMany({
     where: { providerId: user.provider.id },
   });
 

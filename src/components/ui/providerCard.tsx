@@ -175,7 +175,7 @@ const ProviderCard: React.FC<ProviderCardProp> = ({
               showSettingModal ? 'fixed' : 'hidden'
             } top-0 left-0 w-full h-full bg-black/50 flex justify-center items-center z-50`}
           >
-            <SettingsModal setShowSettings={(value)=>setShowSettingModal(value)} />
+            <SettingsModal setShowSettings={(value:boolean)=>setShowSettingModal(value)} />
           </div>
         </>
       )}

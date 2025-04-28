@@ -21,9 +21,12 @@ export async function GET() {
     return NextResponse.json({ error: "Provider data not found for this user" }, { status: 404 });
   }
 
-  const reviews = await prisma?.review.findMany({
-    where: { providerId: user.provider.id },
+  const reviews = await prisma.review.findMany({
+    where: {
+      fromUserId: user.id, // aici user.id trebuie să existe
+    },
   });
+  
 
   return NextResponse.json({ reviews }, { status: 200 });
 }
