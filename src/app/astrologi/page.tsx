@@ -1,5 +1,5 @@
 'use client';
-import React, { useEffect } from 'react';
+import React, { Suspense, useEffect } from 'react';
 import FilteredPsychics from '@/components/FilteredPsychics';
 import { useCatalogStore } from '@/store/catalog';
 
@@ -25,7 +25,9 @@ const Page = () => {
 
 
 
+        <Suspense fallback={<div>Loading...</div>}>
         <FilteredPsychics />
+      </Suspense>
       </div>
     </div>
   );
