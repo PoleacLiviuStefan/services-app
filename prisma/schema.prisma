@@ -12,108 +12,179 @@ enum Role {
   STANDARD
 }
 
+enum Service {
+  CHAT
+  MEET
+}
+
 model User {
-  id                  String               @id @default(uuid())
-  name                String?
-  email               String?              @unique
+  id                  String                @id @default(uuid())
+  name                String?               @unique
+  email               String?               @unique
   emailVerified       DateTime?
   image               String?
   password            String?
   birthDate           DateTime?
   gender              String?
-  role                Role                 @default(STANDARD)
-  consultingSessions  ConsultingSession[]  @relation("ClientSessions")
+  role                Role                  @default(STANDARD)
+
+  consultingSessions  ConsultingSession[]   @relation("ClientSessions")
   accounts            Account[]
-  sessions            Session[]            @relation("UserSessions")
-  provider            Provider?            @relation("UserToProvider")
-  reviewsFrom         Review[]             @relation("ReviewFromUser")
+  sessions            Session[]             @relation("UserSessions")
+  provider            Provider?             @relation("UserToProvider")
+  reviewsFrom         Review[]              @relation("ReviewFromUser")
   groupUsers          GroupUsers[]
   chatGroups          ChatGroup[]
+  providerPackages    UserProviderPackage[] @relation("UserPackages")
+  emailVerification   EmailVerification?    @relation("UserEmailVerification")
 }
 
 model Provider {
-  id               String       @id @default(uuid())
-  userId           String       @unique
-  user             User         @relation("UserToProvider", fields: [userId], references: [id], onDelete: Cascade)
-  description      String?
-  grossVolume      Int?
-  tools            Tool[]       
-  sessions         ConsultingSession[] @relation("ProviderSessions")
-  specialities     Speciality[] 
-  readingId        String?                                // Foreign key
-  reading          Reading?     @relation("ProviderReading")
-  mainSpecialityId String?     
-  mainToolId       String?       
-  mainSpeciality   Speciality?  @relation("MainSpeciality", fields: [mainSpecialityId], references: [id])
-  mainTool         Tool?        @relation("MainTool", fields: [mainToolId], references: [id])
-}
-
-
-model Speciality {
-  id                     String        @id @default(uuid())
-  providerId             String
-  name                   String
+  id                     String                   @id @default(uuid())
+  userId                 String                   @unique
+  user                   User                     @relation("UserToProvider", fields: [userId], references: [id], onDelete: Cascade)
+  stripeAccountId        String?      @unique
+  online                 Boolean                  @default(false)
   description            String?
-  price                  Float
-  provider               Provider      @relation(fields: [providerId], references: [id], onDelete: Cascade)
-  mainSpecialityProvider Provider[]    @relation("MainSpeciality")
-  sessions               ConsultingSession[]
+  videoUrl               String?
+  grossVolume            Float?                   @default(0)
+
+  /// URI-ul unic al calendarului Calendly (seat-ul provider-ului)
+  calendlyCalendarUri    String?                  @unique
+
+  readingId              String?
+  reading                Reading?                 @relation("ProviderReading", fields: [readingId], references: [id], onDelete: SetNull)
+
+  specialities           Speciality[]             @relation("ProviderSpecialities")
+  tools                  Tool[]                   @relation("ProviderTools")
+  mainSpecialityId       String?
+  mainSpeciality         Speciality?              @relation("ProviderMainSpeciality", fields: [mainSpecialityId], references: [id])
+  mainToolId             String?
+  mainTool               Tool?                    @relation("ProviderMainTool", fields: [mainToolId], references: [id])
+  reviews                Review[]                 @relation("ReviewForProvider")
+  sessions               ConsultingSession[]      @relation("ProviderSessions")
+  providerPackages       ProviderPackage[]        @relation("ProviderPkg")
+  userProviderPackages   UserProviderPackage[]    @relation("UserProviderPkgs")
+
+  /// Relație către subscripțiile webhook Calendly
+  calendlySubscriptions  CalendlyWebhookSubscription[] @relation("ProviderCalendlyWebhooks")
 }
 
-model Tool {
-  id                String       @id @default(uuid())
-  providerId        String
-  name              String
-  description       String?
-  provider          Provider     @relation(fields: [providerId], references: [id], onDelete: Cascade)
-  mainToolProvider  Provider[]   @relation("MainTool")
+model ProviderPackage {
+  id             String                  @id @default(uuid())
+  providerId     String
+  service        Service
+  totalSessions  Int
+  price          Float
+  createdAt      DateTime                @default(now())
+  expiresAt      DateTime?
+
+  provider       Provider                @relation("ProviderPkg", fields: [providerId], references: [id], onDelete: Cascade)
+  userProviderPackages UserProviderPackage[] @relation("ProviderPackageUsers")
 }
 
-model ConsultingSession {
-  id           String      @id @default(uuid())
-  providerId   String
-  clientId     String
-  specialityId String
+model UserProviderPackage {
+  id               String                  @id @default(uuid())
+  userId           String
+  providerId       String
+  packageId        String
+  totalSessions    Int
+  usedSessions     Int                     @default(0)
+  createdAt        DateTime                @default(now())
+  expiresAt        DateTime?
 
-  startDate    DateTime?
-  endDate      DateTime?
-  price        Int?
-  isFinished   Boolean     @default(false)
+  user             User                    @relation("UserPackages", fields: [userId], references: [id], onDelete: Cascade)
+  provider         Provider                @relation("UserProviderPkgs", fields: [providerId], references: [id], onDelete: Cascade)
+  providerPackage  ProviderPackage         @relation("ProviderPackageUsers", fields: [packageId], references: [id], onDelete: Cascade)
+  sessions         ConsultingSession[]     @relation("SessionUserPackage")
 
-  provider     Provider    @relation("ProviderSessions", fields: [providerId], references: [id], onDelete: Cascade)
-  client       User        @relation("ClientSessions", fields: [clientId], references: [id], onDelete: Cascade)
-  speciality   Speciality  @relation(fields: [specialityId], references: [id], onDelete: Cascade)
+  @@unique([userId, providerId, packageId])
 }
 
 model Reading {
-  id          String   @id @default(uuid())
-  providerId  String   @unique
+  id          String         @id @default(uuid())
   name        String
   description String?
-  provider    Provider @relation("ProviderReading", fields: [providerId], references: [id], onDelete: Cascade)
+  providers   Provider[]     @relation("ProviderReading")
+}
+
+model Speciality {
+  id          String               @id @default(uuid())
+  name        String
+  description String?
+  price       Float
+
+  providers   Provider[]           @relation("ProviderSpecialities")
+  mainFor     Provider[]           @relation("ProviderMainSpeciality")
+  sessions    ConsultingSession[]  @relation("SpecialitySessions")
+}
+
+model Tool {
+  id               String     @id @default(uuid())
+  name             String
+  description      String?
+
+  providers        Provider[] @relation("ProviderTools")
+  mainForProviders Provider[] @relation("ProviderMainTool")
+}
+
+model ConsultingSession {
+  id               String                  @id @default(uuid())
+  providerId       String
+  clientId         String
+  specialityId     String
+  packageId        String?
+  duration         Int?
+
+  zoomSessionName  String?                 @unique
+  zoomTokens       Json?
+  zoomCreatedAt    DateTime                @default(now())
+
+  scheduledAt      DateTime?
+  calendlyEventUri String?
+  accountId        Int?
+
+  startDate        DateTime?
+  endDate          DateTime?
+  totalPrice       Int?
+  isFinished       Boolean                 @default(false)
+
+  provider         Provider                @relation("ProviderSessions", fields: [providerId], references: [id], onDelete: Cascade)
+  client           User                    @relation("ClientSessions", fields: [clientId], references: [id], onDelete: Cascade)
+  sessionAccount   Account?                @relation("SessionAccount", fields: [accountId], references: [id], onDelete: SetNull)
+  speciality       Speciality              @relation("SpecialitySessions", fields: [specialityId], references: [id], onDelete: Cascade)
+  userPackage      UserProviderPackage?    @relation("SessionUserPackage", fields: [packageId], references: [id])
 }
 
 model Review {
-  id         String   @id @default(uuid())
-  comment    String?
-  fromUser   User     @relation("ReviewFromUser", fields: [fromUserId], references: [id], onDelete: Cascade)
-  fromUserId String
+  id           String    @id @default(uuid())
+  comment      String?
+  date         DateTime
+  rating       Float
+  service      Service   @default(MEET)
+
+  fromUserId   String
+  fromUser     User      @relation("ReviewFromUser", fields: [fromUserId], references: [id], onDelete: Cascade)
+  providerId   String
+  provider     Provider  @relation("ReviewForProvider", fields: [providerId], references: [id], onDelete: Cascade)
 }
 
 model Account {
-  id                Int      @id @default(autoincrement())
-  userId            String
-  type              String
-  provider          String
-  providerAccountId String
-  refresh_token     String?  @db.Text
-  access_token      String?  @db.Text
-  expires_at        Int?
-  token_type        String?
-  scope             String?
-  id_token          String?  @db.Text
-  session_state     String?
-  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                 Int                   @id @default(autoincrement())
+  userId             String
+  type               String
+  provider           String
+  providerAccountId  String
+  refresh_token      String?               @db.Text
+  access_token       String?               @db.Text
+  expires_at         Int?
+  token_type         String?
+  scope              String?
+  id_token           String?               @db.Text
+  session_state      String?
+
+  user               User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountSessions    ConsultingSession[]   @relation("SessionAccount")
 
   @@unique([provider, providerAccountId])
 }
@@ -130,7 +201,7 @@ model GroupUsers {
   id         Int        @id @default(autoincrement())
   group      ChatGroup  @relation(fields: [group_id], references: [id], onDelete: Cascade)
   group_id   String
-  user       User       @relation(fields: [user_id], references: [id])
+  user       User       @relation(fields: [user_id], references: [id], onDelete: Cascade)
   user_id    String
   createdAt  DateTime   @default(now())
 }
@@ -144,4 +215,29 @@ model ChatGroup {
   updatedAt  DateTime   @updatedAt
 
   groupUsers GroupUsers[]
+}
+
+model CalendlyWebhookSubscription {
+  id               String    @id @default(uuid())
+  subscriptionId   String    @unique
+  calendarUri      String
+  events           String[]  
+  scope            String
+  callbackUrl      String
+  providerId       String
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  provider         Provider  @relation("ProviderCalendlyWebhooks", fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@index([calendarUri])
+}
+
+model EmailVerification {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  token     String   @unique
+  expiresAt DateTime
+
+  user      User     @relation("UserEmailVerification", fields: [userId], references: [id], onDelete: Cascade)
 }

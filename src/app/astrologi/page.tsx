@@ -5,12 +5,8 @@ import { useCatalogStore } from '@/store/catalog';
 
 const Page = () => {
 
-  const fetchCatalog   = useCatalogStore((s) => s.fetchCatalog);
   const selectedFilters   = useCatalogStore((s) => s.selectedFilters);
-  useEffect(() => {
-    fetchCatalog();
-    
-  }, [fetchCatalog]);
+
   useEffect(() => {
     console.log('Selected filters:', selectedFilters);
   }, [selectedFilters]);

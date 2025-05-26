@@ -3,10 +3,12 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { FaUserAlt, FaChevronDown } from 'react-icons/fa';
 import Button from './atoms/button';
-import { useSession, signOut } from 'next-auth/react';
+import { useSession  } from 'next-auth/react';
 import mysticLogo from '../../public/mysticnoblack.svg';
 import Image from 'next/image';
-import { useCatalogStore } from '@/store/catalog';
+// import { useCatalogStore } from '@/store/catalog';
+import { displayedServices } from '@/lib/constants';
+import handleLogout from '@/lib/api/logout/logout';
 
 const NavbarMobile = () => {
   const { data: session, status } = useSession();
@@ -17,8 +19,12 @@ const NavbarMobile = () => {
   const toggleMenu = () => setIsOpen(!isOpen);
   const togglePsychologists = () => setIsPsychologistsOpen(!isPsychologistsOpen);
 
-  const specialities = useCatalogStore((state) => state.specialities);
-
+  // const specialities = useCatalogStore((state) => state.specialities);
+  const specialities = displayedServices
+  const rawName = session?.user?.name ?? "";
+  const slug = encodeURIComponent(
+    rawName.trim().split(/\s+/).join("-")
+  )
   return (
     <nav className="lg:hidden fixed top-0 left-0 w-full h-[50px] z-50 bg-primaryColor">
       <div className="flex items-center justify-between px-4 h-full z-50">
@@ -53,7 +59,7 @@ const NavbarMobile = () => {
                   <p className="px-4 py-2 hover:bg-gray-100 cursor-pointer">Profil</p>
                 </Link>
                 <button
-                  onClick={() => signOut()}
+                  onClick={() => handleLogout(slug)}
                   className="w-full bg-red-600 text-white font-bold text-left px-4 py-2 hover:bg-red-700 cursor-pointer"
                 >
                   Deconectare
@@ -71,7 +77,7 @@ const NavbarMobile = () => {
       </div>
 
       <div className={`fixed top-[50px] left-0 w-full bg-primaryColor transform transition-transform duration-300 ease-in-out ${isOpen ? 'translate-y-0' : '-translate-y-full'}`}>
-        <ul className="flex flex-col items-center justify-center h-screen space-y-8 text-white text-xl pt-8 z-50">
+        <ul className="flex flex-col items-center justify-center h-screen space-y-8 text-white text-xl z-50">
           <li onClick={() => {setIsOpen(false); toggleMenu()}}>
             <Link href="/">ACASA</Link>
           </li>
@@ -88,14 +94,14 @@ const NavbarMobile = () => {
 
             <div
               className={`overflow-hidden transition-all duration-300 ease-in-out ${
-                isPsychologistsOpen ? 'max-h-[250px] opacity-100' : 'max-h-0 opacity-0'
+                isPsychologistsOpen ? 'max-h-[300px] opacity-100' : 'max-h-0 opacity-0'
               }`}
             >
               <ul className="mt-2 bg-white text-primaryColor text-center rounded-lg shadow-lg">
                 {specialities.map((speciality, index) => (
                   <Link key={index} href="/astrologi" onClick={() => {setIsOpen(false); setIsPsychologistsOpen(false)}} className="block w-full">
                     <li className="py-2 px-4 hover:bg-primaryColor/10 cursor-pointer">
-                      {speciality.name}
+                      {speciality}
                     </li>
                   </Link>
                 ))}
@@ -106,9 +112,9 @@ const NavbarMobile = () => {
           <li onClick={() => setIsOpen(false)}>
             <Link href="/">DESPRE NOI</Link>
           </li>
-          <li onClick={() => setIsOpen(false)}>
+          {/* <li onClick={() => setIsOpen(false)}>
             <Link href="/">ARTICOLE</Link>
-          </li>
+          </li> */}
         </ul>
       </div>
     </nav>

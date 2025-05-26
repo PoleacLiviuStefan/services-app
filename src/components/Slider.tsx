@@ -1,6 +1,6 @@
 'use client'
 import React, { useState, useEffect } from 'react';
-import ProviderCard from './ui/providerCard';
+import ProviderCard from './providerCard';
 import person from '../../public/person.avif';
 import Button from './atoms/button';
 import SectionTitle from './ui/sectionTitle';
@@ -82,6 +82,7 @@ const Slider = () => {
             >
               <ProviderCard 
                 name={`Provider ${item}`} 
+                online={true}
                 image={person} 
                 rating={4.5} 
                 description="Lorem ipsum dolor sit amet, consectetur adipiscing elit." 

@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "Provider" ALTER COLUMN "grossVolume" SET DEFAULT 0,
+ALTER COLUMN "grossVolume" SET DATA TYPE DOUBLE PRECISION;

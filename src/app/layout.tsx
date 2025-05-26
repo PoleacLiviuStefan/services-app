@@ -5,6 +5,10 @@ import "./globals.css";
 import Navbar from "@/components/Navbar";
 import NavbarMobile from "@/components/NavbarMobile";
 import Providers from "@/components/Providers"; // Asigură-te că calea este corectă
+import GlobalPresenceTracker from "@/components/globalTracker/GlobalPresenceTracker";
+import Footer from "@/components/Footer";
+import CatalogInitializer from "@/components/CatalogInitializer";
+
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -18,7 +22,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Astrologie",
-  description: "Astrologie  ",
+  description: "Astrologie",
 };
 
 export default function RootLayout({
@@ -27,13 +31,24 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen min-w-screen`}>
+ <html lang="en">
+      <body
+        className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen flex flex-col`}
+      >
         <Providers>
+          <GlobalPresenceTracker />
           <Navbar />
           <NavbarMobile />
-          {children}
+
+          {/* Conținutul principal cu creștere automată */}
+          <CatalogInitializer>
+            <main className="flex-1 mt-[50px] lg:mt-[60px]">
+              {children}
+            </main>
+          </CatalogInitializer>
         </Providers>
+
+        <Footer />
       </body>
     </html>
   );

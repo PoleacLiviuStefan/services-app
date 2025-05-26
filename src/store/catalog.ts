@@ -1,5 +1,5 @@
 // /store/catalog.ts
-import ProviderInterface from '@/interfaces/ProviderInterface';
+import {ProviderInterface} from '@/interfaces/ProviderInterface';
 import { create } from 'zustand';
 
 interface CatalogStore {
@@ -21,7 +21,7 @@ interface CatalogStore {
     provider:ProviderInterface;
   }[];
   // obiect care ţine selecţiile tale — cheia e un string (ex: "speciality", "tool", "reading")
-  selectedFilters: Record<string, string>;
+  selectedFilters: Record<string, string[]>;
   // setter generic: primeşte cheia şi opţiunea
   setFilter: (filterKey: string, option: string) => void;
 
@@ -29,19 +29,28 @@ interface CatalogStore {
 }
 
 export const useCatalogStore = create<CatalogStore>((set) => ({
-  services: { full_name: 'test', second_name: '' },
   specialities: [],
   tools: [],
   readings: [],
   selectedFilters: {},
 
   setFilter: (filterKey, option) =>
-    set((state) => ({
-      selectedFilters: {
-        ...state.selectedFilters,
-        [filterKey]: option,
-      },
-    })),
+    set((state) => {
+      const current = state.selectedFilters[filterKey] || [];
+      const has = current.includes(option);
+
+      // dacă există deja, îl eliminăm; altfel, îl adăugăm
+      const updated = has
+        ? current.filter((o) => o !== option)
+        : [...current, option];
+
+      return {
+        selectedFilters: {
+          ...state.selectedFilters,
+          [filterKey]: updated,
+        },
+      };
+    }),
 
 
   fetchCatalog: async () => {

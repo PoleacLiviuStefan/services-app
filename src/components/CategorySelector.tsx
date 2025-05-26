@@ -1,4 +1,3 @@
-// components/CategorySelector.tsx
 "use client";
 
 import React, { useState } from "react";
@@ -8,13 +7,9 @@ import { useCatalogStore } from "@/store/catalog";
 import { getOptionName } from "@/utils/util";
 
 interface CategorySelectorProps {
-  filterKey: string; // ex: "speciality" | "tool" | "reading"
+  filterKey: string; // ex: "specialities" | "tools" | "readings"
   title: string;
-  options:
-    | {
-        name: string;
-      }[]
-    | string[]; // sau orice tip ai nevoie
+  options: { name: string }[] | string[];
 }
 
 const CategorySelector: React.FC<CategorySelectorProps> = ({
@@ -23,55 +18,70 @@ const CategorySelector: React.FC<CategorySelectorProps> = ({
   options,
 }) => {
   const [showOptions, setShowOptions] = useState(false);
-  const selectedOption = useCatalogStore(
-    (s) => s.selectedFilters[filterKey] || ""
+
+  // Selector returns either the stored array or undefined
+  const rawSelection = useCatalogStore(
+    (s) => s.selectedFilters[filterKey]
   );
+  // Fallback to empty array locally, avoids new array on each render
+  const selectedOptions = rawSelection || [];
   const setFilter = useCatalogStore((s) => s.setFilter);
-  const selectedFilters = useCatalogStore((s) => s.selectedFilters);
+
+  // Display label: joined names or title when none selected
+  const headerLabel =
+    selectedOptions.length > 0 ? selectedOptions.join(", ") : title;
+
   return (
-    <div>
+    <div className="relative w-full">
       <Button
         onClick={() => setShowOptions((v) => !v)}
-        className="justify-between text-gray-500 border-primaryColor border px-3 py-1 w-full font-bold"
+        className="justify-between text-gray-700 border border-gray-300 px-3 py-2 w-full font-semibold rounded"
       >
-        {selectedFilters[filterKey] ?? title}
-
-        <span
-          className={`transition-all ease-in-out duration-300 text-2xl ${
-            showOptions && "-rotate-90"
+        {headerLabel}
+        <MdArrowDropDown
+          className={`transition-transform duration-200 ${
+            showOptions ? "rotate-180" : "rotate-0"
           }`}
-        >
-          <MdArrowDropDown />
-        </span>
+          size={24}
+        />
       </Button>
 
       <ul
-        className={`flex flex-col w-full overflow-hidden transition-all ease-in-out duration-300 rounded-lg
+        className={`absolute z-10 mt-1 w-full bg-white rounded shadow-md overflow-hidden transition-all duration-200
           ${
             showOptions
-              ? "max-h-96 py-2 gap-2 opacity-100 border border-black"
-              : "max-h-0 py-0 gap-0 opacity-0 border-0"
+              ? "max-h-60 opacity-100 border border-gray-200 py-2"
+              : "max-h-0 opacity-0 border-0 py-0"
           }
         `}
       >
-        {options.map((option, index) => (
-          <li key={index}>
-            <Button
-              onClick={() => {
-                setFilter(filterKey, getOptionName(option));
-                setShowOptions(false);
-              }}
-              className={`w-full px-2 py-2 ${
-                selectedOption === getOptionName(option) &&
-                "bg-primaryColor text-white"
-              } hover:bg-primaryColor/10`}
-              horizontal
-            > 
-              {getOptionName(option)}
-              
-            </Button>
-          </li>
-        ))}
+        {options.map((opt, i) => {
+          const name = getOptionName(opt);
+          const isSelected = selectedOptions.includes(name);
+
+          return (
+            <li key={i}>
+              <button
+                type="button"
+                onClick={() => setFilter(filterKey, name)}
+                className={`flex items-center w-full px-3 py-2 text-left text-sm ${
+                  isSelected
+                    ? "bg-primaryColor text-white"
+                    : "text-gray-700 hover:bg-gray-100"
+                }`}
+              >
+                <span
+                  className={`mr-2 inline-block h-4 w-4 border rounded ${
+                    isSelected
+                      ? "border-primaryColor bg-primaryColor"
+                      : "border-gray-400"
+                  }`}
+                />
+                {name}
+              </button>
+            </li>
+          );
+        })}
       </ul>
     </div>
   );

@@ -1,8 +1,8 @@
 'use client'
 import React, { useState } from 'react'
-import ProviderCard from './ui/providerCard';
+import ProviderCard from './providerCard';
 import { FaCaretLeft, FaCaretRight } from 'react-icons/fa';
-import ProviderInterface from '@/interfaces/ProviderInterface';
+import {ProviderInterface} from '@/interfaces/ProviderInterface';
 // import person from '../../public/person.avif';
 
 interface AdminPsychicsProps {
@@ -15,7 +15,7 @@ const AdminPsychics: React.FC<AdminPsychicsProps> = ({physics}) => {
     const items = Array.from({ length: 30 }, (_, i) => i + 1);
     const itemsPerPage = 12; 
     const totalPages = Math.ceil(items.length / itemsPerPage);
-
+    console.log('physics', physics);
     const [currentIndex, setCurrentIndex] = useState(0);
 
     // const startIndex = currentIndex * itemsPerPage;
@@ -39,7 +39,8 @@ const AdminPsychics: React.FC<AdminPsychicsProps> = ({physics}) => {
               image={physic.image}
               role={physic.role}
               email={physic.email}
-              isProvider={physic.isProvider ? true : false}
+              isProvider={physic.provider ? true : false}
+              online={physic.provider?.online}
               rating={4.5}
               description="Lorem ipsum dolor sit amet, consectetur adipiscing elit."
               reviews={Math.floor(Math.random() * 100)}

@@ -44,6 +44,7 @@ export async function GET() {
         provider: {
           select: {
             id: true,
+            online: true,
             description: true,
             tools: {
               select: {

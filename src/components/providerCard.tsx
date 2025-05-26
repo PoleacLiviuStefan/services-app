@@ -4,13 +4,14 @@ import React, { useState } from 'react';
 import { FaStar, FaPhoneVolume, FaVideo } from 'react-icons/fa';
 import { MdMessage } from 'react-icons/md';
 import Image from 'next/image';
-import Icon from '../atoms/icon';
+import Icon from './atoms/icon';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
-import Button from '../atoms/button';
-import SettingsModal from './settingsModal';
-import ProviderInterface from '@/interfaces/ProviderInterface';
-import { isError } from '@/utils/util';
+import Button from './atoms/button';
+import SettingsModal from './ui/settingsModal';
+import {ProviderInterface} from '@/interfaces/ProviderInterface';
+import { formatForUrl, isError } from '@/utils/util';
+import defaultAvatar from '../../public/default-avatar.webp';
 
 interface ProviderCardProp extends ProviderInterface{
   forAdmin?: boolean;
@@ -31,12 +32,13 @@ const ProviderCard: React.FC<ProviderCardProp> = ({
   role,
   email,
   isProvider = false,
+  online,
   highlightedCategory,
 }) => {
   const { data: session } = useSession();
   const user = session?.user;
   const [showSettingModal, setShowSettingModal] = useState(false);
-
+  console.log("online", online);
   const handleClientRoleChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
     try {
       const res = await fetch('/api/admin/set-provider', {
@@ -76,16 +78,17 @@ const ProviderCard: React.FC<ProviderCardProp> = ({
     <div
       className={`relative ${forAdmin ? 'h-[650px]' : 'h-card'} w-card border-8 border-primaryColor/10 rounded-lg hover:shadow-lg shadow-primaryColor transition duration-300 ease-in-out cursor-pointer bg-white text-black`}
     >
-      <span className="absolute top-[5px] left-1 bg-green-400 text-white font-extrabold text-[11px] px-1 bg-opacity-80 rounded-lg">
-        ONLINE
-      </span>
+      <Link href={`/profil/${formatForUrl(name)}`}>
+      {isProvider && <span className={`absolute top-[5px] left-1 ${online ? 'bg-green-400' : 'bg-red-400'} text-white font-extrabold text-[11px] px-1 bg-opacity-80 rounded-lg`}>
+       { online ? "ONLINE" : "OFFLINE" }
+      </span>}
       <span className="flex items-center space-x-2 absolute top-[5px] right-1 bg-orange-500 text-white font-extrabold text-[13px] px-1 bg-opacity-60 rounded-lg">
         {rating}
         <FaStar />
       </span>
 
       <Image
-        src={image}
+        src={image ? image : defaultAvatar}
         width={230}
         height={200}
         className="h-[230px] w-full object-cover rounded-b-lg"
@@ -95,7 +98,7 @@ const ProviderCard: React.FC<ProviderCardProp> = ({
       <div className="absolute flex justify-center items-center w-full -mt-[45px] h-[45px] bg-gradient-to-t from-[#000000]/70 to-transparent p-2 rounded-b-lg text-white">
         <span className="font-bold">{name}</span>
       </div>
-
+      </Link>
       <div className="flex flex-col items-center p-2 rounded-t-xl text-white text-primaryColor">
         <span className="text-sm lg:text-md border-2 px-2 py-1 rounded-xl text-primaryColor">
           {reviews} Recenzii

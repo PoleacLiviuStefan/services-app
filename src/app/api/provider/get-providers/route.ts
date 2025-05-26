@@ -1,91 +1,144 @@
+// src/app/api/provider/route.ts
+
+import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { isError } from '@/utils/util';
-import { NextRequest } from 'next/server';
 
 export async function GET(req: NextRequest) {
   try {
-    const searchParams = req.nextUrl.searchParams;
-    const speciality = searchParams.get('speciality');
-    const tool = searchParams.get('tool');
-    const reading = searchParams.get('reading');
-    const search = searchParams.get('search') || '';
-    console.log("search este: ",search);
-    const providers = await prisma.provider.findMany({
-      where: {
-        AND: [
-          search
-            ? {
-                user: {
-                  name: {
-                    contains: search,
-                    mode: 'insensitive',
-                  },
-                },
+    const qs              = req.nextUrl.searchParams;
+    const specialityParam = qs.get('speciality');
+    const toolParam       = qs.get('tool');
+    const readingParam    = qs.get('reading');
+    const serviceParam    = qs.get('service');
+    const search          = qs.get('search') || '';
+    const nameParam       = qs.get('name');
+
+    // 1) Single provider by name
+    if (nameParam) {
+      const raw = await prisma.provider.findFirst({
+        where: { user: { name: nameParam } },
+        include: {
+          user:            true,
+          reading:         { select: { id: true, name: true, description: true } },
+          specialities:    true,
+          tools:           true,
+          mainSpeciality:  { select: { id: true, name: true } },
+          mainTool:        { select: { id: true, name: true } },
+          reviews:         {
+            select: {
+              rating: true
+            }
+          },
+          providerPackages: {
+            select: {
+              id: true,
+              service: true,
+              totalSessions: true,
+              price: true,
+              expiresAt: true
+            }
+          }
+        }
+      });
+
+      if (!raw) {
+        return NextResponse.json({ error: 'Provider not found.' }, { status: 404 });
+      }
+
+      // compute average rating
+      const count = raw.reviews.length;
+      const avg = count > 0
+        ? raw.reviews.reduce((sum, r) => sum + r.rating, 0) / count
+        : 0;
+      const averageRating = parseFloat(avg.toFixed(2));
+
+      // strip out reviews array
+      const { reviews, ...provider } = raw;
+
+      return NextResponse.json({
+        provider: {
+          ...provider,
+          reviewsCount: count,
+          averageRating
+        }
+      }, { status: 200 });
+    }
+
+    // 2) Filtered list
+    const whereClause: any = {
+      AND: [
+        search
+          ? { user: { name: { contains: search, mode: 'insensitive' } } }
+          : {},
+        specialityParam
+          ? {
+              specialities: {
+                some: { name: { contains: specialityParam, mode: 'insensitive' } }
               }
-            : {},
-          speciality
-            ? {
-                specialities: {
-                  some: {
-                    name: {
-                      contains: speciality,
-                      mode: 'insensitive',
-                    },
-                  },
-                },
+            }
+          : {},
+        toolParam
+          ? {
+              tools: {
+                some: { name: { contains: toolParam, mode: 'insensitive' } }
               }
-            : {},
-          tool
-            ? {
-                tools: {
-                  some: {
-                    name: {
-                      contains: tool,
-                      mode: 'insensitive',
-                    },
-                  },
-                },
-              }
-            : {},
-          reading
-            ? {
-                reading: {
-                  name: {
-                    contains: reading,
-                    mode: 'insensitive',
-                  },
-                },
-              }
-            : {},
-        ],
-      },
+            }
+          : {},
+        readingParam
+          ? { reading: { name: { contains: readingParam, mode: 'insensitive' } } }
+          : {},
+        serviceParam
+          ? { providerPackages: { some: { service: serviceParam as any } } }
+          : {}
+      ]
+    };
+
+    const rawList = await prisma.provider.findMany({
+      where: whereClause,
       include: {
-        user: {
+        user:            true,
+        reading:         { select: { id: true, name: true, description: true } },
+        specialities:    true,
+        tools:           true,
+        mainSpeciality:  { select: { id: true, name: true } },
+        mainTool:        { select: { id: true, name: true } },
+        reviews:         {
+          select: { rating: true }
+        },
+        providerPackages: {
           select: {
             id: true,
-            name: true,
-            email: true,
-            image: true,
-            gender: true,
-          },
-        },
-        tools: true,
-        specialities: true,
-        reading: true,
-      },
+            service: true,
+            totalSessions: true,
+            price: true,
+            expiresAt: true
+          }
+        }
+      }
     });
 
-    return new Response(JSON.stringify({ providers }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
+    const providers = rawList.map(raw => {
+      const count = raw.reviews.length;
+      const avg = count > 0
+        ? raw.reviews.reduce((sum, r) => sum + r.rating, 0) / count
+        : 0;
+      const averageRating = parseFloat(avg.toFixed(2));
+      const { reviews, ...provider } = raw;
+      return {
+        ...provider,
+        reviewsCount: count,
+        averageRating
+      };
     });
+
+    return NextResponse.json({ providers }, { status: 200 });
+
   } catch (error: unknown) {
-    const message = isError(error) ? error.message : String(error);
-    console.error('Eroare la obținerea providerilor:', message);
-  
-    return new Response(
-      JSON.stringify({ error: 'A apărut o eroare la obținerea providerilor.' }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } }
+    console.error('Eroare la obținerea providerilor:', isError(error) ? error.message : error);
+    return NextResponse.json(
+      { error: 'A apărut o eroare la obținerea providerilor.' },
+      { status: 500 }
     );
   }
 }

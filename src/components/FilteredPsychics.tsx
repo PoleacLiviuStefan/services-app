@@ -3,18 +3,23 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams, usePathname, useRouter } from "next/navigation";
 import SearchInput from "./SearchInput";
 import { SortPsychics } from "./SortPsychics";
-import ProviderCard from "./ui/providerCard";
+import ProviderCard from "./providerCard";
 import { FaCaretLeft, FaCaretRight } from "react-icons/fa";
 import { useCatalogStore } from "@/store/catalog";
 import LoadingSkeleton from "./ui/loadingSkeleton";
 import Button from "./atoms/button";
-import ProviderInterface from "@/interfaces/ProviderInterface";
+import { ProviderInterface } from "@/interfaces/ProviderInterface";
+
 
 const FilteredPsychics = () => {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const setFilter = useCatalogStore((s) => s.setFilter);
   const selectedFilters = useCatalogStore((s) => s.selectedFilters);
+
+  // Extragem parametrul de speciality din URL
+  const specialityParam = searchParams.get("speciality");
 
   const [providers, setProviders] = useState<ProviderInterface[]>([]);
   const [loading, setLoading] = useState(true);
@@ -37,53 +42,55 @@ const FilteredPsychics = () => {
     router.push(`${pathname}?${params.toString()}`);
   };
 
-  const goToPrevious = () => {
-    goToPage(currentPage > 0 ? currentPage - 1 : totalPages - 1);
-  };
+  // 1) SETĂM FILTRUL AUTOMAT după specialityParam
+  useEffect(() => {
+    if (specialityParam) {
+      // cheia ta din store s-ar numi probabil "specialities"
+      setFilter("specialities", specialityParam);
+    }
+  }, [specialityParam, setFilter]);
 
-  const goToNext = () => {
-    goToPage(currentPage < totalPages - 1 ? currentPage + 1 : 0);
-  };
-
+  // 2) FETCH providers ORI DE CÂTE ORI se schimbă selectedFilters
   const fetchProviders = async () => {
     setLoading(true);
     const params = new URLSearchParams();
-    if (selectedFilters.speciality) {
-      params.set("speciality", selectedFilters.speciality);
+
+    if (selectedFilters.specialities?.length) {
+      // adăugăm fiecare specialitate selectată
+      selectedFilters.specialities.forEach((s) =>
+        params.append("speciality", s)
+      );
     }
-    if (selectedFilters.tool) {
-      params.set("tool", selectedFilters.tool);
+    if (selectedFilters.tools?.length) {
+      selectedFilters.tools.forEach((t) => params.append("tool", t));
     }
-    if (selectedFilters.reading) {
-      params.set("reading", selectedFilters.reading);
+    if (selectedFilters.readings?.length) {
+      selectedFilters.readings.forEach((r) => params.append("reading", r));
     }
-    if (searchProviders.current && searchProviders.current.value !== "") {
+    if (searchProviders.current?.value) {
       params.set("search", searchProviders.current.value);
     }
 
     try {
       const res = await fetch(
         `/api/provider/get-providers?${params.toString()}`,
-        {
-          method: "GET",
-          headers: { "Content-Type": "application/json" },
-        }
+        { headers: { "Content-Type": "application/json" } }
       );
-
       if (!res.ok) throw new Error("Eroare la obținerea providerilor");
       const data = await res.json();
       setProviders(data.providers);
-    } catch (error) {
-      console.error("Eroare la fetch:", error);
+      console.log("Provideri obținuți:", data.providers);
+    } catch (err) {
+      console.error("Eroare la fetch:", err);
     } finally {
       setLoading(false);
     }
   };
 
+  // Apelăm fetchProviders la montare și oricând se schimbă selectedFilters
   useEffect(() => {
     fetchProviders();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [selectedFilters]); // << aici
 
   type HighlightedCategory = {
     type: "speciality" | "tool" | "reading";
@@ -91,12 +98,12 @@ const FilteredPsychics = () => {
   };
 
   const highlightedCategory = useMemo<HighlightedCategory | undefined>(() => {
-    if (selectedFilters.speciality) {
-      return { type: "speciality", name: selectedFilters.speciality };
-    } else if (selectedFilters.tool) {
-      return { type: "tool", name: selectedFilters.tool };
-    } else if (selectedFilters.reading) {
-      return { type: "reading", name: selectedFilters.reading };
+    if (selectedFilters.specialities?.length) {
+      return { type: "speciality", name: selectedFilters.specialities[0] };
+    } else if (selectedFilters.tools?.length) {
+      return { type: "tool", name: selectedFilters.tools[0] };
+    } else if (selectedFilters.readings?.length) {
+      return { type: "reading", name: selectedFilters.readings[0] };
     }
     return undefined;
   }, [selectedFilters]);
@@ -117,19 +124,25 @@ const FilteredPsychics = () => {
       <div className="flex flex-col items-center w-full">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-4">
           {loading
-            ? Array.from({ length: 6 }).map((_, i) => <LoadingSkeleton key={i} />)
+            ? Array.from({ length: 6 }).map((_, i) => (
+                <LoadingSkeleton key={i} />
+              ))
             : currentItems.map((provider) => (
+                // inside currentItems.map(...)
                 <ProviderCard
                   key={provider.id}
                   name={provider.user?.name || "N/A"}
                   image={provider.user?.image || "/person.avif"}
-                  rating={4.5}
-                  description={provider.description || "Fără descriere"}
-                  reviews={Math.floor(Math.random() * 100)}
-                  speciality={provider.mainSpeciality?.name || "Fără specialitate"}
+                  rating={provider.averageRating} // use real rating
+                  description={provider.description || "—"}
+                  reviews={provider.reviewsCount} // number of reviews
+                  speciality={provider.mainSpeciality?.name || "—"} // mainSpeciality
+                  tool={provider.mainTool} // pass mainTool
+                  reading={provider.reading} // pass reading
                   forAdmin={false}
-                  role="STANDARD"
+                  role={provider.role}
                   isProvider={true}
+                  online={provider.online}
                   highlightedCategory={highlightedCategory}
                 />
               ))}
@@ -137,7 +150,9 @@ const FilteredPsychics = () => {
 
         <div className="flex items-center space-x-4 mt-6">
           <button
-            onClick={goToPrevious}
+            onClick={() =>
+              goToPage(currentPage > 0 ? currentPage - 1 : totalPages - 1)
+            }
             className="bg-gray-400 p-2 rounded-full text-white"
           >
             <FaCaretLeft />
@@ -158,7 +173,9 @@ const FilteredPsychics = () => {
           </ul>
 
           <button
-            onClick={goToNext}
+            onClick={() =>
+              goToPage(currentPage < totalPages - 1 ? currentPage + 1 : 0)
+            }
             className="bg-gray-400 p-2 rounded-full text-white"
           >
             <FaCaretRight />

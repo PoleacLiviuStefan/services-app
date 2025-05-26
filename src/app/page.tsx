@@ -1,21 +1,22 @@
 import About from "@/components/About";
 import Hero from "../components/Hero";
 import Slider from "../components/Slider";
+import Curiosities from "@/components/Curiosities";
 
 const Page = () => {
-  
-
   return (
-<div className="flex flex-col items-center w-full h-screen ">
-  <Hero />
+    <div className="flex flex-col items-center w-full min-h-screen ">
+      <Hero />
 
-  <main className="lg:w-[68rem] w-full ">
-  <Slider />
-  <About />
-  </main>
-</div>
-
+      <main className="flex flex-col items-center w-full">
+        <div className="lg:w-[68rem] w-full space-y-20 py-12">
+          <Slider />
+          <About />
+        </div>
+          <Curiosities />
+      </main>
+    </div>
   );
-}
+};
 
 export default Page;
