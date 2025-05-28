@@ -2,24 +2,44 @@
 import nodemailer from "nodemailer";
 
 const transporter = nodemailer.createTransport({
-  host: "smtp.gmail.com",
-  port: 465,
-  secure: true, // folosește TLS
+  host: process.env.SMTP_HOST,       // ex: smtp-relay.brevo.com
+  port: Number(process.env.SMTP_PORT), // 587
+  secure: false,                     // STARTTLS
+  requireTLS: true,
   auth: {
-    user: process.env.EMAIL_USER, // de ex. yourname@gmail.com
-    pass: process.env.EMAIL_PASS, // parola sau, mai bine, parola de aplicație
+    user: process.env.SMTP_USER,     // ex: no-reply@domeniul-tau.ro
+    pass: process.env.SMTP_PASS,
   },
 });
 
 export async function sendVerificationEmail(to: string, token: string) {
-  const url = `${process.env.NEXT_PUBLIC_BASE_URL}/verify-email?token=${token}`;
+  const url = `${process.env.NEXT_PUBLIC_BASE_URL}/verificare-mail?token=${token}`;
+
   await transporter.sendMail({
-    from: `"My App" <${process.env.EMAIL_USER}>`,
+    envelope: {
+      from: process.env.FROM_MAIL,
+      to,
+    },
+    from: `"My App" <${process.env.FROM_MAIL}>`,
     to,
     subject: "Verifică-ți adresa de e-mail",
     html: `
       <p>Bine ai venit!</p>
-      <p>Click <a href="${url}">aici</a> pentru a-ți verifica contul. Link-ul expiră în 24h.</p>
+      <p>Click <a href="${url}">aici</a> pentru a-ți verifica contul. Link-ul expiră în 24 ore.</p>
+    `,
+  });
+}
+
+export async function sendPasswordResetEmail(to: string, token: string) {
+  const url = `${process.env.NEXT_PUBLIC_BASE_URL}/resetare-parola?token=${token}`;
+  await transporter.sendMail({
+    envelope: { from: process.env.FROM_MAIL, to },
+    from: `"My App" <${process.env.FROM_MAIL}>`,
+    to,
+    subject: "Resetare parolă",
+    html: `
+      <p>Ai cerut resetarea parolei.</p>
+      <p>Click <a href="${url}">aici</a> pentru a-ți seta o parolă nouă. Link-ul expiră în 1h.</p>
     `,
   });
 }

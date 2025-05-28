@@ -96,7 +96,7 @@ const SignInForm: React.FC = () => {
         />
       </div>
 
-      <Link href="/autentificare">
+      <Link href="/resetare-parola">
         <p className="text-primaryColor">Ați uitat parola? Resetare Parolă</p>
       </Link>
 

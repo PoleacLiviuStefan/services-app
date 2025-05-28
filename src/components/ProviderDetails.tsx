@@ -609,7 +609,7 @@ const ProviderDetails: React.FC<ProviderDetailsProps> = ({ provider }) => {
               <strong>Stare:</strong>{" "}
               {localProvider.online ? "Online" : "Offline"}
             </div>
-            <EditButton showEditModal={() => setShowEditModal("Status")} />
+            {/* <EditButton showEditModal={() => setShowEditModal("Status")} /> */}
           </div>
 
           {/* Video URL */}

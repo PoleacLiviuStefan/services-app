@@ -132,7 +132,7 @@ const FilteredPsychics = () => {
                 <ProviderCard
                   key={provider.id}
                   name={provider.user?.name || "N/A"}
-                  image={provider.user?.image || "/person.avif"}
+                  image={provider.user?.image || ""}
                   rating={provider.averageRating} // use real rating
                   description={provider.description || "—"}
                   reviews={provider.reviewsCount} // number of reviews

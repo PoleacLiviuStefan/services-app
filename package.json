@@ -24,6 +24,7 @@
     "date-fns": "^4.1.0",
     "jose": "^6.0.11",
     "jsonwebtoken": "^9.0.2",
+    "mime": "^4.0.7",
     "next": "15.1.7",
     "next-auth": "^4.24.11",
     "nodemailer": "^7.0.3",
@@ -39,6 +40,7 @@
   "devDependencies": {
     "@eslint/eslintrc": "^3",
     "@types/node": "^20",
+    "@types/nodemailer": "^6.4.17",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
