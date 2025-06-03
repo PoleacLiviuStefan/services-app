@@ -726,7 +726,7 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
             <div>
               <strong>Stare:</strong> {localProvider.online ? "Online" : "Offline"}
             </div>
-            <EditButton showEditModal={() => setShowEditModal("Status")} />
+            {/* <EditButton showEditModal={() => setShowEditModal("Status")} /> */}
           </div>
 
           {/* Video URL */}
