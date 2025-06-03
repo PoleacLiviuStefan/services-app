@@ -48,7 +48,7 @@ async function putHandler(
   }
 
   // 4) Determinăm baza de upload: folosim `public/uploads` din project root
-  const baseDir = path.join(process.cwd(), "public", "uploads");
+  const ls = path.join(process.cwd(), "public", "uploads");
   // Dacă ai definit și un STORAGE_PATH specific, l-am putea combina:
   // const baseDir = process.env.STORAGE_PATH
   //    ? path.join(process.cwd(), process.env.STORAGE_PATH)
@@ -56,6 +56,7 @@ async function putHandler(
 
   // 5) Creăm folderul avatars dacă nu există
   const uploadDir = path.join(baseDir, "avatars");
+  console.log("📁 [avatar] uploadDir =", uploadDir);
   try {
     await fs.promises.mkdir(uploadDir, { recursive: true });
   } catch (err) {
