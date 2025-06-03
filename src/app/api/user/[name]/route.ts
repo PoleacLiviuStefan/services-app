@@ -1,57 +1,80 @@
 // src/app/api/user/[name]/route.ts
-import { NextResponse } from 'next/server'
-import { Prisma } from '@prisma/client'
-import { prisma } from '@/lib/prisma'
+import { NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
 
 /**
- * În App Router, context.params e un Promise<{ name: string }>
+ * În App Router, context.params este un Promise<{ name: string }>.
  */
 type AsyncRouteContext = {
-  params: Promise<{ name: string }>
-}
-
-type OnlinePayload = { online: boolean }
+  params: Promise<{ name: string }>;
+};
 
 /**
- * Actualizează doar `online` pentru provider-ii existenți.
- * Aruncă:
- *  - 'USER_NOT_FOUND' dacă nu există user
- *  - Prisma.PrismaClientKnownRequestError P2025 dacă nu există provider
+ * Decodifică slug-ul din URL înapoi într-un string cu spații simple și lowercase:
+ * 1. Înlocuiește cratimele cu spațiu.
+ * 2. Colapsează orice grup de spații multiple într-unul singur.
+ * 3. Elimină diacriticele.
+ * 4. Taie spațiile de la început/sfârșit și pune totul în lowercase.
+ *
+ * Din slug-ul "precup-carmen-cristina" rezultă "precup carmen cristina".
  */
-async function setOnlineStatus(name: string, online: boolean): Promise<boolean> {
-  const decoded = name.replace(/-/g, ' ').trim()
+function decodeSlugToName(slug: string): string {
+  let decoded = slug
+    .replace(/-/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 
-  const user = await prisma.user.findFirst({
-    where: { name: { equals: decoded, mode: 'insensitive' } },
-    select: { id: true }
-  })
-  if (!user) {
-    throw new Error('USER_NOT_FOUND')
-  }
+  decoded = decoded
+    .normalize("NFD")               // desparte diacriticele
+    .replace(/[\u0300-\u036f]/g, ""); // elimină semnele diacritice
 
-  // UPDATE fără create: dacă nu există provider, va arunca P2025
-  const updated = await prisma.provider.update({
-    where: { userId: user.id },
-    data: { online }
-  })
-
-  return updated.online
+  return decoded.toLowerCase();
 }
 
 /**
- * GET /api/user/[name]
- * Returnează datele provider-ului (inclusiv online)
+ * Pentru fiecare `user.name` din DB (care poate conține două spații,
+ * diacritice etc.), aplicăm aceleași transformări de “normalizare”:
+ * 1. Collapsează spațiile multiple într-unul singur,
+ * 2. Elimină diacriticele,
+ * 3. Taie spații la început și sfârșit,
+ * 4. Lowercase.
+ *
+ * Astfel, de exemplu "Precup  Carmen  Cristină" devine "precup carmen cristina".
  */
-export async function GET(
-  _req: Request,
-  { params }: AsyncRouteContext
-): Promise<NextResponse> {
-  const { name: slug } = await params
-  const decoded = slug.replace(/-/g, ' ').trim()
+function normalizeDbName(dbName: string): string {
+  return dbName
+    .replace(/\s+/g, " ")
+    .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
 
-  // 1️⃣ Preluăm user + provider cu toate datele necesare
-  const user = await prisma.user.findFirst({
-    where: { name: { equals: decoded, mode: 'insensitive' } },
+/**
+ * Găsește user-ul în mod tolerant la spații multiple.
+ * Pasul 1: decodăm slug-ul → decodedName (ex. "precup carmen cristina").
+ * Pasul 2: spargem decodedName în cuvinte → ["precup","carmen","cristina"].
+ * Pasul 3: facem un findMany cu `AND: [{ name contains "precup" },{ name contains "carmen" },{ name contains "cristina" }]`
+ *        (toate căutările sunt case-insensitive).
+ * Pasul 4: din lista de candidați, revenim doar cu cel al cărui normalizeDbName(user.name) EXACT egalează decodedName.
+ * Dacă nu găsim niciunul, returnăm null.
+ */
+async function findUserBySlug(slug: string) {
+  const decodedName = decodeSlugToName(slug); // "precup carmen cristina"
+  const words = decodedName.split(" ");       // ["precup","carmen","cristina"]
+
+  // Dacă slug-ul nu conține niciun cuvânt (ex: slug vid), nu avem ce căuta
+  if (words.length === 0) return null;
+
+  // Facem interogarea în baza de date pentru toți userii care au,
+  // în câmpul `name`, fiecare dintre cuvintele din `words`.
+  const candidates = await prisma.user.findMany({
+    where: {
+      AND: words.map((w) => ({
+        name: { contains: w, mode: "insensitive" },
+      })),
+    },
     select: {
       id: true,
       name: true,
@@ -66,24 +89,12 @@ export async function GET(
           grossVolume: true,
           calendlyCalendarUri: true,
           stripeAccountId: true,
-          reading: {
-            select: { id: true, name: true, description: true }
-          },
-          specialities: {
-            select: { id: true, name: true, description: true, price: true }
-          },
-          tools: {
-            select: { id: true, name: true, description: true }
-          },
-          mainSpeciality: {
-            select: { id: true, name: true }
-          },
-          mainTool: {
-            select: { id: true, name: true }
-          },
-          reviews: {
-            select: { rating: true }
-          },
+          reading: { select: { id: true, name: true, description: true } },
+          specialities: { select: { id: true, name: true, description: true, price: true } },
+          tools: { select: { id: true, name: true, description: true } },
+          mainSpeciality: { select: { id: true, name: true } },
+          mainTool: { select: { id: true, name: true } },
+          reviews: { select: { rating: true } },
           providerPackages: {
             select: {
               id: true,
@@ -91,42 +102,63 @@ export async function GET(
               totalSessions: true,
               price: true,
               createdAt: true,
-              expiresAt: true
-            }
-          }
-        }
-      }
-    }
-  })
+              expiresAt: true,
+            },
+          },
+        },
+      },
+    },
+  });
 
-  if (!user?.provider) {
+  // Filtrăm candidații pentru a găsi unul al cărui nume, normalizat,
+  // este EXACT decodedName.
+  for (const u of candidates) {
+    if (normalizeDbName(u.name) === decodedName) {
+      return u;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * GET /api/user/[name]
+ * Returnează datele provider-ului (inclusiv toate câmpurile selectate).
+ */
+export async function GET(
+  _req: Request,
+  { params }: AsyncRouteContext
+): Promise<NextResponse> {
+  const { name: slug } = await params;
+  const user = await findUserBySlug(slug);
+
+  // Dacă nu găsește user sau acel user nu are provider, răspundem 404
+  if (!user || !user.provider) {
+    const decoded = decodeSlugToName(slug);
     return NextResponse.json(
       { error: `Providerul pentru '${decoded}' nu a fost găsit.` },
       { status: 404 }
-    )
+    );
   }
 
-  const p = user.provider
-
-  // 2️⃣ Agregăm reviewsCount și averageRating
-  const reviewsCount = p.reviews.length
+  const p = user.provider;
+  const reviewsCount = p.reviews.length;
   const avg =
     reviewsCount > 0
       ? p.reviews.reduce((sum, r) => sum + r.rating, 0) / reviewsCount
-      : 0
-  const averageRating = parseFloat(avg.toFixed(2))
+      : 0;
+  const averageRating = parseFloat(avg.toFixed(2));
 
-  // 3️⃣ Construim obiectul final
   const payload = {
     id: p.id,
     user: {
       id: user.id,
       name: user.name!,
       email: user.email!,
-      image: user.image || null
+      image: user.image || null,
     },
     online: p.online,
-    description: p.description || '',
+    description: p.description || "",
     videoUrl: p.videoUrl || null,
     grossVolume: p.grossVolume,
     scheduleLink: p.calendlyCalendarUri || null,
@@ -138,73 +170,85 @@ export async function GET(
     reviewsCount,
     averageRating,
     providerPackages: p.providerPackages,
-    stripeAccountId: p.stripeAccountId || null
-  }
+    stripeAccountId: p.stripeAccountId || null,
+  };
 
-  return NextResponse.json({ provider: payload }, { status: 200 })
+  return NextResponse.json({ provider: payload }, { status: 200 });
 }
+
 /**
  * PATCH /api/user/[name]
  * Body: { online: boolean }
- * Actualizează câmpul `online` într-un provider existent.
+ * Actualizează doar câmpul `online` pentru provider-ul găsit.
  */
 export async function PATCH(
   req: Request,
   { params }: AsyncRouteContext
 ): Promise<NextResponse> {
-  // parse JSON payload
-  let payload: unknown
+  // Citim JSON-ul din corpul cererii
+  let payload: unknown;
   try {
-    payload = await req.json()
+    payload = await req.json();
   } catch {
-    return NextResponse.json({ error: 'JSON invalid.' }, { status: 400 })
+    return NextResponse.json({ error: "JSON invalid." }, { status: 400 });
   }
 
-  // validate payload
+  // Validăm payload
   if (
-    typeof payload !== 'object' ||
+    typeof payload !== "object" ||
     payload === null ||
-    !('online' in payload) ||
-    typeof (payload as OnlinePayload).online !== 'boolean'
+    !("online" in payload) ||
+    typeof (payload as { online: unknown }).online !== "boolean"
   ) {
     return NextResponse.json(
-      { error: 'Aștept `{ online: boolean }` ca payload.' },
+      { error: "Aștept `{ online: boolean }` ca payload." },
       { status: 400 }
-    )
+    );
   }
 
-  const { name: slug } = await params
+  const { name: slug } = await params;
+  const user = await findUserBySlug(slug);
+
+  if (!user) {
+    return NextResponse.json({ error: "User nu a fost găsit." }, { status: 404 });
+  }
+  if (!user.provider) {
+    return NextResponse.json(
+      { error: "Provider pentru acest user nu există." },
+      { status: 404 }
+    );
+  }
+
+  // Actualizăm câmpul `online` în baza de date
   try {
-    const newStatus = await setOnlineStatus(slug, (payload as OnlinePayload).online)
-    return NextResponse.json({ ok: true, online: newStatus })
+    const updated = await prisma.provider.update({
+      where: { userId: user.id },
+      data: { online: (payload as { online: boolean }).online },
+      select: { online: true },
+    });
+    return NextResponse.json({ ok: true, online: updated.online });
   } catch (err: unknown) {
-    if (err instanceof Error && err.message === 'USER_NOT_FOUND') {
-      return NextResponse.json(
-        { error: 'User nu a fost găsit.' },
-        { status: 404 }
-      )
-    }
     if (
       err instanceof Prisma.PrismaClientKnownRequestError &&
-      err.code === 'P2025'
+      err.code === "P2025"
     ) {
       return NextResponse.json(
-        { error: 'Provider pentru acest user nu există.' },
+        { error: "Provider pentru acest user nu există." },
         { status: 404 }
-      )
+      );
     }
-    console.error('PATCH /api/user/[name] error:', err)
-    return NextResponse.json({ error: 'Eroare internă.' }, { status: 500 })
+    console.error("PATCH /api/user/[name] error:", err);
+    return NextResponse.json({ error: "Eroare internă." }, { status: 500 });
   }
 }
 
 /**
  * POST /api/user/[name]
- * Beacon-urile trimit POST, așa că redirecționăm POST → PATCH
+ * Redirectează POST către PATCH, pentru cazurile în care clientul trimite POST.
  */
 export async function POST(
   req: Request,
   { params }: AsyncRouteContext
 ): Promise<NextResponse> {
-  return PATCH(req, { params })
+  return PATCH(req, { params });
 }

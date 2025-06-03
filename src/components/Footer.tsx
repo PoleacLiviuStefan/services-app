@@ -36,14 +36,14 @@ const Footer = () => {
         {/* Coloana 3: Două imagini (înlocuieşte path-urile cu ale tale) */}
         <div className="flex flex-col space-y-4">
           <Image
-            src="/sal.svg"
+            src="/SAL.svg"
             alt="Imagine 1"
             width={200}
             height={200}
             className="object-cover rounded"
           />
           <Image
-            src="/sol.svg"
+            src="/SOL.svg"
             alt="Imagine 2"
             width={200}
             height={200}
