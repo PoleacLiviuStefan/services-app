@@ -7,6 +7,7 @@ const nextConfig = {
     ignoreDuringBuilds: true,
   },
   env: {
+    
     GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
     GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET,
     NEXT_PUBLIC_ZOOM_SDK_KEY: process.env.ZOOM_SDK_KEY,
@@ -20,6 +21,9 @@ const nextConfig = {
         hostname: "lh3.googleusercontent.com",
       },
     ],
+    domains:[
+      "mysticgold.app"
+    ]
   },
   async headers() {
     return [
