@@ -35,6 +35,7 @@ const ProviderCard: React.FC<ProviderCardProp> = ({
   online,
   highlightedCategory,
 }) => {
+  console.log("numele este: ",name)
   const { data: session } = useSession();
   const user = session?.user;
   const [showSettingModal, setShowSettingModal] = useState(false);

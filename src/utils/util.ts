@@ -10,12 +10,15 @@ export function formatForUrl(str: string): string {
   return (
     str
       .toLowerCase()
-      // 1. Normalizăm Unicode și scoatem diacriticele
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      // 2. Înlocuim orice grup de caractere non-alfanumerice cu o singură cratimă
-      .replace(/[^a-z0-9]+/g, "-")
-      // 3. Eliminăm cratimele de la început și sfârșit (dacă au apărut)
+      // Înlocuim fiecare grup de caractere care NU este:
+      //   - litera a–z
+      //   - cifră 0–9
+      //   - una dintre literele românești: ăâîșț
+      // cu o singură cratimă
+      .replace(/[^a-z0-9ăâîșț]+/g, "-")
+      // Dacă există mai multe cratime consecutive, reducem toate la una singură
+      .replace(/-+/g, "-")
+      // Eliminăm cratimele de la început și sfârșit (dacă au rămas)
       .replace(/^-+|-+$/g, "")
   );
 }

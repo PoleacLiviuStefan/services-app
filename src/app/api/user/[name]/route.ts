@@ -11,64 +11,61 @@ type AsyncRouteContext = {
 };
 
 /**
- * Decodifică slug-ul din URL înapoi într-un string cu spații simple și lowercase:
+ * Decodifică slug-ul din URL într-un string cu spații simple și lowercase,
+ * păstrând diacriticele:
  * 1. Înlocuiește cratimele cu spațiu.
  * 2. Colapsează orice grup de spații multiple într-unul singur.
- * 3. Elimină diacriticele.
- * 4. Taie spațiile de la început/sfârșit și pune totul în lowercase.
+ * 3. Taie spațiile de la început și sfârșit.
+ * 4. Transformă totul la lowercase (diacriticele rămân).
  *
- * Din slug-ul "precup-carmen-cristina" rezultă "precup carmen cristina".
+ * Exemplu:
+ *   "vatală-georgiana" → "vatală georgiana"
  */
 function decodeSlugToName(slug: string): string {
-  let decoded = slug
-    .replace(/-/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  decoded = decoded
-    .normalize("NFD")               // desparte diacriticele
-    .replace(/[\u0300-\u036f]/g, ""); // elimină semnele diacritice
-
-  return decoded.toLowerCase();
+  return slug
+    .replace(/-/g, " ")    // toate cratimele devin spațiu
+    .replace(/\s+/g, " ")  // collapse grupuri de spații multiple
+    .trim()                // elimină spațiile de la margină
+    .toLowerCase();        // lowercase, dar diacriticele rămân
 }
 
 /**
- * Pentru fiecare `user.name` din DB (care poate conține două spații,
- * diacritice etc.), aplicăm aceleași transformări de “normalizare”:
- * 1. Collapsează spațiile multiple într-unul singur,
- * 2. Elimină diacriticele,
- * 3. Taie spații la început și sfârșit,
- * 4. Lowercase.
+ * Normalizează exact cum va fi comparat cu decodedSlugToName:
+ * 1. Înlocuiește cratimele (dacă există) cu spațiu.
+ * 2. Colapsează orice grup de spații multiple într-unul singur.
+ * 3. Taie spațiile de la început și sfârșit.
+ * 4. Transformă totul la lowercase (diacriticele rămân).
  *
- * Astfel, de exemplu "Precup  Carmen  Cristină" devine "precup carmen cristina".
+ * Astfel, "Vatală  Georgiana" (cu două spații și diacritice) devine "vatală georgiana".
  */
 function normalizeDbName(dbName: string): string {
   return dbName
-    .replace(/\s+/g, " ")
-    .trim()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase();
+    .replace(/-/g, " ")    // dacă există cratimă în DB, facem spațiu
+    .replace(/\s+/g, " ")  // collapse spații multiple
+    .trim()                // elimină spațiile de la margină
+    .toLowerCase();        // lowercase, dar diacriticele rămân
 }
 
 /**
- * Găsește user-ul în mod tolerant la spații multiple.
- * Pasul 1: decodăm slug-ul → decodedName (ex. "precup carmen cristina").
- * Pasul 2: spargem decodedName în cuvinte → ["precup","carmen","cristina"].
- * Pasul 3: facem un findMany cu `AND: [{ name contains "precup" },{ name contains "carmen" },{ name contains "cristina" }]`
- *        (toate căutările sunt case-insensitive).
- * Pasul 4: din lista de candidați, revenim doar cu cel al cărui normalizeDbName(user.name) EXACT egalează decodedName.
- * Dacă nu găsim niciunul, returnăm null.
+ * Caută user-ul în baza de date într-un mod tolerant la spații multiple și păstrând diacritice:
+ * 1. decodeSlugToName(slug) → decodedName (ex. "vatală georgiana").
+ * 2. Împarte decodedName în cuvinte: ["vatală", "georgiana"].
+ * 3. Rulează findMany cu AND: [
+ *      { name contains "vatală" }, 
+ *      { name contains "georgiana" }
+ *    ] (toate căutările case-insensitive).
+ * 4. Din candidați, normalizăm fiecare `u.name` cu normalizeDbName și comparăm EXACT cu decodedName.
+ *    Dacă se potrivește, returnăm acel user.
+ * 5. Dacă nimeni nu se potrivește, returnăm null.
  */
 async function findUserBySlug(slug: string) {
-  const decodedName = decodeSlugToName(slug); // "precup carmen cristina"
-  const words = decodedName.split(" ");       // ["precup","carmen","cristina"]
+  const decodedName = decodeSlugToName(slug); // ex. "vatală georgiana"
+  console.log("Decoded name:", decodedName);
+  const words = decodedName.split(" ");       // ex. ["vatală", "georgiana"]
 
-  // Dacă slug-ul nu conține niciun cuvânt (ex: slug vid), nu avem ce căuta
   if (words.length === 0) return null;
 
-  // Facem interogarea în baza de date pentru toți userii care au,
-  // în câmpul `name`, fiecare dintre cuvintele din `words`.
+  // Interogăm pe baza fiecărui cuvânt, case-insensitive:
   const candidates = await prisma.user.findMany({
     where: {
       AND: words.map((w) => ({
@@ -110,8 +107,7 @@ async function findUserBySlug(slug: string) {
     },
   });
 
-  // Filtrăm candidații pentru a găsi unul al cărui nume, normalizat,
-  // este EXACT decodedName.
+  // Filtrăm candidații: normalizăm u.name și comparăm exact cu decodedName
   for (const u of candidates) {
     if (normalizeDbName(u.name) === decodedName) {
       return u;
@@ -123,7 +119,7 @@ async function findUserBySlug(slug: string) {
 
 /**
  * GET /api/user/[name]
- * Returnează datele provider-ului (inclusiv toate câmpurile selectate).
+ * Returnează datele provider-ului asociat user-ului găsit după slug.
  */
 export async function GET(
   _req: Request,
@@ -132,7 +128,6 @@ export async function GET(
   const { name: slug } = await params;
   const user = await findUserBySlug(slug);
 
-  // Dacă nu găsește user sau acel user nu are provider, răspundem 404
   if (!user || !user.provider) {
     const decoded = decodeSlugToName(slug);
     return NextResponse.json(
@@ -179,13 +174,12 @@ export async function GET(
 /**
  * PATCH /api/user/[name]
  * Body: { online: boolean }
- * Actualizează doar câmpul `online` pentru provider-ul găsit.
+ * Actualizează câmpul `online` în provider-ul găsit.
  */
 export async function PATCH(
   req: Request,
   { params }: AsyncRouteContext
 ): Promise<NextResponse> {
-  // Citim JSON-ul din corpul cererii
   let payload: unknown;
   try {
     payload = await req.json();
@@ -193,7 +187,6 @@ export async function PATCH(
     return NextResponse.json({ error: "JSON invalid." }, { status: 400 });
   }
 
-  // Validăm payload
   if (
     typeof payload !== "object" ||
     payload === null ||
@@ -219,7 +212,6 @@ export async function PATCH(
     );
   }
 
-  // Actualizăm câmpul `online` în baza de date
   try {
     const updated = await prisma.provider.update({
       where: { userId: user.id },
@@ -244,7 +236,7 @@ export async function PATCH(
 
 /**
  * POST /api/user/[name]
- * Redirectează POST către PATCH, pentru cazurile în care clientul trimite POST.
+ * Redirecționăm POST către PATCH (pentru cererile care vin cu POST).
  */
 export async function POST(
   req: Request,
