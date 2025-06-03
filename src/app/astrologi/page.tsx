@@ -14,14 +14,14 @@ const Page = () => {
     <div className="flex flex-col items-center min-h-screen w-full px-4 py-20 bg-gradient-to-t from-primaryColor to-secondaryColor">
       <div className="flex flex-col items-center lg:items-start w-full lg:w-[67rem] space-y-8">
         <h1 className="text-white font-semibold text-2xl lg:text-4xl">
-          Astrologi Lorem Ipsum
+          Astrologi
         </h1>
 
 
 
 
 
-        <Suspense fallback={<div>Loading...</div>}>
+        <Suspense fallback={<div>Incarcare...</div>}>
         <FilteredPsychics />
       </Suspense>
       </div>

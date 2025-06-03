@@ -100,7 +100,7 @@ const Slider = () => {
 
   return (
     <div className="flex flex-col items-center w-full space-y-8 h-full text-black mt-12">
-      <SectionTitle>Astrologi Online</SectionTitle>
+      <SectionTitle>Astrologi</SectionTitle>
 
       {/* Containerul slider-ului */}
       <div className="relative w-full overflow-hidden">
