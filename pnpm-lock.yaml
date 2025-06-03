@@ -26,6 +26,9 @@ importers:
       '@types/bcrypt':
         specifier: ^5.0.2
         version: 5.0.2
+      '@types/formidable':
+        specifier: ^3.4.5
+        version: 3.4.5
       '@types/jsonwebtoken':
         specifier: ^9.0.9
         version: 9.0.9
@@ -628,6 +631,9 @@ packages:
 
   '@types/estree@1.0.6':
     resolution: {integrity: sha512-AYnb1nQyY49te+VRAVgmzfcgjYS91mY5P0TKUDCLEM+gNnA+3T6rWITXRLYCpahpqSQbN5cE+gHpnPyXjHWxcw==}
+
+  '@types/formidable@3.4.5':
+    resolution: {integrity: sha512-s7YPsNVfnsng5L8sKnG/Gbb2tiwwJTY1conOkJzTMRvJAlLFW1nEua+ADsJQu8N1c0oTHx9+d5nqg10WuT9gHQ==}
 
   '@types/hoist-non-react-statics@3.3.6':
     resolution: {integrity: sha512-lPByRJUer/iN/xa4qpyL0qmL11DqNW81iU/IG1S3uvRUq4oKagz8VCxZjiWkumgt66YT3vOdDgZ0o32sGKtCEw==}
@@ -2781,6 +2787,10 @@ snapshots:
       '@types/node': 20.17.19
 
   '@types/estree@1.0.6': {}
+
+  '@types/formidable@3.4.5':
+    dependencies:
+      '@types/node': 20.17.19
 
   '@types/hoist-non-react-statics@3.3.6':
     dependencies:

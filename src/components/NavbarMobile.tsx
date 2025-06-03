@@ -94,10 +94,10 @@ const NavbarMobile = () => {
 
             <div
               className={`overflow-hidden transition-all duration-300 ease-in-out ${
-                isPsychologistsOpen ? 'max-h-[300px] opacity-100' : 'max-h-0 opacity-0'
+                isPsychologistsOpen ? 'max-h-[320px] opacity-100' : 'max-h-0 opacity-0'
               }`}
             >
-              <ul className="mt-2 bg-white text-primaryColor text-center rounded-lg shadow-lg">
+              <ul className="mt-2 bg-white text-primaryColor text-center rounded-lg shadow-lg ">
                 {specialities.map((speciality, index) => (
                   <Link key={index} href="/astrologi" onClick={() => {setIsOpen(false); setIsPsychologistsOpen(false)}} className="block w-full">
                     <li className="py-2 px-4 hover:bg-primaryColor/10 cursor-pointer">

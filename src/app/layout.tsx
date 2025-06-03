@@ -33,7 +33,8 @@ export default function RootLayout({
   return (
  <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen flex flex-col`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen flex flex-col   overflow-x-hidden
+  max-w-full`}
       >
         <Providers>
           <GlobalPresenceTracker />
@@ -46,9 +47,9 @@ export default function RootLayout({
               {children}
             </main>
           </CatalogInitializer>
+        <Footer />
         </Providers>
 
-        <Footer />
       </body>
     </html>
   );

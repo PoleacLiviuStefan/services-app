@@ -1,19 +1,59 @@
-import {prisma} from "@/lib/prisma";
-import { NextResponse } from "next/server";
+// app/api/provider/[providerId]/video-url/route.ts
 
-export async function PUT(req: Request, { params }: { params: { providerId: string } }) {
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+import { withProviderAuth } from "@/lib/api/logout/providerMiddleware/withProviderAuth";
+
+export const runtime = "nodejs";
+
+// ----------------------------
+// HANDLER pentru PUT (/api/provider/[providerId]/video-url)
+// ----------------------------
+async function putHandler(
+  req: Request,
+  context: { params: { providerId: string } }
+) {
+  // 1) Așteptăm context.params și extragem providerId
+  const { providerId } = await context.params;
+
+  // 2) Parsăm JSON-ul din body pentru videoUrl
   const { videoUrl }: { videoUrl: string } = await req.json();
+
+  // 3) Actualizăm câmpul videoUrl în baza de date
   const updated = await prisma.provider.update({
-    where: { id: params.providerId },
+    where: { id: providerId },
     data: { videoUrl },
   });
-  return NextResponse.json(updated);
+
+  // 4) Returnăm răspunsul cu obiectul actualizat
+  return NextResponse.json({ updated });
 }
 
-export async function GET(_req: Request, { params }: { params: { providerId: string } }) {
-  const { videoUrl } = await prisma.provider.findUnique({
-    where: { id: params.providerId },
-    select: { videoUrl: true }
-  }) || { videoUrl: null };
+// Exportăm metoda PUT „împachetată” cu withProviderAuth
+export const PUT = withProviderAuth(putHandler);
+
+// ----------------------------
+// HANDLER pentru GET (/api/provider/[providerId]/video-url)
+// ----------------------------
+async function getHandler(
+  _req: Request,
+  context: { params: { providerId: string } }
+) {
+  // 1) Așteptăm context.params și extragem providerId
+  const { providerId } = await context.params;
+
+  // 2) Căutăm doar câmpul videoUrl pentru acel provider
+  const result = await prisma.provider.findUnique({
+    where: { id: providerId },
+    select: { videoUrl: true },
+  });
+
+  // 3) Extragem videoUrl (dacă result e null, atunci videoUrl va fi null)
+  const videoUrl = result ? result.videoUrl : null;
+
+  // 4) Returnăm întotdeauna un obiect cu cheia videoUrl
   return NextResponse.json({ videoUrl });
 }
+
+// Exportăm metoda GET „împachetată” cu withProviderAuth
+export const GET = withProviderAuth(getHandler);

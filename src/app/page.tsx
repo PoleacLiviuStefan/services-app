@@ -2,6 +2,7 @@ import About from "@/components/About";
 import Hero from "../components/Hero";
 import Slider from "../components/Slider";
 import Curiosities from "@/components/Curiosities";
+import Faq from "@/components/Faq";
 
 const Page = () => {
   return (
@@ -13,7 +14,10 @@ const Page = () => {
           <Slider />
           <About />
         </div>
-          <Curiosities />
+        <Curiosities />
+        <div className="lg:w-[68rem] w-full space-y-20 py-12">
+          <Faq />
+        </div>
       </main>
     </div>
   );

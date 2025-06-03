@@ -1,27 +1,39 @@
 // app/api/provider/[providerId]/tools/route.ts
-import { prisma } from '@/lib/prisma';
-import { NextResponse } from 'next/server';
 
-export async function PUT(
+import { prisma } from "@/lib/prisma";
+import { NextResponse } from "next/server";
+import { withProviderAuth } from "@/lib/api/logout/providerMiddleware/withProviderAuth";
+
+export const runtime = "nodejs";
+
+// ----------------------------
+// HANDLER pentru PUT (/api/provider/[providerId]/tools)
+// ----------------------------
+async function putHandler(
   req: Request,
-  { params }: { params: { providerId: string } | Promise<{ providerId: string }> }
+  context: { params: { providerId: string } }
 ) {
-  const { providerId } = await params;
-  let body: { tools?: string[] };
+  // 1) Așteptăm context.params și extragem providerId
+  const { providerId } = await context.params;
 
+  // 2) Citim și validăm JSON-ul din body
+  let body: { tools?: string[] };
   try {
     body = await req.json();
   } catch {
-    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
+    return NextResponse.json(
+      { error: "Invalid JSON" },
+      { status: 400, headers: { "Content-Type": "application/json" } }
+    );
   }
   if (!Array.isArray(body.tools)) {
     return NextResponse.json(
-      { error: 'tools must be an array of IDs' },
-      { status: 400 }
+      { error: "tools must be an array of IDs" },
+      { status: 400, headers: { "Content-Type": "application/json" } }
     );
   }
 
-  // 1) Fetch only the tools that actually exist
+  // 3) Fetch doar tool-urile care există în baza de date
   const existing = await prisma.tool.findMany({
     where: { id: { in: body.tools } },
     select: { id: true },
@@ -29,7 +41,7 @@ export async function PUT(
   const validConnect = existing.map((t) => ({ id: t.id }));
 
   try {
-    // 2) Update with only the valid IDs
+    // 4) Facem update cu doar ID-urile valide și includem lista actualizată de tools
     const updated = await prisma.provider.update({
       where: { id: providerId },
       data: {
@@ -38,12 +50,19 @@ export async function PUT(
       include: { tools: true },
     });
 
-    return NextResponse.json(updated.tools, { status: 200 });
+    // 5) Returnăm array-ul de tool-uri actualizat
+    return NextResponse.json(
+      { tools: updated.tools },
+      { status: 200, headers: { "Content-Type": "application/json" } }
+    );
   } catch (err: any) {
     console.error(err.stack);
     return NextResponse.json(
-      { error: err.message ?? 'Internal Server Error' },
-      { status: 500 }
+      { error: err.message ?? "Internal Server Error" },
+      { status: 500, headers: { "Content-Type": "application/json" } }
     );
   }
 }
+
+// Exportăm metoda PUT „împachetată” cu withProviderAuth
+export const PUT = withProviderAuth(putHandler);

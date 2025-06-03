@@ -1,10 +1,46 @@
-import React, { useState, useEffect } from "react";
-import Button from "./atoms/button";
-import Modal from "./ui/modal";
-import AddAttributeProvider from "./ui/addAttributeProvider";
-import EditButton from "./ui/editButton";
-import { ProviderInterface } from "@/interfaces/ProviderInterface";
+// components/ProviderDetails.tsx
+
+"use client";
+
+import React, { FC, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import Button from "@/components/atoms/button";
+import Modal from "@/components/ui/modal";
+import AddAttributeProvider from "@/components/ui/addAttributeProvider";
+import EditButton from "@/components/ui/editButton";
 import { useCatalogStore } from "@/store/catalog";
+
+interface ProviderInterface {
+  id: string;
+  online: boolean;
+  description: string;
+  videoUrl?: string | null;
+  grossVolume?: number | null;
+  calendlyCalendarUri?: string | null;
+  scheduleLink?: string | null;
+  reading?: { id: string; name: string; description?: string };
+  specialities: { id: string; name: string; description?: string; price?: number }[];
+  tools: { id: string; name: string; description?: string }[];
+  mainSpeciality?: { id: string; name: string };
+  mainTool?: { id: string; name: string };
+  reviewsCount: number;
+  averageRating: number;
+  providerPackages: {
+    id: string;
+    service: string;
+    totalSessions: number;
+    price: number;
+    createdAt: string;
+    expiresAt: string | null;
+  }[];
+  stripeAccountId?: string | null;
+  user: {
+    id: string;
+    name: string;
+    email: string;
+    image?: string | null;
+  };
+}
 
 interface ProviderDetailsProps {
   provider: ProviderInterface;
@@ -23,44 +59,33 @@ type EditModalType =
   | "Description"
   | "Status";
 
-const ProviderDetails: React.FC<ProviderDetailsProps> = ({ provider }) => {
-  // Catalog stores and add functions
+const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
+  console.log('provider')
   const specialitiesStore = useCatalogStore((s) => s.specialities);
   const readingsStore = useCatalogStore((s) => s.readings);
   const toolsStore = useCatalogStore((s) => s.tools);
 
-  // Local state
-  const [localProvider, setLocalProvider] =
-    useState<ProviderInterface>(provider);
+  const [localProvider, setLocalProvider] = useState(provider);
   const [showEditModal, setShowEditModal] = useState<EditModalType>("");
 
   // Form fields
-  const [description, setDescription] = useState(
-    localProvider.description || ""
-  );
+  const [description, setDescription] = useState(localProvider.description || "");
   const [status, setStatus] = useState(localProvider.online);
   const [videoUrl, setVideoUrl] = useState(localProvider.videoUrl || "");
-  const [scheduleLink, setScheduleLink] = useState(
-    localProvider.scheduleLink || ""
-  );
+  const [scheduleLink, setScheduleLink] = useState(localProvider.scheduleLink || "");
   const [readingId, setReadingId] = useState(localProvider.reading?.id || "");
-  const [mainSpecialityId, setMainSpecialityId] = useState(
-    localProvider.mainSpeciality?.id || ""
-  );
-  const [mainToolId, setMainToolId] = useState(
-    localProvider.mainTool?.id || ""
-  );
+  const [mainSpecialityId, setMainSpecialityId] = useState(localProvider.mainSpeciality?.id || "");
+  const [mainToolId, setMainToolId] = useState(localProvider.mainTool?.id || "");
   const [selectedSpecialities, setSelectedSpecialities] = useState<string[]>(
-    localProvider.specialities || []
+    localProvider.specialities.map((s) => s.name)
   );
   const [selectedTools, setSelectedTools] = useState<string[]>(
-    localProvider.tools || []
+    localProvider.tools.map((t) => t.name)
   );
   const [selectedPackages, setSelectedPackages] = useState<string[]>(
-    localProvider.providerPackages?.map((p) => p.id) || []
+    localProvider.providerPackages.map((p) => p.id)
   );
 
-  // New option inputs
   const [newSpecialityName, setNewSpecialityName] = useState("");
   const [newToolName, setNewToolName] = useState("");
   const [newReadingName, setNewReadingName] = useState("");
@@ -69,7 +94,8 @@ const ProviderDetails: React.FC<ProviderDetailsProps> = ({ provider }) => {
   const [newPackagePrice, setNewPackagePrice] = useState("");
   const [newPackageExpiresAt, setNewPackageExpiresAt] = useState("");
 
-  // Sync props -> state
+  const router = useRouter();
+
   useEffect(() => {
     setLocalProvider(provider);
     setDescription(provider.description || "");
@@ -79,31 +105,31 @@ const ProviderDetails: React.FC<ProviderDetailsProps> = ({ provider }) => {
     setReadingId(provider.reading?.id || "");
     setMainSpecialityId(provider.mainSpeciality?.id || "");
     setMainToolId(provider.mainTool?.id || "");
-    setSelectedSpecialities(provider.specialities || []);
-    setSelectedTools(provider.tools || []);
-    setSelectedPackages(provider.providerPackages?.map((p) => p.id) || []);
+    setSelectedSpecialities(provider.specialities.map((s) => s.name));
+    setSelectedTools(provider.tools.map((t) => t.name));
+    setSelectedPackages(provider.providerPackages.map((p) => p.id));
   }, [provider]);
 
-  // Toggle multi-select
   const toggleMulti = (val: string, key: EditModalType) => {
-    if (key === "Specialities")
+    if (key === "Specialities") {
       setSelectedSpecialities((prev) =>
         prev.includes(val) ? prev.filter((v) => v !== val) : [...prev, val]
       );
-    else if (key === "Tools")
+    } else if (key === "Tools") {
       setSelectedTools((prev) =>
         prev.includes(val) ? prev.filter((v) => v !== val) : [...prev, val]
       );
-    else if (key === "Packages")
+    } else if (key === "Packages") {
       setSelectedPackages((prev) =>
         prev.includes(val) ? prev.filter((v) => v !== val) : [...prev, val]
       );
+    }
   };
 
-  // Save handler
   const handleSaveChanges = async (type: EditModalType) => {
-    let url = `/api/provider/${provider.id}`;
+    let url = `/api/provider/${localProvider.id}`;
     let body: any = {};
+
     switch (type) {
       case "Description":
         url += "/description";
@@ -145,9 +171,7 @@ const ProviderDetails: React.FC<ProviderDetailsProps> = ({ provider }) => {
         url += "/packages";
         body = {
           packages: selectedPackages.map((id) => {
-            const pkg = localProvider.providerPackages?.find(
-              (p) => p.id === id
-            );
+            const pkg = localProvider.providerPackages.find((p) => p.id === id);
             return pkg
               ? {
                   service: pkg.service,
@@ -170,7 +194,6 @@ const ProviderDetails: React.FC<ProviderDetailsProps> = ({ provider }) => {
     });
     if (!res.ok) return;
 
-    // Update local state
     setLocalProvider((prev) => {
       const copy = { ...prev } as any;
       switch (type) {
@@ -197,13 +220,19 @@ const ProviderDetails: React.FC<ProviderDetailsProps> = ({ provider }) => {
           copy.mainTool = toolsStore.find((t) => t.id === mainToolId) || null;
           break;
         case "Specialities":
-          copy.specialities = selectedSpecialities;
+          copy.specialities = selectedSpecialities.map((name) => ({
+            id: specialitiesStore.find((s) => s.name === name)!.id,
+            name,
+          }));
           break;
         case "Tools":
-          copy.tools = selectedTools;
+          copy.tools = selectedTools.map((name) => ({
+            id: toolsStore.find((t) => t.name === name)!.id,
+            name,
+          }));
           break;
         case "Packages":
-          copy.providerPackages = prev.providerPackages?.filter((p) =>
+          copy.providerPackages = prev.providerPackages.filter((p) =>
             selectedPackages.includes(p.id)
           );
           break;
@@ -214,14 +243,137 @@ const ProviderDetails: React.FC<ProviderDetailsProps> = ({ provider }) => {
     setShowEditModal("");
   };
 
+  // ================= STRIPE CONNECT =======================
+  const createStripeConnectUrl = () => {
+    const clientId = process.env.NEXT_PUBLIC_STRIPE_CLIENT_ID!;
+    const redirectUri = `${process.env.NEXT_PUBLIC_BASE_URL}/profil`;
+
+    const params = new URLSearchParams({
+      response_type: "code",
+      client_id: clientId,
+      redirect_uri: redirectUri,
+      state: `stripe:${localProvider.id}`,
+      "stripe_user[country]": "RO",
+    });
+
+    return `https://connect.stripe.com/oauth/authorize?${params.toString()}`;
+  };
+
+  // ================= CALENDLY CONNECT =====================
+  const createCalendlyConnectUrl = () => {
+    const clientId = process.env.NEXT_PUBLIC_CALENDLY_CLIENT_ID!;
+    const redirectUri = `${process.env.NEXT_PUBLIC_BASE_URL}/profil`;
+
+    const params = new URLSearchParams({
+      response_type: "code",
+      client_id: clientId,
+      redirect_uri: redirectUri,
+      state: `calendly:${localProvider.id}`,
+    });
+
+    return `https://auth.calendly.com/oauth/authorize?${params.toString()}`;
+  };
+
+  // Render Stripe & Calendly connect sections
+  const renderIntegrationSections = () => (
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+      {/* Stripe Connect */}
+      <div className="h-full flex flex-col justify-between bg-gray-50 p-4 rounded">
+        <div>
+          <strong>Cont Stripe:</strong>{" "}
+          {localProvider.stripeAccountId ? (
+            <span className="text-green-700">
+              Conectat ({localProvider.stripeAccountId})
+            </span>
+          ) : (
+            <span className="text-red-600">Nu esti conectat</span>
+          )}
+        </div>
+        {!localProvider.stripeAccountId ? (
+          <Button
+            onClick={() => {
+              window.location.href = createStripeConnectUrl();
+            }}
+            className="mt-2 px-4 py-2 bg-primaryColor text-white rounded hover:bg-primaryColor-dark"
+          >
+            Conecteaza-te cu Stripe
+          </Button>
+        ) : (
+          <Button
+            onClick={async () => {
+              const res = await fetch(
+                `/api/provider/${localProvider.id}/stripe-account`,
+                {
+                  method: "PUT",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ stripeAccountId: null }),
+                }
+              );
+              if (res.ok) {
+                setLocalProvider((prev) => ({
+                  ...prev,
+                  stripeAccountId: null,
+                }));
+              }
+            }}
+            className="mt-2 px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
+          >
+            Deconecteaza Stripe
+          </Button>
+        )}
+      </div>
+
+      {/* Calendly Connect */}
+      <div className="h-full flex flex-col justify-between bg-gray-50 p-4 rounded">
+        <div>
+          <strong>Conectare Calendly:</strong>{" "}
+          {localProvider.scheduleLink ? (
+            <span className="text-green-700">Conectat</span>
+          ) : (
+            <span className="text-red-600">Nu esti Conectat</span>
+          )}
+        </div>
+        {!localProvider.scheduleLink ? (
+          <Button
+            onClick={() => {
+              window.location.href = createCalendlyConnectUrl();
+            }}
+            className="mt-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+          >
+            Conecteaza-te cu Calendly
+          </Button>
+        ) : (
+          <Button
+            onClick={async () => {
+              const res = await fetch(
+                `/api/provider/${localProvider.id}/calendly-account`,
+                {
+                  method: "PUT",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ calendlyCalendarUri: null }),
+                }
+              );
+              if (res.ok) {
+                setLocalProvider((prev) => ({
+                  ...prev,
+                  calendlyCalendarUri: null,
+                }));
+              }
+            }}
+            className="mt-2 px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
+          >
+            Deconectare Calendly
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+
   return (
     <>
-      {/* Video URL Modal */}
+      {/* =================== Edit Modals =================== */}
       {showEditModal === "VideoUrl" && (
-        <Modal
-          closeModal={() => setShowEditModal("")}
-          title="Editează Video URL"
-        >
+        <Modal closeModal={() => setShowEditModal("")} title="Editează Video URL">
           <input
             type="text"
             value={videoUrl}
@@ -237,12 +389,8 @@ const ProviderDetails: React.FC<ProviderDetailsProps> = ({ provider }) => {
         </Modal>
       )}
 
-      {/* Schedule Link Modal */}
       {showEditModal === "ScheduleLink" && (
-        <Modal
-          closeModal={() => setShowEditModal("")}
-          title="Editează Link Programări"
-        >
+        <Modal closeModal={() => setShowEditModal("")} title="Editează Link Programări">
           <input
             type="text"
             value={scheduleLink}
@@ -258,12 +406,8 @@ const ProviderDetails: React.FC<ProviderDetailsProps> = ({ provider }) => {
         </Modal>
       )}
 
-      {/* Main Speciality Modal */}
       {showEditModal === "MainSpeciality" && (
-        <Modal
-          closeModal={() => setShowEditModal("")}
-          title="Editează Specialitatea Principală"
-        >
+        <Modal closeModal={() => setShowEditModal("")} title="Editează Specialitatea Principală">
           <div className="space-y-2 max-h-[60vh] overflow-auto">
             {specialitiesStore.map((spec) => (
               <AddAttributeProvider
@@ -283,12 +427,8 @@ const ProviderDetails: React.FC<ProviderDetailsProps> = ({ provider }) => {
         </Modal>
       )}
 
-      {/* Main Tool Modal */}
       {showEditModal === "MainTool" && (
-        <Modal
-          closeModal={() => setShowEditModal("")}
-          title="Editează Unealta Principală"
-        >
+        <Modal closeModal={() => setShowEditModal("")} title="Editează Unealta Principală">
           <div className="space-y-2 max-h-[60vh] overflow-auto">
             {toolsStore.map((tool) => (
               <AddAttributeProvider
@@ -307,12 +447,9 @@ const ProviderDetails: React.FC<ProviderDetailsProps> = ({ provider }) => {
           </Button>
         </Modal>
       )}
-      {/* Description Modal */}
+
       {showEditModal === "Description" && (
-        <Modal
-          closeModal={() => setShowEditModal("")}
-          title="Editează Descrierea"
-        >
+        <Modal closeModal={() => setShowEditModal("")} title="Editează Descrierea">
           <textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
@@ -327,16 +464,15 @@ const ProviderDetails: React.FC<ProviderDetailsProps> = ({ provider }) => {
         </Modal>
       )}
 
-      {/* Status Modal */}
       {showEditModal === "Status" && (
         <Modal closeModal={() => setShowEditModal("")} title="Editează Stare">
-          <label className="flex items-center">
+          <label className="flex items-center space-x-2">
             <input
               type="checkbox"
               checked={status}
               onChange={(e) => setStatus(e.target.checked)}
             />
-            <span className="ml-2">Online</span>
+            <span>Online</span>
           </label>
           <Button
             onClick={() => handleSaveChanges("Status")}
@@ -347,13 +483,8 @@ const ProviderDetails: React.FC<ProviderDetailsProps> = ({ provider }) => {
         </Modal>
       )}
 
-      {/* Specialities Modal */}
       {showEditModal === "Specialities" && (
-        <Modal
-          closeModal={() => setShowEditModal("")}
-          title="Editează Specializările"
-        >
-          {/* New speciality input */}
+        <Modal closeModal={() => setShowEditModal("")} title="Editează Specializările">
           <div className="mb-4 flex space-x-2">
             <input
               type="text"
@@ -373,7 +504,6 @@ const ProviderDetails: React.FC<ProviderDetailsProps> = ({ provider }) => {
                   body: JSON.stringify({ name }),
                 });
                 if (res.ok) {
-                  // optional: re-fetch lista specialităților ca să vezi imediat noua opțiune
                   setNewSpecialityName("");
                 }
               }}
@@ -381,7 +511,6 @@ const ProviderDetails: React.FC<ProviderDetailsProps> = ({ provider }) => {
               Adaugă
             </Button>
           </div>
-
           <div className="space-y-2 max-h-[60vh] overflow-auto">
             {specialitiesStore.map((spec) => (
               <AddAttributeProvider
@@ -401,13 +530,8 @@ const ProviderDetails: React.FC<ProviderDetailsProps> = ({ provider }) => {
         </Modal>
       )}
 
-      {/* Tools Modal */}
       {showEditModal === "Tools" && (
-        <Modal
-          closeModal={() => setShowEditModal("")}
-          title="Editează Uneltele"
-        >
-          {/* New tool input */}
+        <Modal closeModal={() => setShowEditModal("")} title="Editează Uneltele">
           <div className="mb-4 flex space-x-2">
             <input
               type="text"
@@ -434,7 +558,6 @@ const ProviderDetails: React.FC<ProviderDetailsProps> = ({ provider }) => {
               Adaugă
             </Button>
           </div>
-
           <div className="space-y-2 max-h-[60vh] overflow-auto">
             {toolsStore.map((tool) => (
               <AddAttributeProvider
@@ -454,10 +577,8 @@ const ProviderDetails: React.FC<ProviderDetailsProps> = ({ provider }) => {
         </Modal>
       )}
 
-      {/* Reading Modal */}
       {showEditModal === "Reading" && (
         <Modal closeModal={() => setShowEditModal("")} title="Editează Reading">
-          {/* New reading input */}
           <div className="mb-4 flex space-x-2">
             <input
               type="text"
@@ -484,7 +605,6 @@ const ProviderDetails: React.FC<ProviderDetailsProps> = ({ provider }) => {
               Adaugă
             </Button>
           </div>
-
           <div className="space-y-2 max-h-[60vh] overflow-auto">
             {readingsStore.map((r) => (
               <AddAttributeProvider
@@ -504,13 +624,8 @@ const ProviderDetails: React.FC<ProviderDetailsProps> = ({ provider }) => {
         </Modal>
       )}
 
-      {/* Packages Modal */}
       {showEditModal === "Packages" && (
-        <Modal
-          closeModal={() => setShowEditModal("")}
-          title="Editează Pachetele"
-        >
-          {/* New package inputs */}
+        <Modal closeModal={() => setShowEditModal("")} title="Editează Pachetele">
           <div className="mb-4 space-y-2">
             <input
               type="text"
@@ -540,7 +655,7 @@ const ProviderDetails: React.FC<ProviderDetailsProps> = ({ provider }) => {
               className="w-full p-2 border rounded"
             />
             <Button
-              className="mt-4  py-3 w-full bg-primaryColor text-white hover:bg-secondaryColor"
+              className="mt-4 py-3 w-full bg-primaryColor text-white hover:bg-secondaryColor"
               disabled={
                 !newPackageService.trim() ||
                 !newPackageSessions ||
@@ -569,14 +684,13 @@ const ProviderDetails: React.FC<ProviderDetailsProps> = ({ provider }) => {
               Adaugă
             </Button>
           </div>
-
           <div className="space-y-2 max-h-[60vh] overflow-auto">
-            {localProvider.providerPackages?.map((pkg) => (
+            {localProvider.providerPackages.map((pkg) => (
               <AddAttributeProvider
                 key={pkg.id}
-                title={`${pkg.service} – ${pkg.totalSessions} sesiuni @ ${
-                  pkg.price
-                }RON – expiră: ${pkg.expiresAt ?? "—"}`}
+                title={`${pkg.service} – ${pkg.totalSessions} sesiuni @ ${pkg.price} RON – expiră: ${
+                  pkg.expiresAt ?? "—"
+                }`}
                 selected={selectedPackages.includes(pkg.id)}
                 setSelect={() => toggleMulti(pkg.id, "Packages")}
               />
@@ -584,15 +698,19 @@ const ProviderDetails: React.FC<ProviderDetailsProps> = ({ provider }) => {
           </div>
           <Button
             onClick={() => handleSaveChanges("Packages")}
-            className="mt-4  py-3 w-full bg-primaryColor text-white hover:bg-secondaryColor"
+            className="mt-4 py-3 w-full bg-primaryColor text-white hover:bg-secondaryColor"
           >
             Salvează
           </Button>
         </Modal>
       )}
 
+      {/* =================== Detalii Furnizor =================== */}
       <div className="max-w-3xl mx-auto bg-white shadow rounded p-6">
         <h3 className="text-lg font-semibold mb-4">Detalii Furnizor</h3>
+
+        {/* Stripe & Calendly Integration */}
+        {renderIntegrationSections()}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-stretch">
           {/* Descriere */}
@@ -606,10 +724,9 @@ const ProviderDetails: React.FC<ProviderDetailsProps> = ({ provider }) => {
           {/* Stare */}
           <div className="h-full flex flex-col justify-between bg-gray-50 p-4 rounded">
             <div>
-              <strong>Stare:</strong>{" "}
-              {localProvider.online ? "Online" : "Offline"}
+              <strong>Stare:</strong> {localProvider.online ? "Online" : "Offline"}
             </div>
-            {/* <EditButton showEditModal={() => setShowEditModal("Status")} /> */}
+            <EditButton showEditModal={() => setShowEditModal("Status")} />
           </div>
 
           {/* Video URL */}
@@ -623,12 +740,9 @@ const ProviderDetails: React.FC<ProviderDetailsProps> = ({ provider }) => {
           {/* Link Programări */}
           <div className="h-full flex flex-col justify-between bg-gray-50 p-4 rounded">
             <div>
-              <strong>Link Programări:</strong>{" "}
-              {localProvider.scheduleLink || "—"}
+              <strong>Link Programări:</strong> {localProvider.scheduleLink || "—"}
             </div>
-            <EditButton
-              showEditModal={() => setShowEditModal("ScheduleLink")}
-            />
+            <EditButton showEditModal={() => setShowEditModal("ScheduleLink")} />
           </div>
 
           {/* Reading */}
@@ -645,9 +759,7 @@ const ProviderDetails: React.FC<ProviderDetailsProps> = ({ provider }) => {
               <strong>Specialitate Principală:</strong>{" "}
               {localProvider.mainSpeciality?.name || "—"}
             </div>
-            <EditButton
-              showEditModal={() => setShowEditModal("MainSpeciality")}
-            />
+            <EditButton showEditModal={() => setShowEditModal("MainSpeciality")} />
           </div>
 
           {/* Unealtă Principală */}
@@ -663,30 +775,29 @@ const ProviderDetails: React.FC<ProviderDetailsProps> = ({ provider }) => {
           <div className="h-full flex flex-col justify-between bg-gray-50 p-4 rounded">
             <div>
               <strong>Specializări:</strong>{" "}
-              {localProvider.specialities?.join(", ") || "—"}
+              {localProvider.specialities.map((s) => s.name).join(", ") || "—"}
             </div>
-            <EditButton
-              showEditModal={() => setShowEditModal("Specialities")}
-            />
+            <EditButton showEditModal={() => setShowEditModal("Specialities")} />
           </div>
 
           {/* Unelte */}
           <div className="h-full flex flex-col justify-between bg-gray-50 p-4 rounded">
             <div>
-              <strong>Unelte:</strong> {localProvider.tools?.join(", ") || "—"}
+              <strong>Unelte:</strong>{" "}
+              {localProvider.tools.map((t) => t.name).join(", ") || "—"}
             </div>
             <EditButton showEditModal={() => setShowEditModal("Tools")} />
           </div>
 
-          {/* Pachete (span two columns) */}
+          {/* Pachete (două coloane) */}
           <div className="col-span-1 sm:col-span-2 h-full flex flex-col justify-between bg-gray-50 p-4 rounded">
             <div>
               <strong>Pachete:</strong>
               <ul className="list-disc ml-6 mt-2">
-                {localProvider.providerPackages?.map((pkg) => (
+                {localProvider.providerPackages.map((pkg) => (
                   <li key={pkg.id}>
-                    {pkg.service} – {pkg.totalSessions} sesiuni @ {pkg.price}RON
-                    – expiră: {pkg.expiresAt ?? "—"}
+                    {pkg.service} – {pkg.totalSessions} sesiuni @ {pkg.price} RON – expiră:{" "}
+                    {pkg.expiresAt ?? "—"}
                   </li>
                 )) || <span>—</span>}
               </ul>

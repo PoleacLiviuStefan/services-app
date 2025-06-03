@@ -1,12 +1,11 @@
+// /components/PackageCard.tsx
 "use client";
 
 import React, { FC } from "react";
 import { Package } from "@/interfaces/PackageInterface";
 
 export interface PackageCardProps {
-  /** Datele pachetului */
   pkg: Package;
-  /** Callback când utilizatorul dă click pe "Cumpără" */
   onBuy: (packageId: string) => void;
 }
 
@@ -16,7 +15,7 @@ const PackageCard: FC<PackageCardProps> = ({ pkg, onBuy }) => {
     : "Fără expirare";
 
   return (
-    <div className="flex justify-between items-center border border-gray-200 rounded-lg p-4">
+    <div className="flex justify-between items-center border border-gray-200 rounded-lg p-4 shadow-sm">
       <div>
         <h3 className="font-medium text-lg">{pkg.name}</h3>
         <p className="text-sm text-gray-600">
@@ -29,7 +28,7 @@ const PackageCard: FC<PackageCardProps> = ({ pkg, onBuy }) => {
         </span>
         <button
           type="button"
-          className="bg-primaryColor text-white px-4 py-2 rounded-lg hover:bg-primaryColor-dark focus:outline-none focus:ring-2 focus:ring-primaryColor"
+          className="cursor-pointer bg-primaryColor text-white px-4 py-2 rounded-lg hover:bg-primaryColor-dark focus:outline-none focus:ring-2 focus:ring-primaryColor"
           onClick={() => onBuy(pkg.id)}
         >
           Cumpără

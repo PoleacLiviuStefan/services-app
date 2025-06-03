@@ -65,6 +65,7 @@ export async function GET(
           videoUrl: true,
           grossVolume: true,
           calendlyCalendarUri: true,
+          stripeAccountId: true,
           reading: {
             select: { id: true, name: true, description: true }
           },
@@ -136,7 +137,8 @@ export async function GET(
     mainTool: p.mainTool,
     reviewsCount,
     averageRating,
-    providerPackages: p.providerPackages
+    providerPackages: p.providerPackages,
+    stripeAccountId: p.stripeAccountId || null
   }
 
   return NextResponse.json({ provider: payload }, { status: 200 })

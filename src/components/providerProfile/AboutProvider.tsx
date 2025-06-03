@@ -22,12 +22,12 @@ const AboutProvider: FC<AboutProviderProps> = ({
 }) => (
   <div className="space-y-8 text-sm lg:text-lg">
     <div>
-      <h3 className="font-semibold mb-2">Specialitatea Principala:</h3>
-      <span className={pillClasses}>{mainSpecialty.name || "NU EXISTA"}</span>
+      <h3 className="font-semibold mb-2">Domeniu Principal:</h3>
+      <span className={pillClasses}>{mainSpecialty?.name || "NU EXISTA"}</span>
     </div>
 
     <div>
-      <h3 className="font-semibold mb-2">Mai Multe Specialitati:</h3>
+      <h3 className="font-semibold mb-2">Mai Multe Domenii:</h3>
       {moreSpecialties.length > 0
         ? moreSpecialties.map((spec) => (
             <span key={spec} className={pillClasses}>
@@ -39,12 +39,12 @@ const AboutProvider: FC<AboutProviderProps> = ({
     </div>
 
     <div>
-      <h3 className="font-semibold mb-2">Unealta Principala:</h3>
+      <h3 className="font-semibold mb-2">Instrumentul Principal:</h3>
       <span className={pillClasses}>{mainTool || 'NU EXISTA'}</span>
     </div>
 
     <div>
-      <h3 className="font-semibold mb-2">Mai Multe Unele:</h3>
+      <h3 className="font-semibold mb-2">Mai Multe Instrumente:</h3>
       {moreTools.length > 0
         ? moreTools.map((tool) => (
             <span key={tool} className={pillClasses}>

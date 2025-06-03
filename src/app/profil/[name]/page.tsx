@@ -56,6 +56,7 @@ export default function PsychicProfile() {
           reviews: reviewsList,
           speciality: mainSpec?.name || "",
           mainSpeciality: mainSpec ? { name: mainSpec.name } : undefined,
+          stripeAccountId: p.stripeAccountId || null,
           reviewsCount,
           online: p.online,
           videoUrl: p.videoUrl,
@@ -115,7 +116,7 @@ export default function PsychicProfile() {
   if (!provider) return null;
 
   return (
-    <div className="flex flex-col justify-center p-4 max-w-4xl mx-auto bg-white shadow-lg rounded-lg overflow-hidden space-y-6 p-8">
+    <div className="flex flex-col  justify-center p-4 max-w-4xl mx-auto bg-white shadow-lg rounded-lg overflow-hidden gap-12 p-8">
       <ProfileMainInfo provider={provider}  />
       <ProviderProfileSection provider={provider} />
     </div>

@@ -125,23 +125,23 @@ const ProviderCard: React.FC<ProviderCardProp> = ({
         </span>
 
         <div className="flex flex-col justify-center bg-primaryColor/40 rounded-lg w-full h-14 lg:h-20 lg:space-y-1 font-bold">
-          <p className="text-sm lg:text-md text-center hidden lg:inline">Alege una dintre cele 3 metode</p>
-          <div className="flex items-center justify-between px-4 lg:px-8">
-            <Link href={user ? '/servicii/apel' : '/autentificare'}>
+          <p className="text-sm lg:text-md text-center hidden lg:inline">Programeaza o sedinta</p>
+          <div className="flex items-center justify-center px-4 lg:px-8">
+            {/* <Link href={user ? '/servicii/apel' : '/autentificare'}>
               <Icon>
                 <FaPhoneVolume />
               </Icon>
-            </Link>
-            <Link href={user ? '/servicii/video' : '/autentificare'}>
+            </Link> */}
+            <Link href={user ? `/profil/${formatForUrl(name)}` : '/autentificare'}>
               <Icon>
                 <FaVideo />
               </Icon>
             </Link>
-            <Link href={user ? '/servicii/mesagerie' : '/autentificare'}>
+            {/* <Link href={user ? '/servicii/mesagerie' : '/autentificare'}>
               <Icon>
                 <MdMessage />
               </Icon>
-            </Link>
+            </Link> */}
           </div>
         </div>
       </div>

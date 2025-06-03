@@ -1,26 +1,36 @@
-import { NextResponse } from 'next/server';
-import fs from 'fs';
-import path from 'path';
-import mime from 'mime';
+import { NextResponse } from "next/server";
+import fs from "fs";
+import path from "path";
+import mime from "mime";
 
-export const runtime = 'nodejs';
+export const runtime = "nodejs";
 
 export async function GET(
   _req: Request,
-  { params }: { params: { filename: string } }
+  { params }: { params: { file: string[] } }
 ) {
-  const { filename } = params;
-  const filePath = path.join('/mnt/storage', filename);
+  // params.file este un array de segmente: de ex ["avatars","1234.jpg"]
+  const segments = params.file;
+  const filePath = path.join(process.env.STORAGE_PATH, ...segments);
 
+
+  // Verificăm dacă există fișierul
   if (!fs.existsSync(filePath)) {
-    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    return new NextResponse(
+      JSON.stringify({ error: "Not found" }),
+      { status: 404, headers: { "Content-Type": "application/json" } }
+    );
   }
 
-  const fileBuffer = await fs.promises.readFile(filePath);
-  const contentType = mime.getType(filename) || 'application/octet-stream';
+  // Determinăm MIME-type pe baza extensiei
+  const contentType = mime.getType(filePath) || "application/octet-stream";
 
-  return new NextResponse(fileBuffer, {
+  // Citim fișierul ca Buffer
+  const buffer = await fs.promises.readFile(filePath);
+
+  // Returnăm buffer-ul cu headerul corespunzător
+  return new NextResponse(buffer, {
     status: 200,
-    headers: { 'Content-Type': contentType },
+    headers: { "Content-Type": contentType },
   });
 }

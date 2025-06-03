@@ -2,7 +2,6 @@
 
 import React, { useState } from "react";
 import Image from "next/image";
-import { useSession } from "next-auth/react";
 import { FaPlay, FaStar, FaVideo } from "react-icons/fa";
 import { MdMessage } from "react-icons/md";
 import Icon from "./atoms/icon";
@@ -19,10 +18,8 @@ interface ProfileMainInfoProps {
 const ProfileMainInfo: React.FC<ProfileMainInfoProps> = ({ provider }) => {
   const [showVideoModal, setShowVideoModal] = useState(false);
   const [showBuyPackageModal, setShowBuyPackageModal] = useState(false);
-  const [selectedService, setSelectedService] = useState<
-    "CHAT" | "MEET" | null
-  >(null);
-
+  const [selectedService, setSelectedService] = useState<"CHAT" | "MEET" | null>(null);
+  console.log("Provider:", provider);
   // Filtrăm pachetele după tip de serviciu
   const chatPackages = provider.packages.filter((p) => p.service === "CHAT");
   const meetPackages = provider.packages.filter((p) => p.service === "MEET");
@@ -41,22 +38,26 @@ const ProfileMainInfo: React.FC<ProfileMainInfoProps> = ({ provider }) => {
         onClose={() => setShowVideoModal(false)}
       />
       <BuyPackageModal
+        providerStripeAccountId={provider.stripeAccountId || ""}
         packages={selectedService === "CHAT" ? chatPackages : meetPackages}
         isOpen={showBuyPackageModal}
         onClose={() => setShowBuyPackageModal(false)}
-        onBuy={handleBuy}
+        providerId={provider.id}
       />
 
       <div className="flex flex-col lg:flex-row lg:justify-between items-center space-y-6 lg:space-x-6 relative w-full">
-        <div className="relative flex flex-col bg-white rounded-lg shadow-lg h-[350px] w-[250px]">
-          <Image
-            src={provider.image}
-            alt={provider.name}
-            height={300}
-            width={250}
-            className="object-cover rounded-lg"
-          />
-          <div className="flex flex-col p-2">
+        {/* Blocul principal cu imaginea și numele */}
+        <div className="flex flex-col items-center bg-white rounded-lg shadow-lg w-[250px] h-[350px]">
+          {/* Container imagine 250×250 */}
+          <div className="flex flex-col items-center relative w-full h-[250px] overflow-hidden rounded-t-lg">
+            <Image
+              src={provider.image || "/default-avatar.webp"}
+              alt={provider.name}
+              fill
+              className="object-cover"
+            />
+
+            {/* Badge ONLINE/OFFLINE */}
             {provider.online ? (
               <span className="absolute top-2 left-2 bg-green-400 text-white font-extrabold text-[11px] px-1 bg-opacity-80 rounded-lg">
                 ONLINE
@@ -66,24 +67,37 @@ const ProfileMainInfo: React.FC<ProfileMainInfoProps> = ({ provider }) => {
                 OFFLINE
               </span>
             )}
+
+            {/* Buton Video Introductiv */}
             {provider.videoUrl && (
-              <Button
+              <button
                 onClick={() => setShowVideoModal(true)}
-                className="flex items-center justify-center bg-primaryColor text-white font-semibold text-sm px-3 py-1 rounded-full"
+                className="
+                  absolute
+                  bottom-2
+                  flex items-center justify-center
+                  bg-primaryColor text-white
+                  font-semibold text-sm
+                  px-3 py-1
+                  rounded-full
+                "
               >
-                <FaPlay className="mr-2" /> Video Introductiv
-              </Button>
+                <FaPlay className="mr-2" />
+                Video Introductiv
+              </button>
             )}
-            <span className="absolute top-1 right-1 flex items-center bg-yellow-500 text-white font-semibold text-sm px-2 py-1 rounded-lg">
+
+            {/* Rating în colțul drept sus */}
+            <span className="absolute top-2 right-2 flex items-center bg-yellow-500 text-white font-semibold text-sm px-2 py-1 rounded-lg">
               {provider.rating} <FaStar className="ml-1" />
               <span className="ml-2 text-xs">({provider.reviewsCount})</span>
             </span>
           </div>
-          <div className="relative flex flex-col">
-            <h2 className="text-center text-primaryColor text-xl font-bold">
-              {provider.name}
-            </h2>
-          </div>
+
+          {/* Numele dedesubt, cu margin-top */}
+          <h2 className="mt-2 text-center text-primaryColor text-xl font-bold">
+            {provider.name}
+          </h2>
         </div>
 
         {/* Caracteristici principale */}

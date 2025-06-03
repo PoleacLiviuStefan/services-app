@@ -14,4 +14,5 @@ export interface Package {
   createdAt: string;
   /** Data expirării pachetului (ISO string) sau undefined dacă nu expiră */
   expiresAt?: string;
+  providerStripeAccountId: string;
 }

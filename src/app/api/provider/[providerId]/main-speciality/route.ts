@@ -1,19 +1,67 @@
-import {prisma} from "@/lib/prisma";
-import { NextResponse } from "next/server";
+// app/api/provider/[providerId]/main-speciality/route.ts
 
-export async function PUT(req: Request, { params }: { params: { providerId: string } }) {
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+import { withProviderAuth } from "@/lib/api/logout/providerMiddleware/withProviderAuth";
+
+export const runtime = "nodejs";
+
+// ----------------------------
+// HANDLER pentru PUT
+// ----------------------------
+async function putHandler(
+  req: Request,
+  context: { params: { providerId: string } }
+) {
+  // Așteptăm context.params și extragem providerId
+  const { providerId } = await context.params;
+
+  // 1) Parsăm JSON-ul din body
   const { mainSpecialityId }: { mainSpecialityId: string } = await req.json();
+
+  // 2) Actualizăm provider-ul în baza de date
   const updated = await prisma.provider.update({
-    where: { id: params.providerId },
+    where: { id: providerId },
     data: { mainSpecialityId },
   });
-  return NextResponse.json(updated);
+
+  // 3) Returnăm obiectul actualizat
+  return NextResponse.json({ updated });
 }
 
-export async function GET(_req: Request, { params }: { params: { providerId: string } }) {
+// Exportăm metoda PUT „împachetată” cu withProviderAuth
+export const PUT = withProviderAuth(putHandler);
+
+// ----------------------------
+// HANDLER pentru GET
+// ----------------------------
+async function getHandler(
+  _req: Request,
+  context: { params: { providerId: string } }
+) {
+  // Așteptăm context.params și extragem providerId
+  const { providerId } = await context.params;
+
+  // 1) Căutăm în baza de date provider-ul, inclusiv relația mainSpeciality
   const provider = await prisma.provider.findUnique({
-    where: { id: params.providerId },
-    include: { mainSpeciality: true }
+    where: { id: providerId },
+    include: { mainSpeciality: true },
   });
-  return NextResponse.json(provider?.mainSpeciality || null);
+
+  // 2) Dacă nu există provider, returnăm 404
+  if (!provider) {
+    return new NextResponse(
+      JSON.stringify({ error: "Provider not found" }),
+      {
+        status: 404,
+        headers: { "Content-Type": "application/json" },
+      }
+    );
+  }
+
+  // 3) Returnăm întotdeauna un obiect: { mainSpeciality: … }
+  return NextResponse.json({ mainSpeciality: provider.mainSpeciality });
 }
+
+// Exportăm metoda GET „împachetată” cu withProviderAuth
+export const GET = withProviderAuth(getHandler);

@@ -39,7 +39,7 @@ const ProviderProfileSection: React.FC<Props> = ({ provider }) => {
         </Button>
         <Button
           onClick={() => setIndexShownSection(2)}
-          className={`w-full px-2 lg:px-4 py-1 lg:py-2 text-md gap-1 font-semibold border-2 text-center ${
+          className={`w-full px-2 lg:px-4 py-1 lg:py-2 text-md gap-1 font-semibold border-2 text-center cursor-pointer ${
             shownIndexSection === 2
               ? 'bg-gradient-to-tr from-buttonPrimaryColor to-buttonSecondaryColor text-white'
               : 'bg-transparent text-black'
@@ -49,13 +49,13 @@ const ProviderProfileSection: React.FC<Props> = ({ provider }) => {
         </Button>
         <Button
           onClick={() => setIndexShownSection(3)}
-          className={`w-full px-2 lg:px-4 py-1 lg:py-2 gap-1 text-md font-semibold border-2 text-center ${
+          className={`w-full px-2 lg:px-4 py-1 lg:py-2 gap-1 text-md font-semibold border-2 text-center cursor-pointer ${
             shownIndexSection === 3
               ? 'bg-gradient-to-tr from-buttonPrimaryColor to-buttonSecondaryColor text-white'
               : 'bg-transparent text-black'
           }`}
         >
-          <span className='text-lg'><CiCalendar /></span>Programare Sedinta
+          <span className='text-lg '><CiCalendar /></span>Programare Sedinta
         </Button>
       </div>
 

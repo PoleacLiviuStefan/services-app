@@ -21,7 +21,7 @@ const Button: React.FC<ButtonProps> = ({
 }) => {
   // Condiționează stilizarea în funcție de prop-ul hero
   const baseClasses = cn(
-    "flex items-center relative transition duration-300 ease-in-out rounded-md text-left text-sm lg:text-md",
+    "flex items-center relative transition duration-300 ease-in-out rounded-md cursor-pointer text-left text-sm lg:text-md",
     horizontal ? 'justify-start' : "justify-center",
     textColor && `text-${textColor}`,
     className // stiluri suplimentare din exterior

@@ -29,12 +29,11 @@ const Hero = () => {
 
       <div className="flex flex-col lg:flex-row items-center lg:gap-16 z-40">
         <div className='flex flex-col lg:items-start items-center justify-center space-y-4 lg:space-y-8 text-left'>
-          <h1 className="text-2xl lg:text-5xl font-extrabold">
-            Lorem ipsum <span className='text-buttonSecondaryColor underline underline-offset-1 italic'>dolor sit</span>
+          <h1 className="text-2xl lg:text-5xl text-center lg:text-left font-extrabold">
+            Ghidarea ta astrală, <span className='text-buttonSecondaryColor underline underline-offset-1 italic'>la un click distanță</span>
           </h1>
           <p className='font-semibold text-center lg:text-left text-sm lg:text-lg text-textPrimaryColor px-6 lg:px-0'>
-            Lorem ipsum dolor sit amet consectetur adipisicing elit.<br />
-            Nemo fugiat adipisci asperiores harum suscipit cum cupiditate accusantium possimus nostrum ea!
+            Platformă online unde poți descoperi <br/>și consulta astrologi profesioniști pentru ghidare personalizată.
           </p>
           <div className='flex space-x-2'>
             <Link href="/astrologi">
