@@ -1,5 +1,4 @@
 // src/app/api/provider/[providerId]/avatar/route.ts
-
 import { NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
@@ -15,7 +14,7 @@ async function putHandler(
 ) {
   const { providerId } = context.params;
 
-  // 1) Obținem FormData
+  // 1) Obținem form-data
   let formData: FormData;
   try {
     formData = await req.formData();
@@ -26,10 +25,8 @@ async function putHandler(
     );
   }
 
-  // 2) Luăm câmpul "avatar"
+  // 2) Extragem câmpul "avatar" (este un Blob pe Node)
   const fileField = formData.get("avatar");
-
-  // Verificăm că există și că este un Blob (Next.js folosește Blob/ReadableStream pentru fișiere)
   if (!fileField || !(fileField instanceof Blob)) {
     return NextResponse.json(
       { error: "Nu a fost furnizată nicio imagine validă" },
@@ -37,7 +34,7 @@ async function putHandler(
     );
   }
 
-  // 3) Conversie în Buffer
+  // 3) Transformăm Blob → Buffer
   let buffer: Buffer;
   try {
     const arrayBuffer = await fileField.arrayBuffer();
@@ -50,8 +47,8 @@ async function putHandler(
     );
   }
 
-  // 4) Determinăm STORAGE_PATH (din .env) și subfolderul avatars
-  const baseDir = process.env.STORAGE_PATH;
+  // 4) Determinăm baza de upload din mediul de producție
+  const baseDir = process.env.STORAGE_PATH; // ex: "./public/uploads"
   if (!baseDir) {
     console.error("STORAGE_PATH nu este definit în mediu");
     return NextResponse.json(
@@ -61,6 +58,7 @@ async function putHandler(
   }
   const uploadDir = path.join(baseDir, "avatars");
 
+  // 5) Creăm directorul dacă nu există
   try {
     await fs.promises.mkdir(uploadDir, { recursive: true });
   } catch (err) {
@@ -71,13 +69,13 @@ async function putHandler(
     );
   }
 
-  // 5) Construim nume de fișier unic + extensie
-  const originalName = (fileField as any).name || ""; // În Node, Blob-ul poate să nu aibă `.name`, dar Next.js păstrează `name`
+  // 6) Generăm un nume unic + extensie
+  const originalName = (fileField as any).name || "";
   const ext = path.extname(originalName) || "";
   const fileName = `${Date.now()}${ext}`;
   const destPath = path.join(uploadDir, fileName);
 
-  // 6) Scriem fișierul pe disc
+  // 7) Scriem fișierul pe disc
   try {
     await fs.promises.writeFile(destPath, buffer);
   } catch (err) {
@@ -88,8 +86,8 @@ async function putHandler(
     );
   }
 
-  // 7) Generăm URL-ul public (ex: /files/avatars/<fileName>)
-  const fileRoute = process.env.FILE_ROUTE;
+  // 8) Construim URL-ul public cu FILE_ROUTE
+  const fileRoute = process.env.FILE_ROUTE; // ex: "/uploads"
   if (!fileRoute) {
     console.error("FILE_ROUTE nu este definit în mediu");
     return NextResponse.json(
@@ -97,9 +95,10 @@ async function putHandler(
       { status: 500 }
     );
   }
-  const imageUrl = `${fileRoute}/avatars/${fileName}`;
+  const imageUrl = `${fileRoute}/avatars/${fileName}`; 
+  // ex: "/uploads/avatars/1748969086963.jpg"
 
-  // 8) Găsim provider pentru a extrage userId
+  // 9) Găsim provider pentru a afla userId
   let providerRecord;
   try {
     providerRecord = await prisma.provider.findUnique({
@@ -107,13 +106,12 @@ async function putHandler(
       select: { userId: true },
     });
   } catch (err) {
-    console.error("Eroare la query prisma.provider.findUnique:", err);
+    console.error("Eroare la prisma.provider.findUnique:", err);
     return NextResponse.json(
       { error: "Eroare internă la găsirea providerului" },
       { status: 500 }
     );
   }
-
   if (!providerRecord) {
     return NextResponse.json(
       { error: "Provider not found" },
@@ -121,7 +119,7 @@ async function putHandler(
     );
   }
 
-  // 9) Actualizăm câmpul User.image în baza de date
+  // 10) Actualizăm user.image în baza de date
   try {
     await prisma.user.update({
       where: { id: providerRecord.userId },
@@ -135,7 +133,7 @@ async function putHandler(
     );
   }
 
-  // 10) Răspundem cu URL-ul imaginii
+  // 11) Răspundem cu URL-ul imaginii
   return NextResponse.json({ imageUrl });
 }
 
