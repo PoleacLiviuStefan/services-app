@@ -47,16 +47,19 @@ async function putHandler(
     );
   }
 
-  // 4) Determinăm baza de upload: folosim `public/uploads` din project root
-  const ls = path.join(process.cwd(), "public", "uploads");
-  // Dacă ai definit și un STORAGE_PATH specific, l-am putea combina:
-  // const baseDir = process.env.STORAGE_PATH
-  //    ? path.join(process.cwd(), process.env.STORAGE_PATH)
-  //    : path.join(process.cwd(), "public", "uploads");
-
-  // 5) Creăm folderul avatars dacă nu există
+  // 4) Determinăm baza de upload din mediul de producție
+  const baseDir = process.env.STORAGE_PATH; // ex: "./public/uploads"
+  console.log("STORAGE_PATH:", baseDir);
+  if (!baseDir) {
+    console.error("STORAGE_PATH nu este definit în mediu");
+    return NextResponse.json(
+      { error: "Server misconfiguration: STORAGE_PATH lipsă" },
+      { status: 500 }
+    );
+  }
   const uploadDir = path.join(baseDir, "avatars");
-  console.log("📁 [avatar] uploadDir =", uploadDir);
+
+  // 5) Creăm directorul dacă nu există
   try {
     await fs.promises.mkdir(uploadDir, { recursive: true });
   } catch (err) {
@@ -67,7 +70,7 @@ async function putHandler(
     );
   }
 
-  // 6) Generăm nume unic + extensie
+  // 6) Generăm un nume unic + extensie
   const originalName = (fileField as any).name || "";
   const ext = path.extname(originalName) || "";
   const fileName = `${Date.now()}${ext}`;
@@ -84,13 +87,17 @@ async function putHandler(
     );
   }
 
-  // 8) Construim URL-ul public cu FILE_ROUTE = "/uploads"
-  const fileRoute = "/uploads"; 
-  // Dacă ai un FILE_ROUTE în env, e bine să verifici:
-  // const fileRoute = process.env.FILE_ROUTE || "/uploads";
-
-  const imageUrl = `${fileRoute}/avatars/${fileName}`;
-  // va fi: "/uploads/avatars/1748969820883.jpg"
+  // 8) Construim URL-ul public cu FILE_ROUTE
+  const fileRoute = process.env.FILE_ROUTE; // ex: "/uploads"
+  if (!fileRoute) {
+    console.error("FILE_ROUTE nu este definit în mediu");
+    return NextResponse.json(
+      { error: "Server misconfiguration: FILE_ROUTE lipsă" },
+      { status: 500 }
+    );
+  }
+  const imageUrl = `${fileRoute}/avatars/${fileName}`; 
+  // ex: "/uploads/avatars/1748969086963.jpg"
 
   // 9) Găsim provider pentru a afla userId
   let providerRecord;
