@@ -10,6 +10,7 @@ export interface PackageCardProps {
 }
 
 const PackageCard: FC<PackageCardProps> = ({ pkg, onBuy }) => {
+  console.log("[PackageCard] Rendering package:", pkg);
   const expirationText = pkg.expiresAt
     ? `Expiră ${new Date(pkg.expiresAt).toLocaleDateString("ro-RO")}`
     : "Fără expirare";

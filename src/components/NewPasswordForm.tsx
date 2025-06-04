@@ -17,7 +17,8 @@ const NewPasswordForm: React.FC<NewPasswordFormProps> = ({ token }) => {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
-    const router = useRouter();
+  const router = useRouter()
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     setError(null)
@@ -26,15 +27,33 @@ const NewPasswordForm: React.FC<NewPasswordFormProps> = ({ token }) => {
     const newPassword = newPasswordRef.current?.value.trim() ?? ''
     const confirmPassword = confirmPasswordRef.current?.value.trim() ?? ''
 
+    // 1. Verificare câmpuri completate
     if (!newPassword || !confirmPassword) {
       setError('Te rog completează ambele câmpuri.')
       return
     }
+
+    // 2. Verificare potrivire parole
     if (newPassword !== confirmPassword) {
       setError('Parolele nu coincid.')
       return
     }
 
+    // 3. Validări suplimentare (minim 6 caractere, literă mare, caracter special)
+    if (newPassword.length < 6) {
+      setError('Parola trebuie să aibă minim 6 caractere.')
+      return
+    }
+    if (!/[A-Z]/.test(newPassword)) {
+      setError('Parola trebuie să conțină cel puțin o literă mare.')
+      return
+    }
+    if (!/[^A-Za-z0-9]/.test(newPassword)) {
+      setError('Parola trebuie să conțină cel puțin un caracter special.')
+      return
+    }
+
+    // Dacă am ajuns aici, toate validările sunt OK → trimitem cererea
     setIsLoading(true)
     try {
       const res = await fetch('/api/auth/reset-password', {
@@ -45,10 +64,18 @@ const NewPasswordForm: React.FC<NewPasswordFormProps> = ({ token }) => {
 
       const data = await res.json()
       if (res.ok) {
-        setSuccess('Parola a fost schimbată cu succes.');
-        router.push('/autentificare');
+        setSuccess('Parola a fost schimbată cu succes.')
+        // redirect către pagina de autentificare
+        router.push('/autentificare')
       } else {
-        setError(data.error || 'A apărut o eroare. Încearcă din nou.')
+        // Dacă server-ul a returnat erori de validare (ex. în response.errors)
+        if (data.errors) {
+          // Putem alege să afișăm primul mesaj de eroare din Zod
+          const fieldErrors = data.errors.newPassword
+          setError(Array.isArray(fieldErrors) ? fieldErrors.join(' ') : 'Eroare la validarea parolei.')
+        } else {
+          setError(data.error || 'A apărut o eroare necunoscută.')
+        }
       }
     } catch {
       setError('Nu am putut contacta serverul. Încearcă mai târziu.')

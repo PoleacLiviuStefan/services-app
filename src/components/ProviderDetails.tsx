@@ -34,6 +34,7 @@ interface ProviderInterface {
     expiresAt: string | null;
   }[];
   stripeAccountId?: string | null;
+  isCalendlyConnected: boolean;
   user: {
     id: string;
     name: string;
@@ -63,26 +64,26 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
   const specialitiesStore = useCatalogStore((s) => s.specialities);
   const readingsStore = useCatalogStore((s) => s.readings);
   const toolsStore = useCatalogStore((s) => s.tools);
-  console.log("PROVIDER DETAILS", provider);
+
   const [localProvider, setLocalProvider] = useState(provider);
   const [showEditModal, setShowEditModal] = useState<EditModalType>("");
 
   // Form fields
-  const [description, setDescription] = useState(localProvider.description || "");
-  const [status, setStatus] = useState(localProvider.online);
-  const [videoUrl, setVideoUrl] = useState(localProvider.videoUrl || "");
-  const [scheduleLink, setScheduleLink] = useState(localProvider.scheduleLink || "");
-  const [readingId, setReadingId] = useState(localProvider.reading?.id || "");
-  const [mainSpecialityId, setMainSpecialityId] = useState(localProvider.mainSpeciality?.id || "");
-  const [mainToolId, setMainToolId] = useState(localProvider.mainTool?.id || "");
+  const [description, setDescription] = useState(provider.description || "");
+  const [status, setStatus] = useState(provider.online);
+  const [videoUrl, setVideoUrl] = useState(provider.videoUrl || "");
+  const [scheduleLink, setScheduleLink] = useState(provider.scheduleLink || "");
+  const [readingId, setReadingId] = useState(provider.reading?.id || "");
+  const [mainSpecialityId, setMainSpecialityId] = useState(provider.mainSpeciality?.id || "");
+  const [mainToolId, setMainToolId] = useState(provider.mainTool?.id || "");
   const [selectedSpecialities, setSelectedSpecialities] = useState<string[]>(
-    localProvider.specialities.map((s) => s.name)
+    provider.specialities.map((s) => s.name)
   );
   const [selectedTools, setSelectedTools] = useState<string[]>(
-    localProvider.tools.map((t) => t.name)
+    provider.tools.map((t) => t.name)
   );
   const [selectedPackages, setSelectedPackages] = useState<string[]>(
-    localProvider.providerPackages.map((p) => p.id)
+    provider.providerPackages.map((p) => p.id)
   );
 
   const [newSpecialityName, setNewSpecialityName] = useState("");
@@ -95,6 +96,7 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
 
   const router = useRouter();
 
+  // Sync initial state only when provider.id changes (prevents resetting on avatar update)
   useEffect(() => {
     setLocalProvider(provider);
     setDescription(provider.description || "");
@@ -107,7 +109,7 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
     setSelectedSpecialities(provider.specialities.map((s) => s.name));
     setSelectedTools(provider.tools.map((t) => t.name));
     setSelectedPackages(provider.providerPackages.map((p) => p.id));
-  }, [provider]);
+  }, [provider.id]);
 
   const toggleMulti = (val: string, key: EditModalType) => {
     if (key === "Specialities") {
@@ -248,43 +250,36 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
     const redirectUri = `${process.env.NEXT_PUBLIC_BASE_URL}/api/stripe/connect/callback`;
     const params = new URLSearchParams({
       response_type: "code",
-      client_id:     clientId,
-      redirect_uri:  redirectUri,
-      state:         `stripe:${localProvider.id}`,
+      client_id: clientId,
+      redirect_uri: redirectUri,
+      state: `stripe:${localProvider.id}`,
       "stripe_user[country]": "RO",
     });
     return `https://connect.stripe.com/oauth/authorize?${params.toString()}`;
   };
 
   // ================= CALENDLY CONNECT (cu PKCE) =====================
+  const handleCalendlyConnect = async () => {
+    const resp = await fetch("/api/calendly/oauth/start", { credentials: "include" });
+    if (!resp.ok) {
+      console.error("Nu am putut iniția PKCE:", await resp.text());
+      return;
+    }
+    const { codeChallenge } = await resp.json();
 
-// File: components/ProviderDetails.tsx
-const handleCalendlyConnect = async () => {
-  // 1. Cere code_challenge și cookie-ul code_verifier de la server
-  const resp = await fetch("/api/calendly/oauth/start", { credentials: "include" });
-  if (!resp.ok) {
-    console.error("Nu am putut iniția PKCE:", await resp.text());
-    return;
-  }
-  const { codeChallenge } = await resp.json();
-
-  // 2. Construiește URL-ul de autorizare Calendly cu PKCE
-  const clientId    = process.env.NEXT_PUBLIC_CALENDLY_CLIENT_ID!;
-  const redirectUri = `${process.env.NEXT_PUBLIC_BASE_URL}/api/calendly/oauth/callback`;
-  const params = new URLSearchParams({
-    response_type:         "code",
-    client_id:             clientId,
-    redirect_uri:          redirectUri,
-    state:                 `calendly:${localProvider.id}`,
-    code_challenge:        codeChallenge,
-    code_challenge_method: "S256",
-  });
-  const authorizeUrl = `https://auth.calendly.com/oauth/authorize?${params.toString()}`;
-
-  // 3. Redirecționează browser-ul către Calendly
-  window.location.href = authorizeUrl;
-};
-
+    const clientId = process.env.NEXT_PUBLIC_CALENDLY_CLIENT_ID!;
+    const redirectUri = `${process.env.NEXT_PUBLIC_BASE_URL}/api/calendly/oauth/callback`;
+    const params = new URLSearchParams({
+      response_type: "code",
+      client_id: clientId,
+      redirect_uri: redirectUri,
+      state: `calendly:${localProvider.id}`,
+      code_challenge: codeChallenge,
+      code_challenge_method: "S256",
+    });
+    const authorizeUrl = `https://auth.calendly.com/oauth/authorize?${params.toString()}`;
+    window.location.href = authorizeUrl;
+  };
 
   // Render Stripe & Calendly connect sections
   const renderIntegrationSections = () => (
@@ -338,7 +333,7 @@ const handleCalendlyConnect = async () => {
       {/* Calendly Connect */}
       <div className="h-full flex flex-col justify-between bg-gray-50 p-4 rounded">
         <div>
-          <strong>Conectare Calendly:{localProvider.isCalendlyConnected ? "nu ": "Da"} </strong>{" "}
+          <strong>Conectare Calendly:</strong>{" "}
           {localProvider.isCalendlyConnected ? (
             <span className="text-green-700">Conectat</span>
           ) : (
@@ -372,7 +367,7 @@ const handleCalendlyConnect = async () => {
             }}
             className="mt-2 px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
           >
-            Deconectare Calendly 
+            Deconectare Calendly
           </Button>
         )}
       </div>
@@ -522,7 +517,7 @@ const handleCalendlyConnect = async () => {
             </Button>
           </div>
           <div className="space-y-2 max-h-[60vh] overflow-auto">
-            {specialitiesStore.map((spec) => (  
+            {specialitiesStore.map((spec) => (
               <AddAttributeProvider
                 key={spec.id}
                 title={spec.name}
@@ -569,7 +564,7 @@ const handleCalendlyConnect = async () => {
             </Button>
           </div>
           <div className="space-y-2 max-h-[60vh] overflow-auto">
-            {toolsStore.map((tool) => (  
+            {toolsStore.map((tool) => (
               <AddAttributeProvider
                 key={tool.id}
                 title={tool.name}
@@ -616,7 +611,7 @@ const handleCalendlyConnect = async () => {
             </Button>
           </div>
           <div className="space-y-2 max-h-[60vh] overflow-auto">
-            {readingsStore.map((r) => (  
+            {readingsStore.map((r) => (
               <AddAttributeProvider
                 key={r.id}
                 title={r.name}
@@ -695,7 +690,7 @@ const handleCalendlyConnect = async () => {
             </Button>
           </div>
           <div className="space-y-2 max-h-[60vh] overflow-auto">
-            {localProvider.providerPackages.map((pkg) => (  
+            {localProvider.providerPackages.map((pkg) => (
               <AddAttributeProvider
                 key={pkg.id}
                 title={`${pkg.service} – ${pkg.totalSessions} sesiuni @ ${pkg.price} RON – expiră: ${

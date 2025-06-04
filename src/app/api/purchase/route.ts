@@ -1,67 +1,117 @@
-// File: app/api/purchase/route.ts
+// File: src/app/api/purchase/route.ts
+
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma"; // Ajustează calea dacă folosești alta structură
+import { Prisma } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
 
-export async function POST(request: Request) {
+export async function POST(req: Request) {
+  // 1. Citește JSON-ul
+  let body: unknown;
   try {
-    // 1. Citim body-ul și verificăm dacă nu e null
-    const body = await request.json();
-    if (!body || typeof body !== "object") {
-      return NextResponse.json(
-        { error: "Payload lipsă sau incompatibil (trebuie obiect JSON)" },
-        { status: 400 }
-      );
-    }
+    body = await req.json();
+  } catch {
+    console.log("[/api/purchase] JSON invalid sau null");
+    return NextResponse.json({ error: "JSON invalid." }, { status: 400 });
+  }
 
-    const { userId, providerId, packageId } = body as {
-      userId?: string;
-      providerId?: string;
-      packageId?: string;
-    };
+  console.log("[/api/purchase] Body primit:", body);
 
-    // 2. Validăm că proprietățile există și sunt șiruri nenule
-    if (!userId || !providerId || !packageId) {
-      return NextResponse.json(
-        { error: "Parametrii userId, providerId și packageId sunt obligatorii." },
-        { status: 400 }
-      );
-    }
+  // 2. Verifică că body nu e null și e un obiect
+  if (body === null || typeof body !== "object") {
+    console.log("[/api/purchase] Body nu e obiect sau e null");
+    return NextResponse.json(
+      { error: "Payload invalid. Aștept un obiect JSON." },
+      { status: 400 }
+    );
+  }
 
-    // 3. Preluăm ProviderPackage pentru a ști totalSessions și expiresAt
-    const providerPackage = await prisma.providerPackage.findUnique({
+  // 3. Extrage câmpurile necesare
+  const { userId, providerId, packageId } = body as {
+    userId?: string;
+    providerId?: string;
+    packageId?: string;
+  };
+
+  console.log(
+    "[/api/purchase] userId:",
+    userId,
+    "providerId:",
+    providerId,
+    "packageId:",
+    packageId
+  );
+
+  // Verifică că cele trei câmpuri există și au tipul corect
+  if (
+    typeof userId !== "string" ||
+    typeof providerId !== "string" ||
+    typeof packageId !== "string"
+  ) {
+    console.log("[/api/purchase] Validare eșuată: lipsesc userId, providerId sau packageId");
+    return NextResponse.json(
+      { error: "Lipsește camp obligatoriu sau tip incorect." },
+      { status: 400 }
+    );
+  }
+
+  // 4. Obține detaliile pachetului din baza de date
+  let pkg;
+  try {
+    pkg = await prisma.providerPackage.findUnique({
       where: { id: packageId },
-      select: { totalSessions: true, expiresAt: true },
+      select: { totalSessions: true, providerId: true },
     });
-    if (!providerPackage) {
-      return NextResponse.json(
-        { error: "ProviderPackage inexistent pentru packageId dat." },
-        { status: 404 }
-      );
-    }
+  } catch (err: any) {
+    console.error("[/api/purchase] Eroare la citirea pachetului:", err);
+    return NextResponse.json(
+      { error: "Eroare internă la citirea pachetului.", details: err.message },
+      { status: 500 }
+    );
+  }
 
-    // 4. Creăm UserProviderPackage
-    const now = new Date();
-    const userProviderPackage = await prisma.userProviderPackage.create({
+  if (!pkg) {
+    console.log("[/api/purchase] Pachetul nu a fost găsit:", packageId);
+    return NextResponse.json(
+      { error: "Pachetul specificat nu există." },
+      { status: 404 }
+    );
+  }
+
+  // 5. Verifică că pachetul aparține acelui provider
+  if (pkg.providerId !== providerId) {
+    console.log(
+      "[/api/purchase] Pachetul nu aparține provider-ului:",
+      packageId,
+      providerId
+    );
+    return NextResponse.json(
+      { error: "Pachetul nu aparține provider-ului specificat." },
+      { status: 400 }
+    );
+  }
+
+  const totalSessions = pkg.totalSessions;
+
+  // 6. Creează UserProviderPackage în Prisma
+  try {
+    const newUserPkg = await prisma.userProviderPackage.create({
       data: {
-        userId: userId,
-        providerId: providerId,
-        packageId: packageId,
-        totalSessions: providerPackage.totalSessions,
-        createdAt: now,
-        expiresAt: providerPackage.expiresAt,
-        // usedSessions rămâne 0 implicit
+        userId,
+        providerId,
+        packageId,
+        totalSessions,
+        usedSessions: 0,
       },
     });
-
-    // 5. Returnăm obiectul creat și status 201
+    console.log("[/api/purchase] UserProviderPackage creat:", newUserPkg);
+    return NextResponse.json({ ok: true, data: newUserPkg }, { status: 201 });
+  } catch (err: any) {
+    console.error("Eroare la /api/purchase:", err);
     return NextResponse.json(
-      { userProviderPackage },
-      { status: 201 }
-    );
-  } catch (error: any) {
-    console.error("Eroare la /api/purchase:", error);
-    return NextResponse.json(
-      { error: "Eroare internă la crearea UserProviderPackage.", details: error.message },
+      {
+        error: "Eroare internă la crearea UserProviderPackage.",
+        details: err.message,
+      },
       { status: 500 }
     );
   }

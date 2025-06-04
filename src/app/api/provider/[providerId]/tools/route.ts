@@ -1,47 +1,66 @@
-// app/api/provider/[providerId]/tools/route.ts
+// File: src/app/api/provider/[providerId]/tools/route.ts
 
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
-import { withProviderAuth } from "@/lib/api/logout/providerMiddleware/withProviderAuth";
 
 export const runtime = "nodejs";
 
-// ----------------------------
-// HANDLER pentru PUT (/api/provider/[providerId]/tools)
-// ----------------------------
 async function putHandler(
   req: Request,
   context: { params: { providerId: string } }
 ) {
-  // 1) Așteptăm context.params și extragem providerId
+  // 1) Extragem providerId
   const { providerId } = await context.params;
+  console.log("[DEBUG] providerId:", providerId);
 
-  // 2) Citim și validăm JSON-ul din body
+  // 2) Citim JSON-ul din body
   let body: { tools?: string[] };
   try {
     body = await req.json();
-  } catch {
+  } catch (e) {
+    console.error("[DEBUG] Invalid JSON:", e);
     return NextResponse.json(
       { error: "Invalid JSON" },
       { status: 400, headers: { "Content-Type": "application/json" } }
     );
   }
+  console.log("[DEBUG] body:", body);
+
+  // 3) Verificăm că avem un array de tool names
   if (!Array.isArray(body.tools)) {
+    console.error("[DEBUG] body.tools nu e array:", body.tools);
     return NextResponse.json(
-      { error: "tools must be an array of IDs" },
+      { error: "tools must be an array of tool names" },
       { status: 400, headers: { "Content-Type": "application/json" } }
     );
   }
 
-  // 3) Fetch doar tool-urile care există în baza de date
-  const existing = await prisma.tool.findMany({
-    where: { id: { in: body.tools } },
+  // 4) Verificăm că providerId există
+  const providerExists = await prisma.provider.findUnique({
+    where: { id: providerId },
     select: { id: true },
   });
-  const validConnect = existing.map((t) => ({ id: t.id }));
+  if (!providerExists) {
+    console.error("[DEBUG] Provider inexistent:", providerId);
+    return NextResponse.json(
+      { error: "Provider not found" },
+      { status: 404, headers: { "Content-Type": "application/json" } }
+    );
+  }
 
+  // 5) Folosim numele primite pentru a găsi tool‐urile în baza de date
+  const existingTools = await prisma.tool.findMany({
+    where: { name: { in: body.tools } },
+    select: { id: true, name: true, description: true },
+  });
+  console.log("[DEBUG] existingTools from DB (matched by name):", existingTools);
+
+  // 6) Creăm lista de conexiuni pe baza ID‐urilor găsite
+  const validConnect = existingTools.map((t) => ({ id: t.id }));
+  console.log("[DEBUG] validConnect (IDs to set):", validConnect);
+
+  // 7) Facem update și includem lista actualizată
   try {
-    // 4) Facem update cu doar ID-urile valide și includem lista actualizată de tools
     const updated = await prisma.provider.update({
       where: { id: providerId },
       data: {
@@ -50,13 +69,13 @@ async function putHandler(
       include: { tools: true },
     });
 
-    // 5) Returnăm array-ul de tool-uri actualizat
+    console.log("[DEBUG] updated.tools:", updated.tools);
     return NextResponse.json(
       { tools: updated.tools },
       { status: 200, headers: { "Content-Type": "application/json" } }
     );
   } catch (err: any) {
-    console.error(err.stack);
+    console.error("[DEBUG] Prisma update error:", err);
     return NextResponse.json(
       { error: err.message ?? "Internal Server Error" },
       { status: 500, headers: { "Content-Type": "application/json" } }
@@ -64,5 +83,4 @@ async function putHandler(
   }
 }
 
-// Exportăm metoda PUT „împachetată” cu withProviderAuth
-export const PUT = withProviderAuth(putHandler);
+export const PUT = putHandler;
