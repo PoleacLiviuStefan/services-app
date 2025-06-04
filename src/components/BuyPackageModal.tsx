@@ -241,7 +241,7 @@ console.log("  providerStripeAccountId:", providerStripeAccountId)
           {!providerStripeAccountId && !paymentSuccess && (
             <div className="flex flex-col items-center space-y-4">
               <p className="text-center text-red-600">
-                Furnizorul nu este conectat la Stripe. Conectează-l mai întâi.
+                Furnizorul nu este conectat la Stripe.
               </p>
               <button
                 className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
