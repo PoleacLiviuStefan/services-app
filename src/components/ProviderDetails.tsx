@@ -254,6 +254,7 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
       redirect_uri: redirectUri,
       state: `stripe:${localProvider.id}`,
       "stripe_user[country]": "RO",
+      scope: 'read_write'
     });
     return `https://connect.stripe.com/oauth/authorize?${params.toString()}`;
   };
