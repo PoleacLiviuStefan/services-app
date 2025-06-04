@@ -61,6 +61,7 @@ type EditModalType =
   | "Status";
 
 const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
+  console.log("provider: ", provider);
   const specialitiesStore = useCatalogStore((s) => s.specialities);
   const readingsStore = useCatalogStore((s) => s.readings);
   const toolsStore = useCatalogStore((s) => s.tools);
@@ -631,7 +632,7 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
       )}
 
       {showEditModal === "Packages" && (
-        <Modal closeModal={() => setShowEditModal("")} title="Editează Pachetele">
+        <Modal closeModal={() => setShowEditModal("")} title="Editează Tipurie de Sedinte">
           <div className="mb-4 space-y-2">
             <input
               type="text"
@@ -669,6 +670,7 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
               }
               onClick={async () => {
                 const pkg = {
+                  providerId: localProvider.id,
                   service: newPackageService.trim(),
                   totalSessions: parseInt(newPackageSessions, 10),
                   price: parseFloat(newPackagePrice),
@@ -797,7 +799,7 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
           {/* Pachete (două coloane) */}
           <div className="col-span-1 sm:col-span-2 h-full flex flex-col justify-between bg-gray-50 p-4 rounded">
             <div>
-              <strong>Pachete:</strong>
+              <strong>Tipuri de Sedinte:</strong>
               <ul className="list-disc ml-6 mt-2">
                 {localProvider.providerPackages.map((pkg) => (
                   <li key={pkg.id}>

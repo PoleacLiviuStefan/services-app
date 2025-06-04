@@ -77,7 +77,7 @@ model Provider {
 model ProviderPackage {
   id             String                  @id @default(uuid())
   providerId     String
-  service        Service
+  service        String
   totalSessions  Int
   price          Float
   createdAt      DateTime                @default(now())
