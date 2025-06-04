@@ -1,20 +1,40 @@
 // src/app/api/provider/[providerId]/avatar/route.ts
+
 import { NextResponse } from "next/server";
-import fs from "fs";
-import path from "path";
+import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { prisma } from "@/lib/prisma";
 import { withProviderAuth } from "@/lib/api/logout/providerMiddleware/withProviderAuth";
 
 export const runtime = "nodejs";
 export const config = { api: { bodyParser: false } };
 
-async function putHandler(
-  req: Request,
-  context: { params: { providerId: string } }
-) {
-  const { providerId } = context.params;
+// 1) Construim endpoint-ul corect pentru MinIO (adăugăm https:// dacă lipsește)
+const rawEndpoint = process.env.MINIO_ENDPOINT || "";
+const MINIO_ENDPOINT = rawEndpoint.match(/^https?:\/\//)
+  ? rawEndpoint
+  : `https://${rawEndpoint}`;
 
-  // 1) Obținem form-data
+// 2) Inițializăm clientul S3 (MinIO)
+//    - forcePathStyle: true este obligatoriu pentru S3-compatibile precum MinIO
+//    - folosește region arbitrariu (ex.: "us-east-1")
+const s3 = new S3Client({
+  endpoint: MINIO_ENDPOINT,
+  forcePathStyle: true,
+  region: "us-east-1",
+  credentials: {
+    accessKeyId: process.env.MINIO_ACCESS_KEY!,
+    secretAccessKey: process.env.MINIO_SECRET_KEY!,
+  },
+});
+
+// 3) Handler-ul real care va fi apelat de Next.js pentru metoda PUT
+async function handler(
+  req: Request,
+  { params }: { params: { providerId: string } }
+) {
+  const { providerId } = params;
+
+  // 3.1) Extragem form-data; dacă nu există, răspundem cu 400 Bad Request
   let formData: FormData;
   try {
     formData = await req.formData();
@@ -25,7 +45,7 @@ async function putHandler(
     );
   }
 
-  // 2) Extragem câmpul "avatar" (este un Blob pe Node)
+  // 3.2) Obținem Blob-ul din câmpul "avatar"
   const fileField = formData.get("avatar");
   if (!fileField || !(fileField instanceof Blob)) {
     return NextResponse.json(
@@ -34,7 +54,7 @@ async function putHandler(
     );
   }
 
-  // 3) Transformăm Blob → Buffer
+  // 3.3) Transformăm Blob în Buffer (pentru upload către S3)
   let buffer: Buffer;
   try {
     const arrayBuffer = await fileField.arrayBuffer();
@@ -47,62 +67,38 @@ async function putHandler(
     );
   }
 
-  // 4) Determinăm baza de upload din mediul de producție
-  //    În .env ai definit: STORAGE_PATH="/mnt/railway/uploads/avatars"
-  const uploadDir = process.env.STORAGE_PATH;
-  console.log("STORAGE_PATH:", uploadDir);
-  if (!uploadDir) {
-    console.error("STORAGE_PATH nu este definit în mediu");
-    return NextResponse.json(
-      { error: "Server misconfiguration: STORAGE_PATH lipsă" },
-      { status: 500 }
-    );
-  }
-
-  // 5) Creăm directorul dacă nu există
-  try {
-    await fs.promises.mkdir(uploadDir, { recursive: true });
-  } catch (err) {
-    console.error("Eroare la crearea folderului de upload:", err);
-    return NextResponse.json(
-      { error: "Eroare la pregătirea spațiului de stocare" },
-      { status: 500 }
-    );
-  }
-
-  // 6) Generăm un nume unic + extensie
+  // 3.4) Generăm un key unic pentru obiect, păstrând extensia originală
   const originalName = (fileField as any).name || "";
-  const ext = path.extname(originalName) || "";
-  const fileName = `${Date.now()}${ext}`;
-  const destPath = path.join(uploadDir, fileName);
+  const ext = originalName.includes(".")
+    ? originalName.slice(originalName.lastIndexOf("."))
+    : "";
+  const timestamp = Date.now();
+  const key = `avatars/${timestamp}${ext}`; // ex: "avatars/1681234567890.png"
 
-  // 7) Scriem fișierul pe disc
+  // 3.5) Upload către MinIO (S3)
   try {
-    await fs.promises.writeFile(destPath, buffer);
+    await s3.send(
+      new PutObjectCommand({
+        Bucket: process.env.MINIO_BUCKET!,
+        Key: key,
+        Body: buffer,
+        ContentType: fileField.type, // ex: "image/png"
+        ACL: "public-read",          // dacă bucket-ul este configurat public
+      })
+    );
   } catch (err) {
-    console.error("Eroare la salvarea fișierului:", err);
+    console.error("Eroare la upload către MinIO:", err);
     return NextResponse.json(
-      { error: "Eroare la salvarea imaginii" },
+      { error: "Eroare la salvarea imaginii în storage" },
       { status: 500 }
     );
   }
 
-  // 8) Construim URL-ul public cu FILE_ROUTE
-  //    În .env ai definit: FILE_ROUTE="/uploads"
-  const fileRoute = process.env.FILE_ROUTE;
-  if (!fileRoute) {
-    console.error("FILE_ROUTE nu este definit în mediu");
-    return NextResponse.json(
-      { error: "Server misconfiguration: FILE_ROUTE lipsă" },
-      { status: 500 }
-    );
-  }
-  // Deoarece STORAGE_PATH deja conține "uploads/avatars", nu mai adăugăm "avatars" în URL.
-  // Imaginea va fi accesibilă la GET /uploads/<fileName>
-  const imageUrl = `${fileRoute}/${fileName}`; 
-  // ex: "/uploads/1748969086963.jpg"
+  // 3.6) Construim URL-ul public (presupunem bucket public)
+  //      Format: https://<MINIO_ENDPOINT>/<BUCKET>/<key>
+  const imageUrl = `${MINIO_ENDPOINT}/${process.env.MINIO_BUCKET}/${key}`;
 
-  // 9) Găsim provider pentru a afla userId
+  // 3.7) Găsim userId-ul asociat providerId prin Prisma
   let providerRecord;
   try {
     providerRecord = await prisma.provider.findUnique({
@@ -123,7 +119,7 @@ async function putHandler(
     );
   }
 
-  // 10) Actualizăm user.image în baza de date
+  // 3.8) Actualizăm câmpul `image` în tabela `user`
   try {
     await prisma.user.update({
       where: { id: providerRecord.userId },
@@ -137,8 +133,9 @@ async function putHandler(
     );
   }
 
-  // 11) Răspundem cu URL-ul imaginii
+  // 3.9) Returnăm URL-ul imaginii
   return NextResponse.json({ imageUrl });
 }
 
-export const PUT = withProviderAuth(putHandler);
+// 4) Exportăm metoda PUT cu middleware-ul de autentificare aplicat
+export const PUT = withProviderAuth(handler);

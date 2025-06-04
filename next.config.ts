@@ -7,23 +7,27 @@ const nextConfig = {
     ignoreDuringBuilds: true,
   },
   env: {
-    
     GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
     GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET,
     NEXT_PUBLIC_ZOOM_SDK_KEY: process.env.ZOOM_SDK_KEY,
-    // Dacă ai nevoie să expui prefix-ul & în browser:
+    // Dacă ai nevoie să expui prefix-ul în browser, îl poți păstra:
     NEXT_PUBLIC_FILE_ROUTE: process.env.FILE_ROUTE,
   },
   images: {
+    // Adaugă aici domeniul MinIO
+    domains: ["mysticgold.app", "bucket-production-71d6.up.railway.app"],
     remotePatterns: [
       {
         protocol: "https",
         hostname: "lh3.googleusercontent.com",
       },
+      {
+        protocol: "https",
+        hostname: "bucket-production-71d6.up.railway.app",
+        // Dacă vrei să restrângi la un anumit pattern:
+        pathname: "/avatars/**",
+      },
     ],
-    domains:[
-      "mysticgold.app"
-    ]
   },
   async headers() {
     return [
@@ -36,15 +40,7 @@ const nextConfig = {
       },
     ];
   },
-  // AICI folosim variabila de mediu pentru rewrite
-  async rewrites() {
-    return [
-      {
-        source: `${process.env.FILE_ROUTE}/:path*`,
-        destination: `/api/files/:path*`,
-      },
-    ];
-  },
+
 };
 
 module.exports = nextConfig;

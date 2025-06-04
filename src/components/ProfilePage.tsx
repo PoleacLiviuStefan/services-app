@@ -225,9 +225,7 @@ const ProfilePage: React.FC = () => {
 
   const { name, email, image, role } = session.user;
   const isProvider = Boolean(provider);
-  const avatarSrc = provider?.user.image
-  ? `${process.env.NEXT_PUBLIC_FILE_ROUTE}/${provider.user.image}` 
-  : defaultAvatar;
+  const avatarSrc = provider?.user.image || defaultAvatar;
 
   return (
     <div className="flex flex-col space-y-10 p-6">
