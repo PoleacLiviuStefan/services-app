@@ -23,10 +23,10 @@ type AsyncRouteContext = {
  */
 function decodeSlugToName(slug: string): string {
   return slug
-    .replace(/-/g, " ")    // toate cratimele devin spațiu
-    .replace(/\s+/g, " ")  // collapse grupuri de spații multiple
-    .trim()                // elimină spațiile de la margină
-    .toLowerCase();        // lowercase, dar diacriticele rămân
+    .replace(/-/g, " ") // toate cratimele devin spațiu
+    .replace(/\s+/g, " ") // collapse grupuri de spații multiple
+    .trim() // elimină spațiile de la margină
+    .toLowerCase(); // lowercase, dar diacriticele rămân
 }
 
 /**
@@ -40,10 +40,10 @@ function decodeSlugToName(slug: string): string {
  */
 function normalizeDbName(dbName: string): string {
   return dbName
-    .replace(/-/g, " ")    // dacă există cratimă în DB, facem spațiu
-    .replace(/\s+/g, " ")  // collapse spații multiple
-    .trim()                // elimină spațiile de la margină
-    .toLowerCase();        // lowercase, dar diacriticele rămân
+    .replace(/-/g, " ") // dacă există cratimă în DB, facem spațiu
+    .replace(/\s+/g, " ") // collapse spații multiple
+    .trim() // elimină spațiile de la margină
+    .toLowerCase(); // lowercase, dar diacriticele rămân
 }
 
 /**
@@ -51,7 +51,7 @@ function normalizeDbName(dbName: string): string {
  * 1. decodeSlugToName(slug) → decodedName (ex. "vatală georgiana").
  * 2. Împarte decodedName în cuvinte: ["vatală", "georgiana"].
  * 3. Rulează findMany cu AND: [
- *      { name contains "vatală" }, 
+ *      { name contains "vatală" },
  *      { name contains "georgiana" }
  *    ] (toate căutările case-insensitive).
  * 4. Din candidați, normalizăm fiecare `u.name` cu normalizeDbName și comparăm EXACT cu decodedName.
@@ -61,7 +61,7 @@ function normalizeDbName(dbName: string): string {
 async function findUserBySlug(slug: string) {
   const decodedName = decodeSlugToName(slug); // ex. "vatală georgiana"
   console.log("Decoded name:", decodedName);
-  const words = decodedName.split(" ");       // ex. ["vatală", "georgiana"]
+  const words = decodedName.split(" "); // ex. ["vatală", "georgiana"]
 
   if (words.length === 0) return null;
 
@@ -85,9 +85,12 @@ async function findUserBySlug(slug: string) {
           videoUrl: true,
           grossVolume: true,
           calendlyCalendarUri: true,
+          isCalendlyConnected:true,
           stripeAccountId: true,
           reading: { select: { id: true, name: true, description: true } },
-          specialities: { select: { id: true, name: true, description: true, price: true } },
+          specialities: {
+            select: { id: true, name: true, description: true, price: true },
+          },
           tools: { select: { id: true, name: true, description: true } },
           mainSpeciality: { select: { id: true, name: true } },
           mainTool: { select: { id: true, name: true } },
@@ -157,15 +160,16 @@ export async function GET(
     videoUrl: p.videoUrl || null,
     grossVolume: p.grossVolume,
     scheduleLink: p.calendlyCalendarUri || null,
-    reading: p.reading || null,
-    specialities: p.specialities,
-    tools: p.tools,
-    mainSpeciality: p.mainSpeciality,
-    mainTool: p.mainTool,
-    reviewsCount,
-    averageRating,
-    providerPackages: p.providerPackages,
+    reading: p.reading || null, // OK
+    specialities: p.specialities, // OK
+    tools: p.tools, // OK
+    mainSpeciality: p.mainSpeciality, // OK
+    mainTool: p.mainTool, // OK
+    reviewsCount, // OK
+    averageRating, // OK
+    providerPackages: p.providerPackages, // OK
     stripeAccountId: p.stripeAccountId || null,
+    isCalendlyConnected: p.isCalendlyConnected || false,
   };
 
   return NextResponse.json({ provider: payload }, { status: 200 });
@@ -203,7 +207,10 @@ export async function PATCH(
   const user = await findUserBySlug(slug);
 
   if (!user) {
-    return NextResponse.json({ error: "User nu a fost găsit." }, { status: 404 });
+    return NextResponse.json(
+      { error: "User nu a fost găsit." },
+      { status: 404 }
+    );
   }
   if (!user.provider) {
     return NextResponse.json(

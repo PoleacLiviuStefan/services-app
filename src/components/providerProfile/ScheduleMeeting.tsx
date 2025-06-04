@@ -1,3 +1,4 @@
+// File: components/ScheduleMeeting.tsx
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -16,7 +17,7 @@ export default function ScheduleMeeting({
   const [schedulingUrl, setSchedulingUrl] = useState<string>('');
   const [scriptReady,   setScriptReady]   = useState(false);
 
-  // 1) Fetch schedulingUrl
+  // 1) Fetch schedulingUrl de la endpoint-ul nostru
   useEffect(() => {
     console.log('[Calendly] fetching /api/calendly/user…');
     fetch('/api/calendly/user')
@@ -25,6 +26,11 @@ export default function ScheduleMeeting({
         return res.json();
       })
       .then(data => {
+        if (data.error) {
+          console.error('[Calendly] /api error:', data.error);
+          return;
+        }
+        // data.resource.scheduling_url conține URL-ul unic al calendarului provider-ului
         console.log('[Calendly] got schedulingUrl:', data.resource.scheduling_url);
         setSchedulingUrl(data.resource.scheduling_url);
       })
@@ -68,7 +74,6 @@ export default function ScheduleMeeting({
         />
       </Head>
 
-      {/* Container cu border pentru debugging */}
       <div
         style={{
           width: '100%',
@@ -77,12 +82,10 @@ export default function ScheduleMeeting({
           position: 'relative',
         }}
       >
-        {/* Fallback test: afișează data-url ca link */}
         {!schedulingUrl && <p style={{ padding: 16 }}>Loading schedulingUrl…</p>}
         {schedulingUrl && !scriptReady && (
           <p style={{ padding: 16 }}>Waiting for Calendly script…</p>
         )}
-        {/* Container real */}
         <div
           id="calendly-inline"
           style={{ width: '100%', height: '100%' }}

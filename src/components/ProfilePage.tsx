@@ -19,6 +19,7 @@ interface ProviderProfile {
   videoUrl?: string | null;
   grossVolume?: number | null;
   calendlyCalendarUri?: string | null;
+  isCalendlyConnected?: boolean;
   scheduleLink?: string | null;
   reading?: { id: string; name: string; description?: string };
   specialities: { id: string; name: string; description?: string; price?: number }[];

@@ -52,7 +52,10 @@ model Provider {
 
   /// URI-ul unic al calendarului Calendly (seat-ul provider-ului)
   calendlyCalendarUri    String?                  @unique
-
+  calendlyAccessToken  String?  // access token (Bearer) pe care îl primești la OAuth
+  calendlyRefreshToken String?  // dacă vrei să faci refresh
+  calendlyExpiresAt    DateTime?// când expiră access_token-ul
+  isCalendlyConnected   Boolean  @default(false)
   readingId              String?
   reading                Reading?                 @relation("ProviderReading", fields: [readingId], references: [id], onDelete: SetNull)
 

@@ -76,7 +76,7 @@ const ProviderProfileSection: React.FC<Props> = ({ provider }) => {
         )}
 
         {shownIndexSection === 3 && (
-          <ScheduleMeeting />
+          <ScheduleMeeting providerId={provider.id} />
         )}
       </div>
     </div>

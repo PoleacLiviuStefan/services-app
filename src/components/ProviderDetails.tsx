@@ -1,4 +1,4 @@
-// components/ProviderDetails.tsx
+// File: components/ProviderDetails.tsx
 
 "use client";
 
@@ -60,11 +60,10 @@ type EditModalType =
   | "Status";
 
 const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
-  console.log('provider')
   const specialitiesStore = useCatalogStore((s) => s.specialities);
   const readingsStore = useCatalogStore((s) => s.readings);
   const toolsStore = useCatalogStore((s) => s.tools);
-
+  console.log("PROVIDER DETAILS", provider);
   const [localProvider, setLocalProvider] = useState(provider);
   const [showEditModal, setShowEditModal] = useState<EditModalType>("");
 
@@ -246,33 +245,46 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
   // ================= STRIPE CONNECT =======================
   const createStripeConnectUrl = () => {
     const clientId = process.env.NEXT_PUBLIC_STRIPE_CLIENT_ID!;
-    const redirectUri = `${process.env.NEXT_PUBLIC_BASE_URL}/profil`;
-
+    const redirectUri = `${process.env.NEXT_PUBLIC_BASE_URL}/api/stripe/connect/callback`;
     const params = new URLSearchParams({
       response_type: "code",
-      client_id: clientId,
-      redirect_uri: redirectUri,
-      state: `stripe:${localProvider.id}`,
+      client_id:     clientId,
+      redirect_uri:  redirectUri,
+      state:         `stripe:${localProvider.id}`,
       "stripe_user[country]": "RO",
     });
-
     return `https://connect.stripe.com/oauth/authorize?${params.toString()}`;
   };
 
-  // ================= CALENDLY CONNECT =====================
-  const createCalendlyConnectUrl = () => {
-    const clientId = process.env.NEXT_PUBLIC_CALENDLY_CLIENT_ID!;
-    const redirectUri = `${process.env.NEXT_PUBLIC_BASE_URL}/profil`;
+  // ================= CALENDLY CONNECT (cu PKCE) =====================
 
-    const params = new URLSearchParams({
-      response_type: "code",
-      client_id: clientId,
-      redirect_uri: redirectUri,
-      state: `calendly:${localProvider.id}`,
-    });
+// File: components/ProviderDetails.tsx
+const handleCalendlyConnect = async () => {
+  // 1. Cere code_challenge și cookie-ul code_verifier de la server
+  const resp = await fetch("/api/calendly/oauth/start", { credentials: "include" });
+  if (!resp.ok) {
+    console.error("Nu am putut iniția PKCE:", await resp.text());
+    return;
+  }
+  const { codeChallenge } = await resp.json();
 
-    return `https://auth.calendly.com/oauth/authorize?${params.toString()}`;
-  };
+  // 2. Construiește URL-ul de autorizare Calendly cu PKCE
+  const clientId    = process.env.NEXT_PUBLIC_CALENDLY_CLIENT_ID!;
+  const redirectUri = `${process.env.NEXT_PUBLIC_BASE_URL}/api/calendly/oauth/callback`;
+  const params = new URLSearchParams({
+    response_type:         "code",
+    client_id:             clientId,
+    redirect_uri:          redirectUri,
+    state:                 `calendly:${localProvider.id}`,
+    code_challenge:        codeChallenge,
+    code_challenge_method: "S256",
+  });
+  const authorizeUrl = `https://auth.calendly.com/oauth/authorize?${params.toString()}`;
+
+  // 3. Redirecționează browser-ul către Calendly
+  window.location.href = authorizeUrl;
+};
+
 
   // Render Stripe & Calendly connect sections
   const renderIntegrationSections = () => (
@@ -286,7 +298,7 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
               Conectat ({localProvider.stripeAccountId})
             </span>
           ) : (
-            <span className="text-red-600">Nu esti conectat</span>
+            <span className="text-red-600">Nu ești conectat</span>
           )}
         </div>
         {!localProvider.stripeAccountId ? (
@@ -296,7 +308,7 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
             }}
             className="mt-2 px-4 py-2 bg-primaryColor text-white rounded hover:bg-primaryColor-dark"
           >
-            Conecteaza-te cu Stripe
+            Conectează-te cu Stripe
           </Button>
         ) : (
           <Button
@@ -318,7 +330,7 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
             }}
             className="mt-2 px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
           >
-            Deconecteaza Stripe
+            Deconectează Stripe
           </Button>
         )}
       </div>
@@ -326,21 +338,19 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
       {/* Calendly Connect */}
       <div className="h-full flex flex-col justify-between bg-gray-50 p-4 rounded">
         <div>
-          <strong>Conectare Calendly:</strong>{" "}
-          {localProvider.scheduleLink ? (
+          <strong>Conectare Calendly:{localProvider.isCalendlyConnected ? "nu ": "Da"} </strong>{" "}
+          {localProvider.isCalendlyConnected ? (
             <span className="text-green-700">Conectat</span>
           ) : (
-            <span className="text-red-600">Nu esti Conectat</span>
+            <span className="text-red-600">Nu ești conectat</span>
           )}
         </div>
-        {!localProvider.scheduleLink ? (
+        {!localProvider.isCalendlyConnected ? (
           <Button
-            onClick={() => {
-              window.location.href = createCalendlyConnectUrl();
-            }}
+            onClick={handleCalendlyConnect}
             className="mt-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
           >
-            Conecteaza-te cu Calendly
+            Conectează-te cu Calendly
           </Button>
         ) : (
           <Button
@@ -362,7 +372,7 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
             }}
             className="mt-2 px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
           >
-            Deconectare Calendly
+            Deconectare Calendly 
           </Button>
         )}
       </div>
@@ -512,7 +522,7 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
             </Button>
           </div>
           <div className="space-y-2 max-h-[60vh] overflow-auto">
-            {specialitiesStore.map((spec) => (
+            {specialitiesStore.map((spec) => (  
               <AddAttributeProvider
                 key={spec.id}
                 title={spec.name}
@@ -559,7 +569,7 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
             </Button>
           </div>
           <div className="space-y-2 max-h-[60vh] overflow-auto">
-            {toolsStore.map((tool) => (
+            {toolsStore.map((tool) => (  
               <AddAttributeProvider
                 key={tool.id}
                 title={tool.name}
@@ -606,7 +616,7 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
             </Button>
           </div>
           <div className="space-y-2 max-h-[60vh] overflow-auto">
-            {readingsStore.map((r) => (
+            {readingsStore.map((r) => (  
               <AddAttributeProvider
                 key={r.id}
                 title={r.name}
@@ -685,7 +695,7 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
             </Button>
           </div>
           <div className="space-y-2 max-h-[60vh] overflow-auto">
-            {localProvider.providerPackages.map((pkg) => (
+            {localProvider.providerPackages.map((pkg) => (  
               <AddAttributeProvider
                 key={pkg.id}
                 title={`${pkg.service} – ${pkg.totalSessions} sesiuni @ ${pkg.price} RON – expiră: ${
@@ -726,7 +736,6 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
             <div>
               <strong>Stare:</strong> {localProvider.online ? "Online" : "Offline"}
             </div>
-            {/* <EditButton showEditModal={() => setShowEditModal("Status")} /> */}
           </div>
 
           {/* Video URL */}
