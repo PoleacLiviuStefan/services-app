@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { useSession } from "next-auth/react";
+import { useSession } from "next-auth/react"; // Vom extrage și metoda `update` de aici
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import AdminPsychics from "@/components/AdminPsychics";
@@ -46,7 +46,8 @@ interface ProviderProfile {
 }
 
 const ProfilePage: React.FC = () => {
-  const { data: session, status } = useSession();
+  // Extragem `update` și îl redenumim `refreshSession`
+  const { data: session, status, update: refreshSession } = useSession();
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -54,26 +55,32 @@ const ProfilePage: React.FC = () => {
   const [loadingProvider, setLoadingProvider] = useState(true);
   const [users, setUsers] = useState<any[]>([]);
 
+  // State pentru editarea numelui
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editedName, setEditedName] = useState("");
+  const [nameError, setNameError] = useState<string | null>(null);
+  const [isSavingName, setIsSavingName] = useState(false);
+
   // Avatar upload state
   const [showAvatarModal, setShowAvatarModal] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
 
-  // 1) Redirect to login if not authenticated
+  // 1) Redirect to login dacă nu e autenticat
   useEffect(() => {
     if (status !== "loading" && !session?.user) {
       router.push("/autentificare");
     }
   }, [session, status, router]);
 
-  // 2) Build “slug” from session.user.name once available
+  // 2) Construim “slug” din session.user.name
   const rawName = session?.user?.name ?? "";
   const slug = rawName
     ? encodeURIComponent(rawName.trim().split(/\s+/).join("-"))
     : "";
 
-  // 3) Fetch provider data by “slug”
+  // 3) Fetch provider după slug
   const fetchProviderBySlug = async () => {
     if (!slug) {
       setProvider(null);
@@ -100,14 +107,14 @@ const ProfilePage: React.FC = () => {
     }
   };
 
-  // 4) Initial fetch once session and slug are ready
+  // 4) Fetch inițial odată ce avem session și slug
   useEffect(() => {
     if (status === "authenticated" && slug) {
       fetchProviderBySlug();
     }
   }, [session, slug, status]);
 
-  // 5) Handle OAuth callback (Stripe or Calendly) – folosim prefix în `state`
+  // 5) Handle OAuth callback (Stripe sau Calendly)
   useEffect(() => {
     const code = searchParams.get("code");
     const state = searchParams.get("state"); // ex: "stripe:<providerId>" sau "calendly:<providerId>"
@@ -119,7 +126,6 @@ const ProfilePage: React.FC = () => {
       (async () => {
         try {
           if (type === "stripe") {
-            // apelăm doar endpoint-ul Stripe callback
             const resp = await fetch(
               `/api/provider/${provId}/stripe-connect/callback?code=${code}`,
               { method: "GET" }
@@ -127,11 +133,9 @@ const ProfilePage: React.FC = () => {
             if (!resp.ok) {
               console.error("Eroare la callback Stripe OAuth:", await resp.text());
             } else {
-              // re-fetch provider ca să includă stripeAccountId
               await fetchProviderBySlug();
             }
           } else if (type === "calendly") {
-            // apelăm doar endpoint-ul Calendly callback
             const resp = await fetch(
               `/api/provider/${provId}/calendly-connect/callback?code=${code}`,
               { method: "GET" }
@@ -139,21 +143,19 @@ const ProfilePage: React.FC = () => {
             if (!resp.ok) {
               console.error("Eroare la callback Calendly OAuth:", await resp.text());
             } else {
-              // re-fetch provider ca să includă calendlyCalendarUri
               await fetchProviderBySlug();
             }
           }
         } catch (err) {
           console.error("Eroare la apelul callback OAuth:", err);
         } finally {
-          // eliminăm parametrii ?code și ?state din URL
           router.replace("/profil", { scroll: false });
         }
       })();
     }
   }, [searchParams, status, slug, router]);
 
-  // 6) If user is ADMIN, fetch users list
+  // 6) Dacă user-ul e ADMIN, fetch utilizatori
   const fetchUsers = async () => {
     try {
       const res = await fetch("/api/admin/get-users", {
@@ -172,7 +174,7 @@ const ProfilePage: React.FC = () => {
     }
   }, [session]);
 
-  // 7) Avatar handlers
+  // 7) Handlers avatar (neschimbate)
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setUploadError(null);
     if (e.target.files && e.target.files[0]) {
@@ -218,12 +220,70 @@ const ProfilePage: React.FC = () => {
     }
   };
 
+  // 8) Handlers pentru editarea numelui (doar provider) + REÎMPROSPĂTAREA sesiunii
+  const handleEditNameClick = () => {
+    if (!provider) return;
+    setNameError(null);
+    setEditedName(provider.user.name || "");
+    setIsEditingName(true);
+  };
+
+  const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setEditedName(e.target.value);
+    if (nameError) {
+      setNameError(null);
+    }
+  };
+
+  const handleSaveName = async () => {
+    if (!editedName.trim()) {
+      setNameError("Numele nu poate fi gol.");
+      return;
+    }
+    if (!provider) return;
+    setIsSavingName(true);
+    try {
+      const res = await fetch(`/api/provider/${provider.id}/update-name`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ name: editedName.trim() }),
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        setNameError(errorData.error || "A apărut o eroare la salvare.");
+      } else {
+        // După ce API-ul a confirmat schimbarea numelui:
+        // 1) Reîncărcăm datele provider-ului (în baza de date numele e deja actualizat)
+        await fetchProviderBySlug();
+
+        // 2) FORȚĂ refresh al sesiunii NextAuth, ca să aducem în session.user.name valoarea nouă
+        await refreshSession();
+
+        // 3) Ieșim din modul de editare
+        setIsEditingName(false);
+      }
+    } catch (err) {
+      console.error("Error updating name:", err);
+      setNameError("A apărut o eroare de rețea.");
+    } finally {
+      setIsSavingName(false);
+    }
+  };
+
+  const handleCancelEditName = () => {
+    setIsEditingName(false);
+    setNameError(null);
+  };
+
   if (status === "loading") {
     return <p className="text-center mt-20">Se încarcă...</p>;
   }
   if (!session?.user) return null;
 
-  const { name, email, image, role } = session.user;
+  const { name, email: sessionEmail, image: sessionImage, role } = session.user;
   const isProvider = Boolean(provider);
   const avatarSrc = provider?.user.image || defaultAvatar;
 
@@ -239,10 +299,58 @@ const ProfilePage: React.FC = () => {
             className="rounded-full object-cover"
           />
         </div>
-        <h2 className="mt-4 text-xl font-bold">
-          {provider?.user.name || name}
-        </h2>
-        <p className="text-gray-600">{provider?.user.email || email}</p>
+
+        {/* Secțiunea cu numele */}
+        <div className="mt-4">
+          {isProvider ? (
+            // Dacă e provider, afișăm input sau text cu buton de editare
+            isEditingName ? (
+              <div className="flex flex-col items-center space-y-2">
+                <input
+                  type="text"
+                  value={editedName}
+                  onChange={handleNameChange}
+                  className="border border-gray-300 rounded px-3 py-1 w-full text-center"
+                  placeholder="Nume utilizator"
+                />
+                {nameError && (
+                  <p className="text-red-500 text-sm">{nameError}</p>
+                )}
+                <div className="flex space-x-2">
+                  <Button
+                    onClick={handleCancelEditName}
+                    className="px-4 py-2 bg-gray-300 text-gray-800 rounded hover:bg-gray-400"
+                  >
+                    Anulează
+                  </Button>
+                  <Button
+                    onClick={handleSaveName}
+                    disabled={isSavingName}
+                    className="px-4 py-2 bg-primaryColor text-white rounded hover:bg-secondaryColor disabled:opacity-50"
+                  >
+                    {isSavingName ? "Salvez..." : "Salvează"}
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center">
+                <h2 className="text-xl font-bold">{provider.user.name}</h2>
+                <Button
+                  onClick={handleEditNameClick}
+                  className="mt-2 px-3 py-1 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 text-sm"
+                >
+                  Editează nume
+                </Button>
+              </div>
+            )
+          ) : (
+            // Dacă nu e provider, afișăm numele din sesiune
+            <h2 className="text-xl font-bold">{name}</h2>
+          )}
+        </div>
+
+        {/* Email */}
+        <p className="text-gray-600">{provider?.user.email || sessionEmail}</p>
 
         <div className="flex justify-center space-x-4 mt-4">
           {isProvider && (
@@ -252,7 +360,7 @@ const ProfilePage: React.FC = () => {
                 setSelectedFile(null);
                 setShowAvatarModal(true);
               }}
-              className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+              className="bg-primaryColor text-white px-4 py-2 rounded hover:bg-secondaryColor"
             >
               Editează Avatar
             </Button>
@@ -315,7 +423,7 @@ const ProfilePage: React.FC = () => {
       )}
 
       {/* Admin Section */}
-      {role === "ADMIN" && (
+      {session.user.role === "ADMIN" && (
         <div className="max-w-3xl mx-auto mt-10">
           <h3 className="text-lg font-semibold mb-4">Administrare Utilizatori</h3>
           <AdminPsychics physics={users} />

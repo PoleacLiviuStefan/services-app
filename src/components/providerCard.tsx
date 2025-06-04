@@ -100,7 +100,7 @@ const ProviderCard: React.FC<ProviderCardProp> = ({
         <span className="font-bold">{name}</span>
       </div>
       </Link>
-      <div className="flex flex-col items-center p-2 rounded-t-xl text-white text-primaryColor">
+      <div className="flex flex-col items-center space-y-2 p-2 rounded-t-xl text-white text-primaryColor">
         <span className="text-sm lg:text-md border-2 px-2 py-1 rounded-xl text-primaryColor">
           {reviews} Recenzii
         </span>
@@ -121,7 +121,7 @@ const ProviderCard: React.FC<ProviderCardProp> = ({
           </div>
         )}
 
-        <span className="text-semibold py-2 text-black overflow-hidden text-ellipsis h-full leading-none lg:h-[70px] text-sm lg:text-md">
+        <span className="text-semibold py-2 text-black overflow-hidden text-ellipsis h-[120px] leading-none lg:h-[90px] text-sm lg:text-md">
           {description}
         </span>
 
