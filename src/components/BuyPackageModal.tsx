@@ -290,7 +290,7 @@ console.log("  providerStripeAccountId:", providerStripeAccountId)
           {selectedPackageId && clientSecret && !paymentSuccess && (
             <div className="mt-6">
               <h3 className="text-lg font-medium mb-2">
-                Confirmă plata pentru “{packages.find((p) => p.id === selectedPackageId)?.name}”
+                Confirmă plata pentru “{packages.find((p) => p.id === selectedPackageId)?.service}”
               </h3>
 
               <Elements stripe={stripePromise} options={{ clientSecret }}>

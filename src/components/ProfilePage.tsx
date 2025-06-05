@@ -11,6 +11,7 @@ import defaultAvatar from "../../public/default-avatar.webp";
 import ProviderDetails from "@/components/ProviderDetails";
 import Modal from "@/components/ui/modal";
 import Button from "@/components/atoms/button";
+import UserBoughtPackages from "./UserBoughtPackages";
 
 interface ProviderProfile {
   id: string;
@@ -415,6 +416,9 @@ const ProfilePage: React.FC = () => {
             </div>
           </div>
         </Modal>
+      )}
+      {!isProvider && !provider && (
+        <UserBoughtPackages />
       )}
 
       {/* Provider Section */}

@@ -47,7 +47,7 @@ const ProfileMainInfo: React.FC<ProfileMainInfoProps> = ({ provider }) => {
 
       <div className="flex flex-col lg:flex-row lg:justify-between items-center space-y-6 lg:space-x-6 relative w-full">
         {/* Blocul principal cu imaginea și numele */}
-        <div className="flex flex-col items-center bg-white rounded-lg shadow-lg w-[250px] h-[350px]">
+        <div className="flex flex-col items-center bg-white rounded-lg shadow-lg w-[250px] h-[300px]">
           {/* Container imagine 250×250 */}
           <div className="flex flex-col items-center relative w-full h-[250px] overflow-hidden rounded-t-lg">
             <Image
@@ -74,7 +74,7 @@ const ProfileMainInfo: React.FC<ProfileMainInfoProps> = ({ provider }) => {
                 onClick={() => setShowVideoModal(true)}
                 className="
                   absolute
-                  bottom-2
+                  bottom-0
                   flex items-center justify-center
                   bg-primaryColor text-white
                   font-semibold text-sm

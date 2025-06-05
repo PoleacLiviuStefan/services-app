@@ -102,7 +102,6 @@ model UserProviderPackage {
   providerPackage  ProviderPackage         @relation("ProviderPackageUsers", fields: [packageId], references: [id], onDelete: Cascade)
   sessions         ConsultingSession[]     @relation("SessionUserPackage")
 
-  @@unique([userId, providerId, packageId])
 }
 
 model Reading {
