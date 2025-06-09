@@ -55,6 +55,7 @@ model Provider {
   calendlyAccessToken  String?  // access token (Bearer) pe care îl primești la OAuth
   calendlyRefreshToken String?  // dacă vrei să faci refresh
   calendlyExpiresAt    DateTime?// când expiră access_token-ul
+  calendlyUserUri      String?
   isCalendlyConnected   Boolean  @default(false)
   readingId              String?
   reading                Reading?                 @relation("ProviderReading", fields: [readingId], references: [id], onDelete: SetNull)
@@ -82,7 +83,7 @@ model ProviderPackage {
   price          Float
   createdAt      DateTime                @default(now())
   expiresAt      DateTime?
-
+  calendlyEventTypeUri String? @unique
   provider       Provider                @relation("ProviderPkg", fields: [providerId], references: [id], onDelete: Cascade)
   userProviderPackages UserProviderPackage[] @relation("ProviderPackageUsers")
 }

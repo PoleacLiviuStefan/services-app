@@ -47,10 +47,10 @@ const CategorySelector: React.FC<CategorySelectorProps> = ({
       </Button>
 
       <ul
-        className={`absolute z-10 mt-1 w-full bg-white rounded shadow-md overflow-hidden transition-all duration-200
+        className={`absolute z-10 mt-1 w-full bg-white text-uppercase rounded shadow-md overflow-hidden transition-all duration-200
           ${
             showOptions
-              ? "max-h-60 opacity-100 border border-gray-200 py-2"
+              ? "max-h-60 opacity-100 overflow-y-scroll border border-gray-200 py-2"
               : "max-h-0 opacity-0 border-0 py-0"
           }
         `}

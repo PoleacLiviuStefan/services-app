@@ -1,14 +1,10 @@
 // File: app/api/calendly/oauth/callback/route.ts
-
 export const runtime = 'nodejs';
 
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
-// Folosim variabila de mediu NEXT_PUBLIC_BASE_URL definită astfel:
-//   • În .env.local (dev):     NEXT_PUBLIC_BASE_URL=http://localhost:3000
-//   • În producție (setată pe platformă): NEXT_PUBLIC_BASE_URL=https://mysticgold.app
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL!;
 if (!BASE_URL) {
   throw new Error('Variabila de mediu NEXT_PUBLIC_BASE_URL nu este definită.');
@@ -42,7 +38,7 @@ export async function GET(req: NextRequest) {
     const providerId = state.replace('calendly:', '');
     console.log('› providerId extras din state:', providerId);
 
-    // 4. Verificăm în baza de date dacă provider-ul există
+    // 4. Găsim în baza de date provider-ul după userId = providerId
     const existing = await prisma.provider.findUnique({
       where: { id: providerId },
       select: { id: true, calendlyCalendarUri: true },
@@ -149,34 +145,24 @@ export async function GET(req: NextRequest) {
 
     // 9. Extragem doar partea principală a scheduling_url (fără segmentul final, ex: “/30min”)
     const fullSchedulingUrl = firstActive.scheduling_url;
-    // ex: "https://calendly.com/stefan-liviu286/30min"
     const urlObj = new URL(fullSchedulingUrl);
-    // urlObj.origin === "https://calendly.com"
-    // urlObj.pathname === "/stefan-liviu286/30min"
     const pathParts = urlObj.pathname.split('/');
-    // => ["", "stefan-liviu286", "30min"]
-    const basePath = pathParts[1]; // => "stefan-liviu286"
-    const calendlyCalendarUri = `${urlObj.origin}/${basePath}`; 
-    // => "https://calendly.com/stefan-liviu286"
+    const basePath = pathParts[1];
+    const calendlyCalendarUri = `${urlObj.origin}/${basePath}`;
 
     console.log('› fullSchedulingUrl:', fullSchedulingUrl);
     console.log('› calendlyCalendarUri (fără ultimul segment):', calendlyCalendarUri);
 
     // 10. Actualizăm în baza de date (Prisma) câmpurile necesare
-    let updated: {
-      id: string;
-      calendlyCalendarUri: string;
-      isCalendlyConnected: boolean;
-    } | null = null;
-
+    let updated = null;
     try {
       updated = await prisma.provider.update({
-        where: { id: providerId },
+        where: { id: existing.id },
         data: {
           calendlyAccessToken:  accessToken,
           calendlyRefreshToken: tokenData.refresh_token,
           calendlyExpiresAt:    new Date(Date.now() + tokenData.expires_in * 1000),
-          calendlyCalendarUri,
+           calendlyUserUri:       userUri,
           isCalendlyConnected:  true,
         },
         select: {

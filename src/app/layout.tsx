@@ -21,8 +21,10 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Astrologie",
-  description: "Astrologie",
+  title: "MysticGold",
+  description: "MysticGold s-a născut dintr-o nevoie reală și dureroasă: prea mulți\n" +
+               "oameni ajung să ceară ajutor în cele mai vulnerabile momente ale\n" +
+               "vieții, doar ca să fie dezamăgiți",
 };
 
 export default function RootLayout({

@@ -121,7 +121,7 @@ const ProviderCard: React.FC<ProviderCardProp> = ({
           </div>
         )}
 
-        <span className="text-semibold py-2 text-black overflow-hidden text-ellipsis h-[120px] leading-none lg:h-[90px] text-sm lg:text-md">
+        <span className="text-semibold py-2 text-black overflow-hidden text-ellipsis h-[90px] leading-none lg:h-[50px] text-sm lg:text-md">
           {description}
         </span>
 
