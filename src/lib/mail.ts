@@ -20,7 +20,7 @@ export async function sendVerificationEmail(to: string, token: string) {
       from: process.env.FROM_MAIL,
       to,
     },
-    from: `"My App" <${process.env.FROM_MAIL}>`,
+    from: `"MysticGold" <${process.env.FROM_MAIL}>`,
     to,
     subject: "Verifică-ți adresa de e-mail",
     html: `
@@ -34,7 +34,7 @@ export async function sendPasswordResetEmail(to: string, token: string) {
   const url = `${process.env.NEXT_PUBLIC_BASE_URL}/resetare-parola?token=${token}`;
   await transporter.sendMail({
     envelope: { from: process.env.FROM_MAIL, to },
-    from: `"My App" <${process.env.FROM_MAIL}>`,
+    from: `"MysticGold" <${process.env.FROM_MAIL}>`,
     to,
     subject: "Resetare parolă",
     html: `

@@ -3,11 +3,10 @@ export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 
 interface BodyDTO {
-  providerId:        string;
+  providerId:        string;  // userId al provider-ului
   scheduledEventUri: string;
 }
 
@@ -39,8 +38,9 @@ export async function POST(req: NextRequest) {
         mainSpecialityId:     true,
       },
     });
-    if (!dbPr) return NextResponse.json({ error: "Provider invalid." }, { status: 404 });
-
+    if (!dbPr) {
+      return NextResponse.json({ error: "Provider invalid." }, { status: 404 });
+    }
     let {
       id: realProviderId,
       calendlyAccessToken: token,
@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
       mainSpecialityId,
     } = dbPr;
 
-    // 3. Helper to refresh Calendly token once
+    // 3. Helper to refresh Calendly token once if expired
     async function refreshOnce(): Promise<boolean> {
       if (!refreshToken) return false;
       if (expiresAt && new Date() < expiresAt) return false;
@@ -80,7 +80,7 @@ export async function POST(req: NextRequest) {
       return true;
     }
 
-    // 4. Fetch the scheduled_event (retry on 401)
+    // 4. Fetch the scheduled_event from Calendly (retry on 401)
     let res = await fetch(scheduledEventUri, {
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -120,12 +120,7 @@ export async function POST(req: NextRequest) {
     const endDate     = new Date(endStr);
     const duration    = Math.round((endDate.getTime() - startDate.getTime()) / 60000);
 
-    // Debug logging
-    console.log("scheduledAt =", scheduledAt.toISOString());
-    console.log("startDate   =", startDate.toISOString());
-    console.log("endDate     =", endDate.toISOString());
-
-    // 7. Find or create client
+    // 7. Find or create the client user
     let client = await prisma.user.findUnique({
       where:  { email },
       select: { id: true },
@@ -146,7 +141,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 9. Pick a UserProviderPackage with remaining sessions
+    // 9. Select a UserProviderPackage with remaining sessions
     const pkgs = await prisma.userProviderPackage.findMany({
       where: {
         userId:     client.id,
@@ -157,22 +152,25 @@ export async function POST(req: NextRequest) {
       },
       orderBy: { createdAt: "asc" },
     });
-    const userPkg = pkgs.find(p => p.usedSessions < p.providerPackage.totalSessions);
+    const userPkg = pkgs.find(
+      (p) => p.usedSessions < p.providerPackage.totalSessions
+    );
     if (!userPkg) {
       return NextResponse.json(
-        { error: "Nu ai sesiuni disponibile." },
+        { error: "Nu ai sesiuni disponibile în niciun pachet." },
         { status: 400 }
       );
     }
-    const totalPrice = userPkg.providerPackage.price / userPkg.providerPackage.totalSessions;
+    const totalPrice =
+      userPkg.providerPackage.price / userPkg.providerPackage.totalSessions;
 
-    // 10. Create Zoom meeting
+    // 10. Create Zoom meeting via your endpoint
     const zoomRes = await fetch(
       `${process.env.NEXT_PUBLIC_BASE_URL}/api/video/create-session`,
       {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+        body:    JSON.stringify({
           users:       [realProviderId, client.id],
           providerId:  realProviderId,
           clientId:    client.id,
@@ -190,36 +188,32 @@ export async function POST(req: NextRequest) {
     }
     const { sessionName, tokens } = zoomJson;
 
-    // 11. Persist ConsultingSession (catch P2002 for duplicate zoomSessionName)
-    let created = await prisma.consultingSession.create({
-      data: {
+    // 11. Upsert ConsultingSession: create or update existing by zoomSessionName
+    const session = await prisma.consultingSession.upsert({
+      where: { zoomSessionName: sessionName },
+      update: {
+        scheduledAt,
+        startDate,
+        endDate,
+        duration,
+        totalPrice:        Math.round(totalPrice * 100) / 100,
+        calendlyEventUri:  scheduledEventUri,
+      },
+      create: {
         providerId:        realProviderId,
         clientId:          client.id,
         specialityId,
         packageId:         userPkg.id,
         duration,
-        scheduledAt,      // now persist correctly
-        startDate,        // now persist correctly
-        endDate,          // now persist correctly
-        totalPrice:       Math.round(totalPrice * 100) / 100,
-        calendlyEventUri: scheduledEventUri,
-        zoomSessionName:  sessionName,
-        zoomTokens:       tokens,
-        isFinished:       false,
+        scheduledAt,
+        startDate,
+        endDate,
+        totalPrice:        Math.round(totalPrice * 100) / 100,
+        calendlyEventUri:  scheduledEventUri,
+        zoomSessionName:   sessionName,
+        zoomTokens:        tokens,
+        isFinished:        false,
       },
-    }).catch(async (e: any) => {
-      if (
-        e instanceof Prisma.PrismaClientKnownRequestError &&
-        e.code === "P2002" &&
-        Array.isArray(e.meta?.target) &&
-        e.meta.target.includes("zoomSessionName")
-      ) {
-        // return existing if duplicate
-        return prisma.consultingSession.findUnique({
-          where: { zoomSessionName: sessionName },
-        });
-      }
-      throw e;
     });
 
     // 12. Increment usedSessions
@@ -228,18 +222,14 @@ export async function POST(req: NextRequest) {
       data: { usedSessions: { increment: 1 } },
     });
 
-    // 13. Finally, re-fetch the record to ensure all fields are loaded
-    const fresh = await prisma.consultingSession.findUnique({
-      where: { id: created!.id },
-    });
-
-    return NextResponse.json({ ok: true, data: fresh }, { status: 201 });
+    // 13. Return the session
+    return NextResponse.json({ ok: true, data: session }, { status: 201 });
   } catch (err: any) {
     console.error("Unexpected error în /api/calendly/event-scheduled:", err);
     return NextResponse.json(
       {
         error:   "Eroare internă neașteptată",
-        details: err.message || String(err),
+        details: err?.message || String(err),
       },
       { status: 500 }
     );

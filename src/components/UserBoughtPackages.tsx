@@ -62,9 +62,9 @@ export default function UserBoughtPackages() {
       });
   }, [status]);
 
-  if (status === "loading" || loading) {
-    return <p>Se încarcă pachetele cumpărate…</p>;
-  }
+  // if (status === "loading" || loading) {
+  //   return <p>Se încarcă pachetele cumpărate…</p>;
+  // }
 
   if (error) {
     return <p className="text-red-500">Eroare: {error}</p>;

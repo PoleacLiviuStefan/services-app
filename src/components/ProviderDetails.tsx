@@ -128,6 +128,36 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
     }
   };
 
+
+    const handleAddRequest = async (type: EditModalType) => {
+    let url = "";
+    let body: any = {};
+    if (type === "Specialities") {
+      url = "/api/requests/speciality";
+      body = { name: newSpecialityName.trim() };
+    } else if (type === "Tools") {
+      url = "/api/requests/tool";
+      body = { name: newToolName.trim() };
+    } else if (type === "Reading") {
+      url = "/api/requests/reading";
+      body = { name: newReadingName.trim() };
+    }
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (res.ok) {
+      alert("Cerere trimisă pentru aprobare.");
+      if (type === "Specialities") setNewSpecialityName("");
+      if (type === "Tools") setNewToolName("");
+      if (type === "Reading") setNewReadingName("");
+    } else {
+      console.error(await res.text());
+      alert("Eroare la trimiterea cererii.");
+    }
+  };
+
   const handleSaveChanges = async (type: EditModalType) => {
     let url = `/api/provider/${localProvider.id}`;
     let body: any = {};
@@ -492,7 +522,7 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
 
       {showEditModal === "Specialities" && (
         <Modal closeModal={() => setShowEditModal("")} title="Editează Specializările">
-          <div className="mb-4 flex space-x-2">
+          <div className="mb-4 flex items-center space-x-2">
             <input
               type="text"
               value={newSpecialityName}
@@ -500,23 +530,7 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
               placeholder="Adaugă specialitate nouă"
               className="flex-1 p-2 border rounded"
             />
-            <Button
-              className="mt-4 py-3 w-full bg-primaryColor text-white hover:bg-secondaryColor"
-              disabled={!newSpecialityName.trim()}
-              onClick={async () => {
-                const name = newSpecialityName.trim();
-                const res = await fetch("/api/add/specialities", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ name }),
-                });
-                if (res.ok) {
-                  setNewSpecialityName("");
-                }
-              }}
-            >
-              Adaugă
-            </Button>
+        <Button className="py-3 w-full bg-primaryColor text-white hover:bg-secondaryColor" disabled={!newSpecialityName.trim()} onClick={() => handleAddRequest("Specialities")}>Adaugă</Button>
           </div>
           <div className="space-y-2 max-h-[60vh] overflow-auto">
             {specialitiesStore.map((spec) => (
@@ -539,7 +553,7 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
 
       {showEditModal === "Tools" && (
         <Modal closeModal={() => setShowEditModal("")} title="Editează Uneltele">
-          <div className="mb-4 flex space-x-2">
+          <div className="mb-4 flex items-center space-x-2">
             <input
               type="text"
               value={newToolName}
@@ -547,23 +561,7 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
               placeholder="Adaugă unealtă nouă"
               className="flex-1 p-2 border rounded"
             />
-            <Button
-              className="mt-4 py-3 w-full bg-primaryColor text-white hover:bg-secondaryColor"
-              disabled={!newToolName.trim()}
-              onClick={async () => {
-                const name = newToolName.trim();
-                const res = await fetch("/api/add/tools", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ name }),
-                });
-                if (res.ok) {
-                  setNewToolName("");
-                }
-              }}
-            >
-              Adaugă
-            </Button>
+<Button className="py-3 w-full bg-primaryColor text-white hover:bg-secondaryColor" disabled={!newToolName.trim()} onClick={() => handleAddRequest("Tools")}>Adaugă</Button>
           </div>
           <div className="space-y-2 max-h-[60vh] overflow-auto">
             {toolsStore.map((tool) => (
@@ -577,7 +575,7 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
           </div>
           <Button
             onClick={() => handleSaveChanges("Tools")}
-            className="mt-4 py-3 w-full bg-primaryColor text-white hover:bg-secondaryColor"
+            className=" py-3 w-full bg-primaryColor text-white hover:bg-secondaryColor"
           >
             Salvează
           </Button>
@@ -586,7 +584,7 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
 
       {showEditModal === "Reading" && (
         <Modal closeModal={() => setShowEditModal("")} title="Editează Reading">
-          <div className="mb-4 flex space-x-2">
+          <div className="mb-4 flex items-center space-x-2">
             <input
               type="text"
               value={newReadingName}
@@ -594,23 +592,7 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
               placeholder="Adaugă reading nou"
               className="flex-1 p-2 border rounded"
             />
-            <Button
-              className="mt-4 py-3 w-full bg-primaryColor text-white hover:bg-secondaryColor"
-              disabled={!newReadingName.trim()}
-              onClick={async () => {
-                const name = newReadingName.trim();
-                const res = await fetch("/api/add/readings", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ name }),
-                });
-                if (res.ok) {
-                  setNewReadingName("");
-                }
-              }}
-            >
-              Adaugă
-            </Button>
+            <Button className="py-3 w-full bg-primaryColor text-white hover:bg-secondaryColor" disabled={!newReadingName.trim()} onClick={() => handleAddRequest("Reading")}>Adaugă</Button>
           </div>
           <div className="space-y-2 max-h-[60vh] overflow-auto">
             {readingsStore.map((r) => (
@@ -662,7 +644,7 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
               className="w-full p-2 border rounded"
             />
             <Button
-              className="mt-4 py-3 w-full bg-primaryColor text-white hover:bg-secondaryColor"
+              className="py-3 w-full bg-primaryColor text-white hover:bg-secondaryColor"
               disabled={
                 !newPackageService.trim() ||
                 !newPackageSessions ||
@@ -692,7 +674,7 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
               Adaugă
             </Button>
           </div>
-          <div className="space-y-2 max-h-[60vh] overflow-auto">
+          <div className="space-y-2 max-h-[200px] lg:max-h-[60vh] overflow-auto">
             {localProvider.providerPackages.map((pkg) => (
               <AddAttributeProvider
                 key={pkg.id}
