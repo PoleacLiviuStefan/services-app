@@ -28,7 +28,7 @@ const Navbar = () => {
         <Image src={mysticLogo} alt="Logo" className="w-[60px] h-full" />
       </Link>
       <ul className="flex space-x-12 font-semibold">
-        {["ACASA", "ASTROLOGI", "DESPRE NOI"].map((item, index) => (
+        {["ACASA", "SERVICII EZOTERICE", "DESPRE NOI"].map((item, index) => (
           <li
             key={index}
             className="relative group cursor-pointer flex  items-center justify-center"
@@ -38,7 +38,7 @@ const Navbar = () => {
                 {item}
               </span>
             </Link>
-            {item === "ASTROLOGI" && (
+            {item === "SERVICII EZOTERICE" && (
               <>
                 <span className="ml-2 opacity-0 transform -translate-x-2 transition-all duration-500 ease-in-out group-hover:opacity-100 group-hover:translate-x-0">
                   <FaChevronDown />
