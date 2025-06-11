@@ -33,7 +33,7 @@ const Navbar = () => {
             key={index}
             className="relative group cursor-pointer flex  items-center justify-center"
           >
-            <Link href={item === "ACASA" ? "/" : `/${item.toLowerCase()}`}>
+            <Link href={item === "ACASA" ? "/" : item==="SERVICII EZOTERICE" ? "/astrologi" : `/${item.toLowerCase()}`}>
               <span className="inline-block transition-colors duration-500 ease-in-out hover:underline hover:text-gray-200">
                 {item}
               </span>
