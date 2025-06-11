@@ -12,7 +12,7 @@ export async function POST(req: Request) {
   const user = await prisma.user.findUnique({ where: { email } })
   if (!user) {
     // nu expune existența
-    return new NextResponse(null, { status: 204 })
+    return new NextResponse({"error":"No user found"}, { status: 404 })
   }
 
   await prisma.passwordReset.deleteMany({ where: { userId: user.id } })
