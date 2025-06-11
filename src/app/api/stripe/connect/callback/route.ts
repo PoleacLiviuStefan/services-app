@@ -1,81 +1,53 @@
 // File: app/api/stripe/connect/callback/route.ts
 
-import { NextResponse } from "next/server";
-import type { NextRequest } from "next/server";
+import { NextResponse, NextRequest } from "next/server";
 import Stripe from "stripe";
 import { prisma } from "@/lib/prisma";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth"; // Asigură-te că ai definit authOptions
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string, {
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: "2025-04-30.basil",
 });
 
 export async function GET(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-
-  if (!session?.user?.email) {
-    return NextResponse.json({ error: "Neautentificat" }, { status: 401 });
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { email: session.user.email },
-  });
-
-  if (!user) {
-    return NextResponse.json({ error: "Userul nu a fost găsit" }, { status: 404 });
-  }
-
-  const userId = user.id;
-
   const { searchParams } = new URL(req.url);
-  const code = searchParams.get("code");
-  const error = searchParams.get("error_description");
+  const code  = searchParams.get("code");
+  const state = searchParams.get("state"); // ex: "stripe:<providerId>"
+  
+  // baza ta de URL
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL!; // ex: "https://mysticgold.app"
 
-  if (error) {
-    console.error("Stripe Connect error:", error);
-    return NextResponse.redirect(
-      `${process.env.CONNECT_REDIRECT_URI}?error=${encodeURIComponent(error)}`
-    );
+  // dacă lipsește code sau state, trimitem pur și simplu înapoi la profil
+  if (!code || !state || !state.startsWith("stripe:")) {
+    return NextResponse.redirect(new URL("/profil", baseUrl));
   }
 
-  if (!code) {
-    return NextResponse.json(
-      { error: "Lipsește codul de autorizare" },
-      { status: 400 }
-    );
-  }
+  // extragem ID-ul provider-ului din state
+  const providerId = state.split(":")[1];
 
   try {
-    const response = await stripe.oauth.token({
+    // 1) schimbăm code pe token la Stripe
+    const resp = await stripe.oauth.token({
       grant_type: "authorization_code",
       code,
     });
+    const accountId = resp.stripe_user_id;
 
-    const connectedAccountId = response.stripe_user_id;
-
-    const provider = await prisma.provider.findUnique({
-      where: { userId },
-    });
-
-    if (!provider) {
-      return NextResponse.json({ error: "Providerul nu a fost găsit" }, { status: 404 });
-    }
-
+    // 2) actualizăm în DB
     await prisma.provider.update({
-      where: { userId },
-      data: { stripeAccountId: connectedAccountId },
+      where: { id: providerId },
+      data: { stripeAccountId: accountId },
     });
 
-    return NextResponse.redirect(
-      `/onboarding-success?accountId=${connectedAccountId}`
-    );
+    // 3) redirect absolut înapoi la profil, cu un query param (opțional)
+    const url = new URL("/profil", baseUrl);
+    url.searchParams.set("stripeConnected", "1");       // poți folosi orice flag
+    return NextResponse.redirect(url);
+
   } catch (err: any) {
-    console.error("Eroare la schimbul de token Stripe:", err);
-    return NextResponse.redirect(
-      `${process.env.CONNECT_REDIRECT_URI}?error=${encodeURIComponent(
-        err.message
-      )}`
-    );
+    console.error("Stripe OAuth callback error:", err.message);
+    // redirect cu eroare
+    const url = new URL("/profil", baseUrl);
+    url.searchParams.set("stripeError", encodeURIComponent(err.message));
+    return NextResponse.redirect(url);
   }
 }

@@ -3,16 +3,30 @@ export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 interface BodyDTO {
-  providerId:        string;  // userId al provider-ului
+  providerId:        string;  // userId al provider-ului (venit în body de la Calendly webhook)
   scheduledEventUri: string;
 }
 
 export async function POST(req: NextRequest) {
   try {
-    // 1. Parse & validate request body
+    // ————————————————————————————————
+    // 1. Autentificare & currentUserId
+    const session = await getServerSession(authOptions);
+    if (!session || !session.user?.id) {
+      return NextResponse.json(
+        { error: "Unautorizat. Trebuie să fii autentificat." },
+        { status: 401 }
+      );
+    }
+    const currentUserId = session.user.id;
+
+    // ————————————————————————————————
+    // 2. Parse & validate request body
     let body: BodyDTO;
     try {
       body = await req.json();
@@ -27,7 +41,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 2. Load provider credentials + default speciality
+    // ————————————————————————————————
+    // 3. Încarcă datele provider-ului
     const dbPr = await prisma.provider.findUnique({
       where: { userId },
       select: {
@@ -49,7 +64,8 @@ export async function POST(req: NextRequest) {
       mainSpecialityId,
     } = dbPr;
 
-    // 3. Helper to refresh Calendly token once if expired
+    // ————————————————————————————————
+    // 4. Refresh token helper
     async function refreshOnce(): Promise<boolean> {
       if (!refreshToken) return false;
       if (expiresAt && new Date() < expiresAt) return false;
@@ -80,7 +96,8 @@ export async function POST(req: NextRequest) {
       return true;
     }
 
-    // 4. Fetch the scheduled_event from Calendly (retry on 401)
+    // ————————————————————————————————
+    // 5. Fetch scheduled_event de la Calendly
     let res = await fetch(scheduledEventUri, {
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -97,42 +114,27 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 5. Extract timestamps & invitee
+    // ————————————————————————————————
+    // 6. Extrage date din payload
     const rsrc           = scheduledJson.resource;
     const scheduledAtStr = rsrc.created_at!;
     const startStr       = rsrc.start_time!;
     const endStr         = rsrc.end_time!;
-    const member         = Array.isArray(rsrc.event_memberships)
-      ? rsrc.event_memberships[0]
-      : null;
-    const email = member?.user_email;
-    const name  = member?.user_name;
-    if (!scheduledAtStr || !startStr || !endStr || !email) {
+    if (!scheduledAtStr || !startStr || !endStr) {
       return NextResponse.json(
         { error: "Payload incomplet de la Calendly." },
         { status: 500 }
       );
     }
 
-    // 6. Parse into Date objects
+    // 7. Parse Dates & calc duration
     const scheduledAt = new Date(scheduledAtStr);
     const startDate   = new Date(startStr);
     const endDate     = new Date(endStr);
     const duration    = Math.round((endDate.getTime() - startDate.getTime()) / 60000);
 
-    // 7. Find or create the client user
-    let client = await prisma.user.findUnique({
-      where:  { email },
-      select: { id: true },
-    });
-    if (!client) {
-      client = await prisma.user.create({
-        data: { email, name: name || undefined, role: "STANDARD" },
-        select: { id: true },
-      });
-    }
-
-    // 8. Determine specialityId
+    // ————————————————————————————————
+    // 8. Verifică specialityId
     const specialityId = mainSpecialityId!;
     if (!specialityId) {
       return NextResponse.json(
@@ -141,10 +143,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 9. Select a UserProviderPackage with remaining sessions
+    // ————————————————————————————————
+    // 9. Alege pachetul clientului (client = user-ul curent)
     const pkgs = await prisma.userProviderPackage.findMany({
       where: {
-        userId:     client.id,
+        userId:     currentUserId,
         providerId: realProviderId,
       },
       include: {
@@ -164,16 +167,17 @@ export async function POST(req: NextRequest) {
     const totalPrice =
       userPkg.providerPackage.price / userPkg.providerPackage.totalSessions;
 
-    // 10. Create Zoom meeting via your endpoint
+    // ————————————————————————————————
+    // 10. Crează întâlnirea Zoom
     const zoomRes = await fetch(
       `${process.env.NEXT_PUBLIC_BASE_URL}/api/video/create-session`,
       {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({
-          users:       [realProviderId, client.id],
+        body: JSON.stringify({
+          users:       [realProviderId, currentUserId],
           providerId:  realProviderId,
-          clientId:    client.id,
+          clientId:    currentUserId,
           specialityId,
           packageId:   userPkg.id,
         }),
@@ -188,8 +192,9 @@ export async function POST(req: NextRequest) {
     }
     const { sessionName, tokens } = zoomJson;
 
-    // 11. Upsert ConsultingSession: create or update existing by zoomSessionName
-    const session = await prisma.consultingSession.upsert({
+    // ————————————————————————————————
+    // 11. Upsert ConsultingSession (folosind currentUserId ca clientId)
+    const consultingSession = await prisma.consultingSession.upsert({
       where: { zoomSessionName: sessionName },
       update: {
         scheduledAt,
@@ -201,7 +206,7 @@ export async function POST(req: NextRequest) {
       },
       create: {
         providerId:        realProviderId,
-        clientId:          client.id,
+        clientId:          currentUserId,
         specialityId,
         packageId:         userPkg.id,
         duration,
@@ -216,14 +221,19 @@ export async function POST(req: NextRequest) {
       },
     });
 
+    // ————————————————————————————————
     // 12. Increment usedSessions
     await prisma.userProviderPackage.update({
       where: { id: userPkg.id },
       data: { usedSessions: { increment: 1 } },
     });
 
-    // 13. Return the session
-    return NextResponse.json({ ok: true, data: session }, { status: 201 });
+    // ————————————————————————————————
+    // 13. Răspuns final
+    return NextResponse.json(
+      { ok: true, data: consultingSession },
+      { status: 201 }
+    );
   } catch (err: any) {
     console.error("Unexpected error în /api/calendly/event-scheduled:", err);
     return NextResponse.json(
