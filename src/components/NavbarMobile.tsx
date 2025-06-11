@@ -88,7 +88,7 @@ const NavbarMobile = () => {
               onClick={togglePsychologists}
               className="flex items-center justify-center w-full text-white font-bold px-4 py-2 focus:outline-none"
             >
-              <span>ASTROLOGI</span>
+              <span>SERVICII EZOTERICE</span>
               <FaChevronDown className={`ml-2 transition-transform duration-300 ${isPsychologistsOpen ? 'rotate-180' : ''}`} />
             </button>
 
