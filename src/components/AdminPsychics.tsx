@@ -160,7 +160,7 @@ const AdminPsychics: React.FC<AdminPsychicsProps> = ({ physics }) => {
           <div className="flex space-x-4 mb-4">
             {[
               { key: 'SPECIALITY', label: 'Specialități' },
-              { key: 'TOOL', label: 'Unelte' },
+              { key: 'TOOL', label: 'Instrumente' },
               { key: 'READING', label: 'Reading-uri' }
             ].map(tabInfo => (
               <button

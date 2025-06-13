@@ -6,7 +6,7 @@ const SearchInput = forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLI
       {...props}
       ref={ref}
       className='border border-gray-400 p-2 rounded-md w-full text-sm lg:text-md lg:w-50 py-3 focus:outline-primaryColor'
-      placeholder={props.placeholder || 'Cauta un psiholog'}
+      placeholder={props.placeholder || 'Cauta un astrolog'}
     />
   );
 });

@@ -19,7 +19,12 @@ interface ProviderInterface {
   calendlyCalendarUri?: string | null;
   scheduleLink?: string | null;
   reading?: { id: string; name: string; description?: string };
-  specialities: { id: string; name: string; description?: string; price?: number }[];
+  specialities: {
+    id: string;
+    name: string;
+    description?: string;
+    price?: number;
+  }[];
   tools: { id: string; name: string; description?: string }[];
   mainSpeciality?: { id: string; name: string };
   mainTool?: { id: string; name: string };
@@ -75,7 +80,9 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
   const [videoUrl, setVideoUrl] = useState(provider.videoUrl || "");
   const [scheduleLink, setScheduleLink] = useState(provider.scheduleLink || "");
   const [readingId, setReadingId] = useState(provider.reading?.id || "");
-  const [mainSpecialityId, setMainSpecialityId] = useState(provider.mainSpeciality?.id || "");
+  const [mainSpecialityId, setMainSpecialityId] = useState(
+    provider.mainSpeciality?.id || ""
+  );
   const [mainToolId, setMainToolId] = useState(provider.mainTool?.id || "");
   const [selectedSpecialities, setSelectedSpecialities] = useState<string[]>(
     provider.specialities.map((s) => s.name)
@@ -94,6 +101,11 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
   const [newPackageSessions, setNewPackageSessions] = useState("");
   const [newPackagePrice, setNewPackagePrice] = useState("");
   const [newPackageExpiresAt, setNewPackageExpiresAt] = useState("");
+  const [calendlyEvents, setCalendlyEvents] = useState<CalendlyEventType[]>([]);
+  const [mapping, setMapping] = useState<Mapping>({});
+  const [loadingCalendly, setLoadingCalendly] = useState(false);
+  const [savingMapping, setSavingMapping] = useState(false);
+  const [newPackageEventUri, setNewPackageEventUri] = useState<string>("");
 
   const router = useRouter();
 
@@ -109,8 +121,14 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
     setMainToolId(provider.mainTool?.id || "");
     setSelectedSpecialities(provider.specialities.map((s) => s.name));
     setSelectedTools(provider.tools.map((t) => t.name));
-    setSelectedPackages(provider.providerPackages.map((p) => p.id));
-  }, [provider.id]);
+    // setSelectedPackages(provider.providerPackages.map((p) => p.id));
+
+    const initMap: Mapping = {};
+    provider.providerPackages.forEach((pkg) => {
+      if (pkg.calendlyEventTypeUri) initMap[pkg.calendlyEventTypeUri] = pkg.id;
+    });
+    setMapping(initMap);
+  }, [localProvider.id]);
 
   const toggleMulti = (val: string, key: EditModalType) => {
     if (key === "Specialities") {
@@ -121,15 +139,66 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
       setSelectedTools((prev) =>
         prev.includes(val) ? prev.filter((v) => v !== val) : [...prev, val]
       );
-    } else if (key === "Packages") {
-      setSelectedPackages((prev) =>
-        prev.includes(val) ? prev.filter((v) => v !== val) : [...prev, val]
-      );
+    }
+    // } else if (key === "Packages") {
+    //   setSelectedPackages((prev) =>
+    //     prev.includes(val) ? prev.filter((v) => v !== val) : [...prev, val]
+    //   );
+    // }
+  };
+
+  useEffect(() => {
+    if (!provider.isCalendlyConnected) return;
+    setLoadingCalendly(true);
+    fetch(`/api/provider/${localProvider.id}/calendly/event-types`)
+      .then((r) => r.json())
+      .then((data) => {
+        setCalendlyEvents(data.eventTypes);
+        if (data.existingMappings) setMapping(data.existingMappings);
+      })
+      .catch(console.error)
+      .finally(() => setLoadingCalendly(false));
+  }, [localProvider.id, provider.isCalendlyConnected]);
+
+  const handleMapChange = (uri: string, pkgId: string) => {
+    setMapping((prev) => ({ ...prev, [uri]: pkgId }));
+  };
+
+  const saveAllMappings = async () => {
+    setSavingMapping(true);
+    try {
+      for (const [uri, pkgId] of Object.entries(mapping)) {
+        if (!pkgId) continue;
+        await fetch(
+          `/api/provider/${localProvider.id}/calendly/map-event-type`,
+          {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              calendlyEventTypeUri: uri,
+              packageId: pkgId,
+            }),
+          }
+        );
+      }
+      alert("Mapări salvate cu succes!");
+    } catch (e) {
+      console.error(e);
+      alert("Eroare la salvarea mapărilor.");
+    } finally {
+      setSavingMapping(false);
     }
   };
 
+  const mappingInverse = React.useMemo((): Record<string, string> => {
+  const inv: Record<string, string> = {};
+  Object.entries(mapping).forEach(([uri, pkgId]) => {
+    inv[pkgId] = uri;
+  });
+  return inv;
+}, [mapping]);
 
-    const handleAddRequest = async (type: EditModalType) => {
+  const handleAddRequest = async (type: EditModalType) => {
     let url = "";
     let body: any = {};
     if (type === "Specialities") {
@@ -201,19 +270,7 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
         break;
       case "Packages":
         url += "/packages";
-        body = {
-          packages: selectedPackages.map((id) => {
-            const pkg = localProvider.providerPackages.find((p) => p.id === id);
-            return pkg
-              ? {
-                  service: pkg.service,
-                  totalSessions: pkg.totalSessions,
-                  price: pkg.price,
-                  expiresAt: pkg.expiresAt,
-                }
-              : {};
-          }),
-        };
+        body = { packages: selectedPackages };
         break;
       default:
         return;
@@ -285,14 +342,16 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
       redirect_uri: redirectUri,
       state: `stripe:${localProvider.id}`,
       "stripe_user[country]": "RO",
-      scope: 'read_write'
+      scope: "read_write",
     });
     return `https://connect.stripe.com/oauth/authorize?${params.toString()}`;
   };
 
   // ================= CALENDLY CONNECT (cu PKCE) =====================
   const handleCalendlyConnect = async () => {
-    const resp = await fetch("/api/calendly/oauth/start", { credentials: "include" });
+    const resp = await fetch("/api/calendly/oauth/start", {
+      credentials: "include",
+    });
     if (!resp.ok) {
       console.error("Nu am putut iniția PKCE:", await resp.text());
       return;
@@ -410,7 +469,10 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
     <>
       {/* =================== Edit Modals =================== */}
       {showEditModal === "VideoUrl" && (
-        <Modal closeModal={() => setShowEditModal("")} title="Editează Video URL">
+        <Modal
+          closeModal={() => setShowEditModal("")}
+          title="Editează Video URL"
+        >
           <input
             type="text"
             value={videoUrl}
@@ -427,7 +489,10 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
       )}
 
       {showEditModal === "ScheduleLink" && (
-        <Modal closeModal={() => setShowEditModal("")} title="Editează Link Programări">
+        <Modal
+          closeModal={() => setShowEditModal("")}
+          title="Editează Link Programări"
+        >
           <input
             type="text"
             value={scheduleLink}
@@ -444,7 +509,10 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
       )}
 
       {showEditModal === "MainSpeciality" && (
-        <Modal closeModal={() => setShowEditModal("")} title="Editează Specialitatea Principală">
+        <Modal
+          closeModal={() => setShowEditModal("")}
+          title="Editează Specialitatea Principală"
+        >
           <div className="space-y-2 max-h-[60vh] overflow-auto">
             {specialitiesStore.map((spec) => (
               <AddAttributeProvider
@@ -465,7 +533,10 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
       )}
 
       {showEditModal === "MainTool" && (
-        <Modal closeModal={() => setShowEditModal("")} title="Editează Unealta Principală">
+        <Modal
+          closeModal={() => setShowEditModal("")}
+          title="Editează Unealta Principală"
+        >
           <div className="space-y-2 max-h-[60vh] overflow-auto">
             {toolsStore.map((tool) => (
               <AddAttributeProvider
@@ -486,7 +557,10 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
       )}
 
       {showEditModal === "Description" && (
-        <Modal closeModal={() => setShowEditModal("")} title="Editează Descrierea">
+        <Modal
+          closeModal={() => setShowEditModal("")}
+          title="Editează Descrierea"
+        >
           <textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
@@ -521,7 +595,10 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
       )}
 
       {showEditModal === "Specialities" && (
-        <Modal closeModal={() => setShowEditModal("")} title="Editează Specializările">
+        <Modal
+          closeModal={() => setShowEditModal("")}
+          title="Editează Specializările"
+        >
           <div className="mb-4 flex items-center space-x-2">
             <input
               type="text"
@@ -530,7 +607,13 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
               placeholder="Adaugă specialitate nouă"
               className="flex-1 p-2 border rounded"
             />
-        <Button className="py-3 w-full bg-primaryColor text-white hover:bg-secondaryColor" disabled={!newSpecialityName.trim()} onClick={() => handleAddRequest("Specialities")}>Adaugă</Button>
+            <Button
+              className="py-3 w-full bg-primaryColor text-white hover:bg-secondaryColor"
+              disabled={!newSpecialityName.trim()}
+              onClick={() => handleAddRequest("Specialities")}
+            >
+              Adaugă
+            </Button>
           </div>
           <div className="space-y-2 max-h-[60vh] overflow-auto">
             {specialitiesStore.map((spec) => (
@@ -552,7 +635,10 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
       )}
 
       {showEditModal === "Tools" && (
-        <Modal closeModal={() => setShowEditModal("")} title="Editează Uneltele">
+        <Modal
+          closeModal={() => setShowEditModal("")}
+          title="Editează Uneltele"
+        >
           <div className="mb-4 flex items-center space-x-2">
             <input
               type="text"
@@ -561,7 +647,13 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
               placeholder="Adaugă unealtă nouă"
               className="flex-1 p-2 border rounded"
             />
-<Button className="py-3 w-full bg-primaryColor text-white hover:bg-secondaryColor" disabled={!newToolName.trim()} onClick={() => handleAddRequest("Tools")}>Adaugă</Button>
+            <Button
+              className="py-3 w-full bg-primaryColor text-white hover:bg-secondaryColor"
+              disabled={!newToolName.trim()}
+              onClick={() => handleAddRequest("Tools")}
+            >
+              Adaugă
+            </Button>
           </div>
           <div className="space-y-2 max-h-[60vh] overflow-auto">
             {toolsStore.map((tool) => (
@@ -592,7 +684,13 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
               placeholder="Adaugă reading nou"
               className="flex-1 p-2 border rounded"
             />
-            <Button className="py-3 w-full bg-primaryColor text-white hover:bg-secondaryColor" disabled={!newReadingName.trim()} onClick={() => handleAddRequest("Reading")}>Adaugă</Button>
+            <Button
+              className="py-3 w-full bg-primaryColor text-white hover:bg-secondaryColor"
+              disabled={!newReadingName.trim()}
+              onClick={() => handleAddRequest("Reading")}
+            >
+              Adaugă
+            </Button>
           </div>
           <div className="space-y-2 max-h-[60vh] overflow-auto">
             {readingsStore.map((r) => (
@@ -613,87 +711,148 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
         </Modal>
       )}
 
-      {showEditModal === "Packages" && (
-        <Modal closeModal={() => setShowEditModal("")} title="Editează Tipurie de Sedinte">
-          <div className="mb-4 space-y-2">
-            <input
-              type="text"
-              value={newPackageService}
-              onChange={(e) => setNewPackageService(e.target.value)}
-              placeholder="Serviciu"
-              className="w-full p-2 border rounded"
-            />
-            <input
-              type="number"
-              value={newPackageSessions}
-              onChange={(e) => setNewPackageSessions(e.target.value)}
-              placeholder="Număr sesiuni"
-              className="w-full p-2 border rounded"
-            />
-            <input
-              type="number"
-              value={newPackagePrice}
-              onChange={(e) => setNewPackagePrice(e.target.value)}
-              placeholder="Preț (RON)"
-              className="w-full p-2 border rounded"
-            />
-            <input
-              type="date"
-              value={newPackageExpiresAt}
-              onChange={(e) => setNewPackageExpiresAt(e.target.value)}
-              className="w-full p-2 border rounded"
-            />
+{showEditModal === "Packages" && (
+  <Modal closeModal={() => setShowEditModal("")} title="Editează Tipuri de Ședințe">
+    {/* 1. Select pentru evenimentul Calendly */}
+    <div className="mb-4">
+      <label htmlFor="newPackageEventUri" className="block mb-1 font-medium">
+        Alege şedinţă Calendly
+      </label>
+      <select
+        id="newPackageEventUri"
+        className="w-full p-2 border rounded"
+        value={newPackageEventUri}
+        onChange={(e) => setNewPackageEventUri(e.target.value)}
+      >
+        <option value="">— Alege din Calendly —</option>
+        {calendlyEvents?.map((et) => (
+          <option key={et.uri} value={et.uri}>
+            {et.name}
+          </option>
+        ))}
+      </select>
+    </div>
+
+    {/* 2. Form pentru pachet nou */}
+    <div className="mb-4 space-y-2">
+      <input
+        type="text"
+        value={newPackageService}
+        onChange={(e) => setNewPackageService(e.target.value)}
+        placeholder="Serviciu"
+        className="w-full p-2 border rounded"
+      />
+      <input
+        type="number"
+        value={newPackageSessions}
+        onChange={(e) => setNewPackageSessions(e.target.value)}
+        placeholder="Număr sesiuni"
+        className="w-full p-2 border rounded"
+      />
+      <input
+        type="number"
+        value={newPackagePrice}
+        onChange={(e) => setNewPackagePrice(e.target.value)}
+        placeholder="Preț (RON)"
+        className="w-full p-2 border rounded"
+      />
+    </div>
+
+    {/* 3. Listare pachete existente cu buton de ștergere */}
+    <div className="mb-4">
+      <h4 className="font-medium mb-2">Pachete existente</h4>
+      <ul className="space-y-2 max-h-48 overflow-auto">
+        {localProvider.providerPackages.map((pkg) => (
+          <li key={pkg.id} className="flex justify-between items-center">
+            <span>
+              {pkg.service} – {pkg.totalSessions} sesiuni @ {pkg.price} RON
+            </span>
             <Button
-              className="py-3 w-full bg-primaryColor text-white hover:bg-secondaryColor"
-              disabled={
-                !newPackageService.trim() ||
-                !newPackageSessions ||
-                !newPackagePrice
-              }
               onClick={async () => {
-                const pkg = {
-                  providerId: localProvider.id,
-                  service: newPackageService.trim(),
-                  totalSessions: parseInt(newPackageSessions, 10),
-                  price: parseFloat(newPackagePrice),
-                  expiresAt: newPackageExpiresAt || null,
-                };
-                const res = await fetch("/api/add/packages", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify(pkg),
-                });
-                if (res.ok) {
-                  setNewPackageService("");
-                  setNewPackageSessions("");
-                  setNewPackagePrice("");
-                  setNewPackageExpiresAt("");
+                // DELETE request
+                const res = await fetch(
+                  `/api/provider/${localProvider.id}/packages/${pkg.id}`,
+                  { method: "DELETE" }
+                );
+                if (!res.ok) {
+                  console.error("Eroare la ștergere pachet:", await res.text());
+                  return;
                 }
+                const { packages: remaining } = await res.json();
+                setLocalProvider((prev) => ({
+                  ...prev,
+                  providerPackages: remaining,
+                }));
               }}
+              className="text-red-600 hover:underline"
             >
-              Adaugă
+              Șterge
             </Button>
-          </div>
-          <div className="space-y-2 max-h-[200px] lg:max-h-[60vh] overflow-auto">
-            {localProvider.providerPackages.map((pkg) => (
-              <AddAttributeProvider
-                key={pkg.id}
-                title={`${pkg.service} – ${pkg.totalSessions} sesiuni @ ${pkg.price} RON – expiră: ${
-                  pkg.expiresAt ?? "—"
-                }`}
-                selected={selectedPackages.includes(pkg.id)}
-                setSelect={() => toggleMulti(pkg.id, "Packages")}
-              />
-            ))}
-          </div>
-          <Button
-            onClick={() => handleSaveChanges("Packages")}
-            className="mt-4 py-3 w-full bg-primaryColor text-white hover:bg-secondaryColor"
-          >
-            Salvează
-          </Button>
-        </Modal>
-      )}
+          </li>
+        ))}
+      </ul>
+    </div>
+
+    {/* 4. Buton adaugă pachet nou și mapare */}
+    <Button
+      className="py-3 w-full bg-primaryColor text-white hover:bg-secondaryColor"
+      disabled={
+        !newPackageService.trim() ||
+        !newPackageSessions ||
+        !newPackagePrice ||
+        !newPackageEventUri
+      }
+      onClick={async () => {
+        // Construcție array complet și PUT
+        const allPackages = [
+          ...localProvider.providerPackages.map((pkg) => ({
+            service: pkg.service,
+            totalSessions: pkg.totalSessions,
+            price: pkg.price,
+            calendlyEventTypeUri: mappingInverse[pkg.id] || undefined,
+          })),
+          {
+            service: newPackageService.trim(),
+            totalSessions: parseInt(newPackageSessions, 10),
+            price: parseFloat(newPackagePrice),
+            calendlyEventTypeUri: newPackageEventUri,
+          },
+        ];
+
+        const res = await fetch(
+          `/api/provider/${localProvider.id}/packages`,
+          {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ packages: allPackages }),
+          }
+        );
+        if (!res.ok) {
+          console.error("Eroare la actualizare pachete:", await res.text());
+          return;
+        }
+
+        const { packages: updated } = await res.json();
+        setLocalProvider((prev) => ({ ...prev, providerPackages: updated }));
+
+        // Rebuild mapping și clear form
+        const newMapping: Record<string, string> = {};
+        updated.forEach((pkg) => {
+          if (pkg.calendlyEventTypeUri) newMapping[pkg.calendlyEventTypeUri] = pkg.id;
+        });
+        setMapping(newMapping);
+        setNewPackageService("");
+        setNewPackageSessions("");
+        setNewPackagePrice("");
+        setNewPackageEventUri("");
+        setShowEditModal("");
+      }}
+    >
+      Adaugă pachet nou și mapare
+    </Button>
+  </Modal>
+)}
+
 
       {/* =================== Detalii Furnizor =================== */}
       <div className="max-w-3xl mx-auto bg-white shadow rounded p-6">
@@ -714,7 +873,8 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
           {/* Stare */}
           <div className="h-full flex flex-col justify-between bg-gray-50 p-4 rounded">
             <div>
-              <strong>Stare:</strong> {localProvider.online ? "Online" : "Offline"}
+              <strong>Stare:</strong>{" "}
+              {localProvider.online ? "Online" : "Offline"}
             </div>
           </div>
 
@@ -729,9 +889,12 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
           {/* Link Programări */}
           <div className="h-full flex flex-col justify-between bg-gray-50 p-4 rounded">
             <div>
-              <strong>Link Programări:</strong> {localProvider.scheduleLink || "—"}
+              <strong>Link Programări:</strong>{" "}
+              {localProvider.scheduleLink || "—"}
             </div>
-            <EditButton showEditModal={() => setShowEditModal("ScheduleLink")} />
+            <EditButton
+              showEditModal={() => setShowEditModal("ScheduleLink")}
+            />
           </div>
 
           {/* Reading */}
@@ -748,7 +911,9 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
               <strong>Specialitate Principală:</strong>{" "}
               {localProvider.mainSpeciality?.name || "—"}
             </div>
-            <EditButton showEditModal={() => setShowEditModal("MainSpeciality")} />
+            <EditButton
+              showEditModal={() => setShowEditModal("MainSpeciality")}
+            />
           </div>
 
           {/* Unealtă Principală */}
@@ -766,13 +931,15 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
               <strong>Specializări:</strong>{" "}
               {localProvider.specialities.map((s) => s.name).join(", ") || "—"}
             </div>
-            <EditButton showEditModal={() => setShowEditModal("Specialities")} />
+            <EditButton
+              showEditModal={() => setShowEditModal("Specialities")}
+            />
           </div>
 
           {/* Unelte */}
           <div className="h-full flex flex-col justify-between bg-gray-50 p-4 rounded">
             <div>
-              <strong>Unelte:</strong>{" "}
+              <strong>Instrumente:</strong>{" "}
               {localProvider.tools.map((t) => t.name).join(", ") || "—"}
             </div>
             <EditButton showEditModal={() => setShowEditModal("Tools")} />
@@ -785,8 +952,8 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
               <ul className="list-disc ml-6 mt-2">
                 {localProvider.providerPackages.map((pkg) => (
                   <li key={pkg.id}>
-                    {pkg.service} – {pkg.totalSessions} sesiuni @ {pkg.price} RON – expiră:{" "}
-                    {pkg.expiresAt ?? "—"}
+                    {pkg.service} – {pkg.totalSessions} sesiuni @ {pkg.price}{" "}
+                    RON
                   </li>
                 )) || <span>—</span>}
               </ul>

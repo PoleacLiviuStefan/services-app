@@ -1,102 +1,85 @@
-'use client';
+// File: components/VideoSessionPage.tsx
 
-import { useEffect, useState, useCallback } from 'react';
-import type {
-  ZoomClient,
-  ZoomMediaStream,
-  ZoomVideoSDK,
-  Participant,
-} from '@zoom/videosdk';
+"use client";
 
-// --- Session Info -----------------------------
+import React, { useEffect, useState, useCallback } from 'react';
+import { useSession } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
+import type { ZoomClient, ZoomMediaStream, ZoomVideoSDK, Participant } from '@zoom/videosdk';
+
 interface SessionInfo {
   sessionName: string;
-  token:       string;
-  userId:      string;
+  token: string;
+  userId: string;
 }
 
 export default function VideoSessionPage() {
-  const [session, setSession] = useState<SessionInfo | null>(null);
-  const [client, setClient]   = useState<ZoomClient | null>(null);
-  const [stream, setStream]   = useState<ZoomMediaStream | null>(null);
+  const { data: auth, status } = useSession();
+  const router = useRouter();
+  const [sessionInfo, setSessionInfo] = useState<SessionInfo | null>(null);
+  const [client, setClient] = useState<ZoomClient | null>(null);
+  const [stream, setStream] = useState<ZoomMediaStream | null>(null);
   const [isVideoOn, setVideoOn] = useState(false);
   const [isAudioOn, setAudioOn] = useState(false);
-  const [error, setError]       = useState<string>('');
+  const [error, setError] = useState<string>('');
+  const [loading, setLoading] = useState(false);
 
-  // Create session for two users ('alice' and 'bob')
-  const createSession = useCallback(async () => {
+  // Extract consultingSessionId from URL
+  const { pathname } = useRouter();
+  const match = pathname.match(/sessions\/(.+)$/);
+  const sessionId = match ? match[1] : null;
+
+  // Fetch Zoom credentials for this session
+  const fetchSession = useCallback(async () => {
+    if (!sessionId) return;
+    setLoading(true);
     try {
-      const res = await fetch('/api/video/create-session', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ users: ['furnizor', 'client'] }),
-      });
+      const res = await fetch(`/api/consulting-sessions/${sessionId}/zoom-credentials`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || res.statusText);
-      setSession({ sessionName: data.sessionName, token: data.tokens.alice, userId: 'alice' });
+      // data = { sessionName, token, userId }
+      setSessionInfo(data);
     } catch (err: any) {
       setError(err.message);
+    } finally {
+      setLoading(false);
     }
-  }, []);
+  }, [sessionId]);
 
-  // Initialize SDK and join session
+  // Initialize Zoom SDK when sessionInfo arrives
   useEffect(() => {
-    if (!session) return;
+    if (!sessionInfo) return;
     (async () => {
       try {
-        // Optional: if TensorFlow.js is loaded, force CPU backend to avoid WebGL errors
-        if (typeof (window as any).tf !== 'undefined') {
-          (window as any).tf.setBackend('cpu').catch(() => {});
-        }
-
         const ZoomMod = (await import('@zoom/videosdk')) as { default?: ZoomVideoSDK } & ZoomVideoSDK;
         const ZoomVideo = ZoomMod.default ?? ZoomMod;
         const c = ZoomVideo.createClient();
         await c.init('en-US', 'Global', { patchJsMedia: true });
-        await c.join(session.sessionName, session.token, session.userId);
+        await c.join(sessionInfo.sessionName, sessionInfo.token, sessionInfo.userId);
         setClient(c);
 
         const ms = c.getMediaStream();
         setStream(ms);
 
-        // Start local video using recommended API
-        const localVideoEl = document.getElementById('local-video') as HTMLVideoElement;
-        try {
-          if (ms.isRenderSelfViewWithVideoElement?.()) {
-            await ms.startVideo({ videoElement: localVideoEl });
-          } else {
-            await ms.startVideo();
-            const actual = await ms.attachVideo(session.userId, 2);
-            localVideoEl.replaceWith(actual);
-          }
-          setVideoOn(true);
-        } catch (err: any) {
-          setError(err.name === 'NotAllowedError'
-            ? 'Permisiune cameră refuzată.'
-            : `Eroare cameră: ${err.message}`);
-          return;
+        const localEl = document.getElementById('local-video') as HTMLVideoElement;
+        if (ms.isRenderSelfViewWithVideoElement?.()) {
+          await ms.startVideo({ videoElement: localEl });
+        } else {
+          await ms.startVideo();
+          const vaulted = await ms.attachVideo(sessionInfo.userId, 2);
+          localEl.replaceWith(vaulted);
         }
+        setVideoOn(true);
 
-        // Start local audio
-        try {
-          await ms.startAudio();
-          setAudioOn(true);
-        } catch {
-          // ignore audio errors
-        }
+        await ms.startAudio();
+        setAudioOn(true);
 
-        // Handle remote video streams
         c.on('stream-updated', async (participant: Participant, type) => {
           if (type !== 'video') return;
-          try {
-            const remoteEl = await ms.attachVideo(participant.userId, 2);
-            remoteEl.id = `remote-${participant.userId}`;
-            document.getElementById('remote-videos')?.appendChild(remoteEl);
-          } catch {
-            // ignore
-          }
+          const remote = await ms.attachVideo(participant.userId, 2);
+          remote.id = `remote-${participant.userId}`;
+          document.getElementById('remote-videos')?.appendChild(remote);
         });
-
         c.on('stream-removed', (participant: Participant, type) => {
           if (type !== 'video') return;
           document.getElementById(`remote-${participant.userId}`)?.remove();
@@ -105,32 +88,34 @@ export default function VideoSessionPage() {
         setError(err.message);
       }
     })();
-  }, [session]);
+  }, [sessionInfo]);
 
-  // Toggle video on/off
+  const joinSession = useCallback(() => {
+    if (!sessionInfo) fetchSession();
+  }, [sessionInfo, fetchSession]);
+
   const toggleVideo = useCallback(async () => {
-    if (!stream || !session) return;
+    if (!stream) return;
     try {
-      const localVideoEl = document.getElementById('local-video') as HTMLVideoElement;
       if (isVideoOn) {
         await stream.stopVideo();
         setVideoOn(false);
       } else {
+        const localEl = document.getElementById('local-video') as HTMLVideoElement;
         if (stream.isRenderSelfViewWithVideoElement?.()) {
-          await stream.startVideo({ videoElement: localVideoEl });
+          await stream.startVideo({ videoElement: localEl });
         } else {
           await stream.startVideo();
-          const actual = await stream.attachVideo(session.userId, 2);
-          localVideoEl.replaceWith(actual);
+          const attached = await stream.attachVideo(sessionInfo!.userId, 2);
+          localEl.replaceWith(attached);
         }
         setVideoOn(true);
       }
-    } catch (err: any) {
-      setError(err.message);
+    } catch (e: any) {
+      setError(e.message);
     }
-  }, [stream, isVideoOn, session]);
+  }, [stream, isVideoOn, sessionInfo]);
 
-  // Toggle audio on/off
   const toggleAudio = useCallback(async () => {
     if (!stream) return;
     try {
@@ -141,43 +126,47 @@ export default function VideoSessionPage() {
         await stream.startAudio();
         setAudioOn(true);
       }
-    } catch (err: any) {
-      setError(err.message);
-    }
+    } catch {}
   }, [stream, isAudioOn]);
 
-  // Leave session
   const leaveSession = useCallback(async () => {
     if (!client) return;
     await client.leave();
     client.destroy();
     setClient(null);
-    setSession(null);
+    setSessionInfo(null);
   }, [client]);
 
+  // Render
+  if (status === 'loading' || loading) return <p>Se încarcă...</p>;
+  if (!auth?.user) return <p>Unauthorized</p>;
+
   return (
-    <div style={{ padding: 16 }}>
-      {error && <pre style={{ color: 'red' }}>{error}</pre>}
-      {!session ? (
-        <button onClick={createSession}>
-          Creează &amp; intră într-o sesiune cu 2 useri
+    <div className="p-6">
+      {error && <p className="text-red-500">{error}</p>}
+      {!sessionInfo ? (
+        <button
+          onClick={joinSession}
+          className="px-4 py-2 bg-primaryColor text-white rounded"
+        >
+          Intră în sesiunea Zoom
         </button>
       ) : (
         <>
-          <div style={{ margin: '1rem 0' }}>
-            <button onClick={toggleVideo}>
+          <div className="space-x-4 mb-4">
+            <button onClick={toggleVideo} className="px-3 py-1 bg-gray-200 rounded">
               {isVideoOn ? 'Oprește Video' : 'Pornește Video'}
             </button>
-            <button onClick={toggleAudio} style={{ marginLeft: 8 }}>
+            <button onClick={toggleAudio} className="px-3 py-1 bg-gray-200 rounded">
               {isAudioOn ? 'Dezactivează Microfon' : 'Activează Microfon'}
             </button>
-            <button onClick={leaveSession} style={{ marginLeft: 8 }}>
+            <button onClick={leaveSession} className="px-3 py-1 bg-red-500 text-white rounded">
               Părăsește sesiunea
             </button>
           </div>
-          <div style={{ display: 'flex', gap: 16 }}>
+          <div className="flex gap-6">
             <div>
-              <h3>Self-view</h3>
+              <h3 className="font-semibold">Self-view</h3>
               <video
                 id="local-video"
                 width={320}
@@ -185,15 +174,12 @@ export default function VideoSessionPage() {
                 autoPlay
                 playsInline
                 muted
-                style={{ backgroundColor: '#000', objectFit: 'cover' }}
+                className="bg-black object-cover"
               />
             </div>
             <div>
-              <h3>Remote-view</h3>
-              <div
-                id="remote-videos"
-                style={{ width: 320, height: 240, backgroundColor: '#000', overflow: 'auto' }}
-              />
+              <h3 className="font-semibold">Remote-view</h3>
+              <div id="remote-videos" className="bg-black w-[320px] h-[240px] overflow-auto" />
             </div>
           </div>
         </>

@@ -1,94 +1,62 @@
-// app/api/provider/[providerId]/packages/route.ts
-
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { withProviderAuth } from "@/lib/api/logout/providerMiddleware/withProviderAuth";
 
 export const runtime = "nodejs";
 
-// ----------------------------
-// HANDLER pentru PUT (/api/provider/[providerId]/packages)
-// ----------------------------
-async function putHandler(
-  req: Request,
-  context: { params: { providerId: string } }
+export async function PUT(
+  request: Request,
+  { params }: { params: { providerId: string } }
 ) {
-  // 1) Așteptăm context.params și extragem providerId
-  const { providerId } = await context.params;
+  const { providerId } = params;
+  const { packages }: { packages: Array<{
+    id?: string;
+    service: string;
+    totalSessions: number;
+    price: number;
+    expiresAt?: string;
+    calendlyEventTypeUri?: string;
+  }> } = await request.json();
 
-  // 2) Parsăm JSON-ul din body pentru array-ul de pachete
-  const { packages }: {
-    packages: {
-      service: string;
-      totalSessions: number;
-      price: number;
-      expiresAt?: string;
-    }[];
-  } = await req.json();
-
-  // 3) Transaction: șterge toate providerPackage existente pentru acest provider
-  //    și creează noile înregistrări
-  await prisma.$transaction([
-    prisma.providerPackage.deleteMany({ where: { providerId } }),
-    ...packages.map((p) =>
-      prisma.providerPackage.create({
-        data: {
-          providerId,
-          service: p.service,
-          totalSessions: p.totalSessions,
-          price: p.price,
-          expiresAt: p.expiresAt ? new Date(p.expiresAt) : undefined,
-        },
-      })
-    ),
-  ]);
-
-  // 4) După tranzacție, obținem lista actualizată a pachetelor
-  const updated = await prisma.providerPackage.findMany({
-    where: { providerId },
-  });
-
-  // 5) Returnăm rezultatul ca JSON
-  return NextResponse.json({ packages: updated });
-}
-
-// Exportăm metoda PUT “împachetată” cu withProviderAuth
-export const PUT = withProviderAuth(putHandler);
-
-// ----------------------------
-// HANDLER pentru GET (/api/provider/[providerId]/packages)
-// ----------------------------
-async function getHandler(
-  _req: Request,
-  context: { params: { providerId: string } }
-) {
-  const { providerId } = await context.params;
-
-  // 1) Obținem pachetele pentru acest provider și includem stripeAccountId
-  const list = await prisma.providerPackage.findMany({
-    where: { providerId },
-    include: {
-      provider: {
-        select: {
-          stripeAccountId: true,
-        },
-      },
+  // 1) Remove any packages the user has deleted
+  const incomingIds = packages.map((p) => p.id).filter(Boolean) as string[];
+  await prisma.providerPackage.deleteMany({
+    where: {
+      providerId,
+      id: { notIn: incomingIds },
     },
   });
 
-  // 2) Mapăm obiectele astfel încât front-end-ul să aibă și `providerStripeAccountId`
-  const formatted = list.map((pkg) => ({
-    id: pkg.id,
-    service: pkg.service,
-    totalSessions: pkg.totalSessions,
-    price: pkg.price,
-    expiresAt: pkg.expiresAt,
-    providerStripeAccountId: pkg.provider.stripeAccountId!, // sigur nu e null/undefined
-  }));
+  // 2) Upsert each package
+  const upserted = await Promise.all(
+    packages.map((pkg) =>
+      pkg.id
+        ? prisma.providerPackage.update({
+            where: { id: pkg.id },
+            data: {
+              service: pkg.service,
+              totalSessions: pkg.totalSessions,
+              price: pkg.price,
+              expiresAt: pkg.expiresAt ? new Date(pkg.expiresAt) : null,
+              calendlyEventTypeUri: pkg.calendlyEventTypeUri ?? null,
+            },
+          })
+        : prisma.providerPackage.create({
+            data: {
+              providerId,
+              service: pkg.service,
+              totalSessions: pkg.totalSessions,
+              price: pkg.price,
+              expiresAt: pkg.expiresAt ? new Date(pkg.expiresAt) : null,
+              calendlyEventTypeUri: pkg.calendlyEventTypeUri ?? null,
+            },
+          })
+    )
+  );
 
-  // 3) Returnăm ca JSON
-  return NextResponse.json({ packages: formatted });
+  // 3) Return the full, fresh list
+  const refreshed = await prisma.providerPackage.findMany({
+    where: { providerId },
+  });
+
+  return NextResponse.json({ packages: refreshed });
 }
-
-// Exportăm metoda GET “împachetată” cu withProviderAuth
-export const GET = withProviderAuth(getHandler);

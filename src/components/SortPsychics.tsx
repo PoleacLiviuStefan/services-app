@@ -52,7 +52,7 @@ export const SortPsychics = () => {
       <CategorySelector
         filterKey="tool"
         options={tools}
-        title="Unelte"
+        title="Instrumente"
       />
 
       <CategorySelector

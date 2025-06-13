@@ -76,3 +76,37 @@ export async function PUT(req: NextRequest, { params }: { params: { providerId: 
     );
   }
 }
+
+export async function DELETE(
+  request: Request,
+  context: { params: Promise<{ providerId: string; packageId: string }> }
+) {
+  const { providerId, packageId } = await context.params;
+
+  const pkg = await prisma.providerPackage.findUnique({
+    where: { id: packageId },
+    select: { providerId: true },
+  });
+  if (!pkg || pkg.providerId !== providerId) {
+    return NextResponse.json(
+      { error: "Pachet inexistent sau nu îți aparține." },
+      { status: 404 }
+    );
+  }
+
+  try {
+    await prisma.providerPackage.delete({
+      where: { id: packageId },
+    });
+    const remaining = await prisma.providerPackage.findMany({
+      where: { providerId },
+    });
+    return NextResponse.json({ packages: remaining });
+  } catch (e: any) {
+    console.error("Eroare la ștergerea pachetului:", e);
+    return NextResponse.json(
+      { error: "Nu am putut șterge pachetul." },
+      { status: 500 }
+    );
+  }
+}
