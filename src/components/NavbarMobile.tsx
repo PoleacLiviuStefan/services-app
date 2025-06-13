@@ -99,7 +99,7 @@ const NavbarMobile = () => {
             >
               <ul className="mt-2 bg-white text-primaryColor text-center rounded-lg shadow-lg ">
                 {specialities.map((speciality, index) => (
-                  <Link key={index} href="/astrologi" onClick={() => {setIsOpen(false); setIsPsychologistsOpen(false)}} className="block w-full">
+                  <Link key={index} href={`/astrologi?speciality=${speciality}`} onClick={() => {setIsOpen(false); setIsPsychologistsOpen(false)}} className="block w-full">
                     <li className="py-2 px-4 hover:bg-primaryColor/10 cursor-pointer">
                       {speciality}
                     </li>

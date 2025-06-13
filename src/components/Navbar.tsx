@@ -45,18 +45,20 @@ const Navbar = () => {
                 </span>
                 <ul className="absolute z-50 top-10 left-0 bg-white text-primaryColor opacity-0 invisible transition-all duration-300 group-hover:opacity-100 group-hover:visible border-b-primaryColor border rounded-b-lg shadow-lg">
                   {specialities.map((speciality) => (
-                    <li
-                      key={speciality}
-                      className="hover:bg-primaryColor/10 w-full h-full p-3 font-light text-sm"
-                    >
-                      <Link
+                        <Link
                         href={`/astrologi?speciality=${encodeURIComponent(
                           speciality
                         )}`}
                       >
+                    <li
+                      key={speciality}
+                      className="hover:bg-primaryColor/10 w-full h-full p-3 font-light text-sm"
+                    >
+                  
                         {speciality}
-                      </Link>
+                      
                     </li>
+                    </Link>
                   ))}
                 </ul>
               </>

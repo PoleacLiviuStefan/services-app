@@ -5,6 +5,6 @@ export const displayedServices = [
     'Clarviziune',
     'Rune',
     'Reiki',
-    'Theta Healing',
+    'Theta-Healing',
     'EFT'
 ]
