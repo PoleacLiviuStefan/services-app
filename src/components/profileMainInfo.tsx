@@ -111,14 +111,15 @@ const ProfileMainInfo: React.FC<ProfileMainInfoProps> = ({ provider }) => {
                   setSelectedService(svc);
                   setShowBuyPackageModal(true);
                 }}
-                className={`
+                className={`flex flex-col
                   p-3
                   ${selectedService === svc ? "ring-2 ring-primaryColor" : ""}
                 `}
               >
-                <Icon>
+                <Icon className="-mb-[15px]">
                   <FaVideo size={20} />
                 </Icon>
+                <span className="border-[2px] border-primaryColor px-6 py-4 font-bold duration ease-in-out  rounded-md hover:bg-primaryColor hover:text-white">Cumpara Sedinte</span>
               </Button>
             ))}
           </div>

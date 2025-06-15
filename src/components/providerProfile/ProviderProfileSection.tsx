@@ -1,29 +1,43 @@
-// components/providerProfile/ProviderProfileSection.tsx
+// File: components/providerProfile/ProviderProfileSection.tsx
 'use client';
 
-import React, { useState } from 'react'
-import Button from '../atoms/button'
-import AboutProvider from './AboutProvider'
-import ReviewsProvider from './ReviewsProvider'
-import ScheduleMeeting from './ScheduleMeeting'
-import { ProviderInterface } from '@/interfaces/ProviderInterface'
-import { CiCircleInfo,CiStar,CiCalendar } from "react-icons/ci";
+import React, { useState } from 'react';
+import Button from '../atoms/button';
+import AboutProvider from './AboutProvider';
+import ReviewsProvider from './ReviewsProvider';
+import ScheduleMeeting from './ScheduleMeeting';
+import { ProviderInterface } from '@/interfaces/ProviderInterface';
+import { CiCircleInfo, CiStar, CiCalendar } from "react-icons/ci";
+
 interface Props {
   provider: ProviderInterface & {
-    // ne așteptăm să existe lista de review-uri pe provider
     reviews: Array<{
-      id: string
-      comment?: string
-      date: string
-      rating: number
-      fromUser: { id: string; name: string; image?: string }
-    }>
-  }
+      id: string;
+      comment?: string;
+      date: string;
+      rating: number;
+      fromUser: { id: string; name: string; image?: string };
+    }>;
+    packages: Array<{
+      id: string;
+      service: string;
+      totalSessions: number;
+      price: number;
+      createdAt: string;
+      expiresAt: string | null;
+    }>;
+  };
 }
 
 const ProviderProfileSection: React.FC<Props> = ({ provider }) => {
-  const [shownIndexSection, setIndexShownSection] = useState(1)
+  const [shownIndexSection, setIndexShownSection] = useState(1);
 
+  // Serviciile unice extrase din pachete
+  const services = Array.from(
+    new Set(provider.packages.map(pkg => pkg.service))
+  );
+  console.log("Services este aici: ", services);
+  console.log("provider.packages este aici: ", provider.packages);
   return (
     <div className="w-full bg-white flex flex-col">
       <div className="flex justify-center w-full">
@@ -35,27 +49,27 @@ const ProviderProfileSection: React.FC<Props> = ({ provider }) => {
               : 'bg-transparent text-black'
           }`}
         >
-          <span className='text-lg'><CiCircleInfo /></span>Despre Mine
+          <CiCircleInfo className="text-lg" /> Despre Mine
         </Button>
         <Button
           onClick={() => setIndexShownSection(2)}
-          className={`w-full px-2 lg:px-4 py-1 lg:py-2 text-md gap-1 font-semibold border-2 text-center cursor-pointer ${
+          className={`flex w-full px-2 lg:px-4 py-1 lg:py-2 gap-1 text-md font-semibold border-2 text-center ${
             shownIndexSection === 2
               ? 'bg-gradient-to-tr from-buttonPrimaryColor to-buttonSecondaryColor text-white'
               : 'bg-transparent text-black'
           }`}
         >
-          <span className='text-lg'><CiStar /></span>Recenzii
+          <CiStar className="text-lg" /> Recenzii
         </Button>
         <Button
           onClick={() => setIndexShownSection(3)}
-          className={`w-full px-2 lg:px-4 py-1 lg:py-2 gap-1 text-md font-semibold border-2 text-center cursor-pointer ${
+          className={`flex w-full px-2 lg:px-4 py-1 lg:py-2 gap-1 text-md font-semibold border-2 text-center ${
             shownIndexSection === 3
               ? 'bg-gradient-to-tr from-buttonPrimaryColor to-buttonSecondaryColor text-white'
               : 'bg-transparent text-black'
           }`}
         >
-          <span className='text-lg '><CiCalendar /></span>Programare Sedinta
+          <CiCalendar className="text-lg" /> Programare Ședință
         </Button>
       </div>
 
@@ -76,11 +90,16 @@ const ProviderProfileSection: React.FC<Props> = ({ provider }) => {
         )}
 
         {shownIndexSection === 3 && (
-          <ScheduleMeeting providerId={provider.id} />
+          <ScheduleMeeting
+            providerId={provider.id}
+            services={provider.packages}
+            providerStripeAccountId={provider.stripeAccountId}
+            locale="ro"
+          />
         )}
       </div>
     </div>
-  )
-}
+  );
+};
 
-export default ProviderProfileSection
+export default ProviderProfileSection;

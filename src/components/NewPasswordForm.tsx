@@ -5,6 +5,7 @@ import React, { useRef, useState, FormEvent } from 'react'
 import Button from './atoms/button'
 import InputForm from './ui/inputForm'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 
 interface NewPasswordFormProps {
   token: string
@@ -16,7 +17,9 @@ const NewPasswordForm: React.FC<NewPasswordFormProps> = ({ token }) => {
 
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [showLink,setShowLink] = useState(false)
   const [success, setSuccess] = useState<string | null>(null)
+
   const router = useRouter()
 
   const handleSubmit = async (e: FormEvent) => {
@@ -75,6 +78,7 @@ const NewPasswordForm: React.FC<NewPasswordFormProps> = ({ token }) => {
           setError(Array.isArray(fieldErrors) ? fieldErrors.join(' ') : 'Eroare la validarea parolei.')
         } else {
           setError(data.error || 'A apărut o eroare necunoscută.')
+          setShowLink(true)
         }
       }
     } catch {
@@ -116,6 +120,7 @@ const NewPasswordForm: React.FC<NewPasswordFormProps> = ({ token }) => {
       </div>
 
       {error && <p className="text-red-500">{error}</p>}
+      {error=="Token invalid sau expirat." && <Link href="/resetare-parola" className="text-blue-500">Apasa aici pentru a trimit un nou mail de resetare a parolei</Link>}
       {success && <p className="text-green-600">{success}</p>}
 
       <Button

@@ -28,6 +28,7 @@ const BuyPackageModal: FC<BuyPackageModalProps> = ({
   isOpen,
   onClose,
 }) => {
+  console.log("packages sunt: ", packages);
   const { data: session } = useSession();
   console.log("session:", session);
   const [selectedPackageId, setSelectedPackageId] = useState<string | null>(null);
