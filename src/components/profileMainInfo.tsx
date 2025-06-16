@@ -104,16 +104,16 @@ const ProfileMainInfo: React.FC<ProfileMainInfoProps> = ({ provider }) => {
 
           {/* butoane dinamice cu doar iconița de video */}
           <div className="flex flex-wrap justify-center gap-4">
-            {services.map((svc) => (
+            
               <Button
-                key={svc}
+              
                 onClick={() => {
-                  setSelectedService(svc);
+                  setSelectedService(services[0]);
                   setShowBuyPackageModal(true);
                 }}
                 className={`flex flex-col
                   p-3
-                  ${selectedService === svc ? "ring-2 ring-primaryColor" : ""}
+              
                 `}
               >
                 <Icon className="-mb-[15px]">
@@ -121,7 +121,7 @@ const ProfileMainInfo: React.FC<ProfileMainInfoProps> = ({ provider }) => {
                 </Icon>
                 <span className="border-[2px] border-primaryColor px-6 py-4 font-bold duration ease-in-out  rounded-md hover:bg-primaryColor hover:text-white">Cumpara Sedinte</span>
               </Button>
-            ))}
+            
           </div>
         </div>
       </div>
