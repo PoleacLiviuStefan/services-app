@@ -10,6 +10,7 @@ import BuyPackageModal from "../BuyPackageModal";
 import BoughtPackageCard from "../BoughtPackageCard";
 import { BoughtPackage } from "@/interfaces/PackageInterface";
 import { FaVideo } from "react-icons/fa";
+import Link from "next/link";
 
 interface ScheduleMeetingProps {
   providerId: string;
@@ -140,7 +141,12 @@ export default function ScheduleMeeting({
 
       <div className="max-w-2xl mx-auto mb-6">
         {loadingBought && <p>Se încarcă pachetele cumpărate…</p>}
-        {errorBought && <p className="text-red-500">Eroare: {errorBought}</p>}
+        {errorBought && <p className=""> {errorBought==="Nu am găsit pachetele cumpărate" ?    <> <p>Autentifica-te mai intai pentru a putea programa o sedinta</p>     <Link href="/autentificare">
+                    <Button className="px-4 text-white py-2 gap-4 shadow-md shadow-primaryButtonColor bg-gradient-to-tr from-10 from-buttonPrimaryColor to-buttonSecondaryColor to-80 text-md hover:text-white hover:bg-primaryColor font-semibold border-2 border-buttonSecondaryColor/30">
+                   
+                      Autentificare
+                    </Button>
+                  </Link></>: `Eroare: ${errorBought}`}</p>}
 
         {/* dacă nu există pachete cumpărate */}
         {!loadingBought && !errorBought && boughtPackages.length === 0 && (

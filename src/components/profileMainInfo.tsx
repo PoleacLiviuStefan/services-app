@@ -121,7 +121,14 @@ const ProfileMainInfo: React.FC<ProfileMainInfoProps> = ({ provider }) => {
                 </Icon>
                 <span className="border-[2px] border-primaryColor px-6 py-4 font-bold duration ease-in-out  rounded-md hover:bg-primaryColor hover:text-white">Cumpara Sedinte</span>
               </Button>
-            
+                  <p className="font-bold">Pasii pentru a putea programa o consulatie:</p>
+                  <ul>
+                    <ol>1.Apasa pe butonul 'Cumpara Sedinte'</ol>
+                    <ol>2.Efectueaza Plata pentru suma afisata</ol>
+                    <ol>3.Apasa pe butonul 'Programare Sedinta' aflat putin mai jos si alege un interval disponibil.</ol>
+
+
+                  </ul>
           </div>
         </div>
       </div>

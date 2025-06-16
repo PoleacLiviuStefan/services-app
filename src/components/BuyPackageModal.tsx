@@ -289,10 +289,11 @@ console.log("  providerStripeAccountId:", providerStripeAccountId)
 
           {/* Dacă avem clientSecret, montăm Stripe Elements */}
           {selectedPackageId && clientSecret && !paymentSuccess && (
-            <div className="mt-6">
+            <div className="flex flex-col items-center w-full mt-6 ">
               <h3 className="text-lg font-medium mb-2">
                 Confirmă plata pentru “{packages.find((p) => p.id === selectedPackageId)?.service}”
               </h3>
+                <span className="font-bold">TOTAL: {packages.find((p) => p.id === selectedPackageId)?.price} RON</span>
 
               <Elements stripe={stripePromise} options={{ clientSecret }}>
                 <CheckoutForm
