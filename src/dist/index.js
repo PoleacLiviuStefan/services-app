@@ -36,49 +36,21 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
     }
 };
 exports.__esModule = true;
-exports.POST = exports.runtime = void 0;
-exports.runtime = 'nodejs';
-var server_1 = require("next/server");
-var jsonwebtoken_1 = require("jsonwebtoken");
-var uuid_1 = require("uuid");
-function POST(req) {
-    return __awaiter(this, void 0, void 0, function () {
-        var _a, users, providerId, clientId, specialityId, packageId, sessionName, sdkKey, sdkSecret, iat, exp, tokens, _i, users_1, userId, payload;
-        return __generator(this, function (_b) {
-            switch (_b.label) {
-                case 0: return [4 /*yield*/, req.json()];
-                case 1:
-                    _a = _b.sent(), users = _a.users, providerId = _a.providerId, clientId = _a.clientId, specialityId = _a.specialityId, packageId = _a.packageId;
-                    // validări de bază
-                    if (!Array.isArray(users) || users.length !== 2) {
-                        return [2 /*return*/, server_1.NextResponse.json({ error: 'Trebuie să specifici exact 2 user IDs.' }, { status: 400 })];
-                    }
-                    if (!providerId || !clientId || !specialityId) {
-                        return [2 /*return*/, server_1.NextResponse.json({ error: 'Lipsește providerId, clientId sau specialityId.' }, { status: 400 })];
-                    }
-                    sessionName = uuid_1.v4();
-                    sdkKey = process.env.ZOOM_SDK_KEY;
-                    sdkSecret = process.env.ZOOM_SDK_SECRET;
-                    iat = Math.floor(Date.now() / 1000);
-                    exp = iat + 60 * 60;
-                    tokens = {};
-                    for (_i = 0, users_1 = users; _i < users_1.length; _i++) {
-                        userId = users_1[_i];
-                        payload = {
-                            app_key: sdkKey,
-                            version: 1,
-                            tpc: sessionName,
-                            role_type: 0,
-                            user_identity: userId,
-                            iat: iat,
-                            exp: exp
-                        };
-                        tokens[userId] = jsonwebtoken_1["default"].sign(payload, sdkSecret, { algorithm: 'HS256' });
-                    }
-                    // 4. Trimite doar JSON cu sessionName și tokens
-                    return [2 /*return*/, server_1.NextResponse.json({ sessionName: sessionName, tokens: tokens }, { status: 200 })];
-            }
+var kafka_1 = require("./services/kafka");
+var socket_1 = require("./services/socket");
+var http_1 = require("http");
+(function () { return __awaiter(void 0, void 0, void 0, function () {
+    var socketService, httpServer, PORT;
+    return __generator(this, function (_a) {
+        kafka_1.consumeMessage();
+        socketService = new socket_1.SocketService();
+        httpServer = http_1["default"].createServer();
+        PORT = process.env.PORT || 8000;
+        socketService.io.attach(httpServer);
+        socketService.initListeners();
+        httpServer.listen(PORT, function () {
+            console.log("Http server started at port:", PORT);
         });
+        return [2 /*return*/];
     });
-}
-exports.POST = POST;
+}); })();

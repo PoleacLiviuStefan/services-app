@@ -29,6 +29,15 @@ enum ApprovalStatus {
   REJECTED
 }
 
+model Message {
+    id String @id @default(uuid())
+    content String
+    username String
+    createdAt DateTime @default(now()) @map("created_at")
+
+    @@map("messages")
+}
+
 model User {
   id                 String             @id @default(uuid())
   name               String?            @unique

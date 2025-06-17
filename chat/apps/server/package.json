@@ -1,0 +1,20 @@
+{
+  "name": "chat-app",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "tsc-watch --onSuccess \"node dist/index.js\"",
+    "build": "tsc -p .",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.x.x",
+    "socket.io": "^4.x",
+    "ioredis": "^5.x",
+    "kafkajs": "^2.x"
+  },
+  "devDependencies": {
+    "typescript": "^5.x",
+    "tsc-watch": "^6.x"
+  }
+}

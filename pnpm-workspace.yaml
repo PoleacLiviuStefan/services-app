@@ -1,0 +1,4 @@
+packages:
+  - '.'               # Next.js principal în `site/`
+  - 'chat' # chat-server
+  # nu incluzi `chat/apps/web` dacă ai mutat clientul sub `site/src`

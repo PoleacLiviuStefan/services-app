@@ -4,174 +4,179 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
-import { usePathname } from 'next/navigation';
-import type { ZoomClient, ZoomMediaStream, ZoomVideoSDK, Participant } from '@zoom/videosdk';
+import { useParams } from 'next/navigation';
 
 interface SessionInfo {
   sessionName: string;
-  token: string;
-  userId: string;
+  token:       string;
+  userId:      string;
+  startDate:   string;
+  endDate:     string;
+  provider:    { id: string; name: string };
+  client:      { id: string; name: string };
 }
 
 export default function VideoSessionPage() {
   const { data: auth, status } = useSession();
-  const pathname = usePathname();
+  const params = useParams();
+  const sessionId = params?.sessionId;
+
   const [sessionInfo, setSessionInfo] = useState<SessionInfo | null>(null);
-  const [client, setClient] = useState<ZoomClient | null>(null);
-  const [stream, setStream] = useState<ZoomMediaStream | null>(null);
+  const [client, setClient]     = useState<any>(null);
+  const [stream, setStream]     = useState<any>(null);
   const [isVideoOn, setVideoOn] = useState(false);
   const [isAudioOn, setAudioOn] = useState(false);
-  const [error, setError] = useState<string>('');
-  const [loading, setLoading] = useState(false);
+  const [error, setError]       = useState<string>('');
+  const [loading, setLoading]   = useState(false);
+  const [timeLeft, setTimeLeft] = useState<string>('');
 
-  // Extract consultingSessionId from pathname
-  const match = pathname?.match(/\/sessions\/(.+)$/);
-  const sessionId = match ? match[1] : null;
-
+  // Fetch session info
   const fetchSession = useCallback(async () => {
     if (!sessionId) return;
     setLoading(true);
     try {
-      const res = await fetch(`/api/consulting-sessions/${sessionId}/zoom-credentials`);
+      const res = await fetch(`/api/video/session-info/${sessionId}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || res.statusText);
-      setSessionInfo({
-        sessionName: data.sessionName,
-        token: data.token,
-        userId: data.userId,
-      });
-    } catch (err: any) {
-      setError(err.message);
+      setSessionInfo(data);
+    } catch (e: any) {
+      setError(e.message);
     } finally {
       setLoading(false);
     }
   }, [sessionId]);
 
   useEffect(() => {
-    if (sessionInfo) return;
     fetchSession();
-  }, [sessionInfo, fetchSession]);
+  }, [fetchSession]);
 
+  // Countdown timer
+  useEffect(() => {
+    if (!sessionInfo?.endDate) return;
+    const timer = setInterval(() => {
+      const now = Date.now();
+      const end = new Date(sessionInfo.endDate).getTime();
+      const diff = end - now;
+      if (diff <= 0) {
+        setTimeLeft('00:00');
+        clearInterval(timer);
+        return;
+      }
+      const mins = Math.floor(diff / 60000).toString().padStart(2, '0');
+      const secs = Math.floor((diff % 60000) / 1000).toString().padStart(2, '0');
+      setTimeLeft(`${mins}:${secs}`);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [sessionInfo]);
+
+  // Initialize Zoom
   useEffect(() => {
     if (!sessionInfo) return;
     (async () => {
       try {
-        const ZoomMod = (await import('@zoom/videosdk')) as { default?: ZoomVideoSDK } & ZoomVideoSDK;
-        const ZoomVideo = ZoomMod.default ?? ZoomMod;
+        await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        const ZoomMod = await import('@zoom/videosdk');
+        const ZoomVideo = (ZoomMod.default ?? ZoomMod) as any;
         const c = ZoomVideo.createClient();
-        await c.init('en-US', 'Global', { patchJsMedia: true });
-        await c.join(sessionInfo.sessionName, sessionInfo.token, sessionInfo.userId);
+        await c.init('en-US','Global',{patchJsMedia:true});
+        await c.join(
+          sessionInfo.sessionName,
+          sessionInfo.token,
+          sessionInfo.userId
+        );
         setClient(c);
-
         const ms = c.getMediaStream();
         setStream(ms);
-
-        const localEl = document.getElementById('local-video') as HTMLVideoElement;
-        if (ms.isRenderSelfViewWithVideoElement?.()) {
-          await ms.startVideo({ videoElement: localEl });
-        } else {
-          await ms.startVideo();
-          const attached = await ms.attachVideo(sessionInfo.userId, 2);
-          localEl.replaceWith(attached);
-        }
+        await ms.startVideo({ videoElement: document.getElementById('local-video')! });
         setVideoOn(true);
-
         await ms.startAudio();
         setAudioOn(true);
-
-        c.on('stream-updated', async (participant: Participant, type) => {
-          if (type !== 'video') return;
-          const remoteEl = await ms.attachVideo(participant.userId, 2);
-          remoteEl.id = `remote-${participant.userId}`;
-          document.getElementById('remote-videos')?.appendChild(remoteEl);
+        c.on('stream-updated', async (p: any, t: string) => {
+          if (t !== 'video') return;
+          const el = await ms.attachVideo(p.userId, 2);
+          el.id = `remote-${p.userId}`;
+          document.getElementById('remote-videos')?.appendChild(el);
         });
-        c.on('stream-removed', (participant: Participant, type) => {
-          if (type !== 'video') return;
-          document.getElementById(`remote-${participant.userId}`)?.remove();
+        c.on('stream-removed', (p: any, t: string) => {
+          if (t !== 'video') return;
+          document.getElementById(`remote-${p.userId}`)?.remove();
         });
-      } catch (err: any) {
-        setError(err.message);
+      } catch (e: any) {
+        setError(e.message);
       }
     })();
   }, [sessionInfo]);
 
   const toggleVideo = useCallback(async () => {
-    if (!stream || !sessionInfo) return;
-    try {
-      const localEl = document.getElementById('local-video') as HTMLVideoElement;
-      if (isVideoOn) {
-        await stream.stopVideo();
-        setVideoOn(false);
-      } else if (stream.isRenderSelfViewWithVideoElement?.()) {
-        await stream.startVideo({ videoElement: localEl });
-        setVideoOn(true);
-      } else {
-        await stream.startVideo();
-        const attached = await stream.attachVideo(sessionInfo.userId, 2);
-        localEl.replaceWith(attached);
-        setVideoOn(true);
-      }
-    } catch (e: any) {
-      setError(e.message);
+    if (!stream) return;
+    if (isVideoOn) {
+      await stream.stopVideo();
+      setVideoOn(false);
+    } else {
+      await stream.startVideo({ videoElement: document.getElementById('local-video')! });
+      setVideoOn(true);
     }
-  }, [stream, isVideoOn, sessionInfo]);
+  }, [stream, isVideoOn]);
 
   const toggleAudio = useCallback(async () => {
     if (!stream) return;
-    try {
-      if (isAudioOn) {
-        await stream.stopAudio();
-        setAudioOn(false);
-      } else {
-        await stream.startAudio();
-        setAudioOn(true);
-      }
-    } catch {}
+    if (isAudioOn) {
+      await stream.stopAudio();
+      setAudioOn(false);
+    } else {
+      await stream.startAudio();
+      setAudioOn(true);
+    }
   }, [stream, isAudioOn]);
 
-  const leaveSession = useCallback(async () => {
+  const leave = useCallback(async () => {
     if (!client) return;
     await client.leave();
     client.destroy();
     setClient(null);
+    setStream(null);
     setSessionInfo(null);
   }, [client]);
 
-  if (status === 'loading' || loading) return <p>Se încarcă...</p>;
+  if (status === 'loading' || loading) return <p>Se încarcă sesiunea video...</p>;
   if (!auth?.user) return <p>Unauthorized</p>;
+  if (!sessionId) return <p>ID sesiune invalid.</p>;
+  if (!sessionInfo) return <p>Se pregătește sesiunea...</p>;
 
   return (
-    <div className="p-6">
-      {error && <p className="text-red-500">{error}</p>}
-      <div className="flex space-x-4 mb-4">
-        <button onClick={toggleVideo} className="px-3 py-1 bg-gray-200 rounded">
-          {isVideoOn ? 'Oprește Video' : 'Pornește Video'}
-        </button>
-        <button onClick={toggleAudio} className="px-3 py-1 bg-gray-200 rounded">
-          {isAudioOn ? 'Dezactivează Microfon' : 'Activează Microfon'}
-        </button>
-        <button onClick={leaveSession} className="px-3 py-1 bg-red-500 text-white rounded">
-          Părăsește sesiunea
-        </button>
-      </div>
-      <div className="flex gap-6">
+    <div className="p-4 space-y-4">
+      <div className="flex flex-col sm:flex-row sm:justify-between">
         <div>
-          <h3 className="font-semibold">Self-view</h3>
+          <p className="font-medium">Client: {sessionInfo.client.name}</p>
+          <p className="font-medium">Furnizor: {sessionInfo.provider.name}</p>
+        </div>
+        <p className="text-lg font-semibold">Timp rămas: {timeLeft}</p>
+      </div>
+      <div className="flex flex-col md:flex-row gap-4">
+        <div className="flex-1">
+          <h3 className="font-semibold mb-2">Tu ({auth.user.name})</h3>
           <video
             id="local-video"
-            width={320}
-            height={240}
-            autoPlay
-            playsInline
-            muted
-            className="bg-black object-cover"
+            className="w-full bg-black rounded"
+            autoPlay playsInline muted
           />
+          <div className="mt-2 flex space-x-2">
+            <button onClick={toggleVideo} className="px-4 py-2 bg-blue-600 text-white rounded">
+              {isVideoOn ? 'Oprește Video' : 'Pornește Video'}
+            </button>
+            <button onClick={toggleAudio} className="px-4 py-2 bg-blue-600 text-white rounded">
+              {isAudioOn ? 'Mute Microfon' : 'Unmute Microfon'}
+            </button>
+          </div>
         </div>
-        <div>
-          <h3 className="font-semibold">Remote-view</h3>
-          <div id="remote-videos" className="bg-black w-[320px] h-[240px] overflow-auto" />
+        <div className="flex-1">
+          <h3 className="font-semibold mb-2">Furnizor ({sessionInfo.provider.name})</h3>
+          <div id="remote-videos" className="w-full h-[240px] bg-black rounded overflow-auto" />
         </div>
       </div>
+      <button onClick={leave} className="px-4 py-2 bg-red-600 text-white rounded">
+        Părăsește sesiunea
+      </button>
     </div>
   );
 }
