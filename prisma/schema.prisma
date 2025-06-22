@@ -29,6 +29,12 @@ enum ApprovalStatus {
   REJECTED
 }
 
+/// Tipul de entitate pentru facturare
+enum EntityType {
+  PERS_FIZICA
+  PERS_JURIDICA
+}
+
 model Message {
     id String @id @default(uuid())
     content String
@@ -37,6 +43,33 @@ model Message {
 
     @@map("messages")
 }
+
+
+model BillingDetails {
+  id          String     @id @default(uuid())
+  userId      String     @unique
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// Persoană fizică = nume complet + CNP  
+  /// Persoană juridică = firmă + CIF
+  entityType  EntityType @default(PERS_JURIDICA)
+
+  // Pentru ambele tipuri
+  companyName String     // pentru PF = nume complet, pentru PJ = firmă
+  cif         String     // pentru PF = CNP, pentru PJ = CIF
+  address     String
+  phone       String
+
+  // Doar pentru PJ
+  bank        String?    // devine NULL pentru PF
+  iban        String?    // devine NULL pentru PF
+
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@map("billing_details")
+}
+
 
 model User {
   id                 String             @id @default(uuid())
@@ -62,6 +95,8 @@ model User {
   // relații pentru ApprovalRequest
   requestsCreated    ApprovalRequest[]  @relation("RequestsCreated")
   requestsReviewed   ApprovalRequest[]  @relation("RequestsReviewed")
+
+  billingDetails    BillingDetails?   // relaţie 1-la-1 fără @relation aici
 }
 
 model ApprovalRequest {
@@ -144,7 +179,18 @@ model UserProviderPackage {
   provider         Provider                @relation("UserProviderPkgs", fields: [providerId], references: [id], onDelete: Cascade)
   providerPackage  ProviderPackage         @relation("ProviderPackageUsers", fields: [packageId], references: [id], onDelete: Cascade)
   sessions         ConsultingSession[]     @relation("SessionUserPackage")
+  invoices         Invoice[]               @relation("PackageInvoices")
+}
 
+model Invoice {
+  id            String                 @id @default(uuid())
+  number        String                 // numărul facturii (din Oblio)
+  url           String                 // URL-ul PDF-ului salvat
+  createdAt     DateTime               @default(now())
+  packageId     String
+  package       UserProviderPackage    @relation("PackageInvoices", fields: [packageId], references: [id], onDelete: Cascade)
+
+  @@index([packageId])
 }
 
 model Reading {

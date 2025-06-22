@@ -12,6 +12,20 @@ const transporter = nodemailer.createTransport({
   },
 });
 
+export async function sendInvoiceEmail(to: string, invoiceNumber: string, invoiceUrl: string) {
+  await transporter.sendMail({
+    from: `"MysticGold" <${process.env.FROM_MAIL}>`,
+    to,
+    subject: `Achiziție Pachet MysticGold #${invoiceNumber}`,
+    html: `
+      <p>Bună ziua,</p>
+      <p>În atașament găsiți factura dumneavoastră cu numărul <strong>${invoiceNumber}</strong>.</p>
+      <p>Puteți descărca PDF-ul de aici: <a href="${invoiceUrl}">${invoiceUrl}</a></p>
+      <p>Mulțumim pentru achiziție!</p>
+    `,
+  });
+}
+
 export async function sendVerificationEmail(to: string, token: string) {
   const url = `${process.env.NEXT_PUBLIC_BASE_URL}/verificare-mail?token=${token}`;
 

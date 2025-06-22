@@ -151,15 +151,15 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
   useEffect(() => {
     if (!provider.isCalendlyConnected) return;
     setLoadingCalendly(true);
-    fetch(`/api/provider/${localProvider.id}/calendly/event-types`)
-      .then((r) => r.json())
-      .then((data) => {
+    fetch(`/api/provider/${provider.id}/calendly/event-types`)
+      .then(r => r.json())
+      .then(data => {
         setCalendlyEvents(data.eventTypes);
-        if (data.existingMappings) setMapping(data.existingMappings);
+        setMapping(data.existingMappings || {});
       })
       .catch(console.error)
       .finally(() => setLoadingCalendly(false));
-  }, [localProvider.id, provider.isCalendlyConnected]);
+  }, [provider.id, provider.isCalendlyConnected]);
 
   const handleMapChange = (uri: string, pkgId: string) => {
     setMapping((prev) => ({ ...prev, [uri]: pkgId }));
@@ -333,18 +333,13 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
     setShowEditModal("");
   };
   //eit package
-  const handleEditClick = (pkg: {
-    id: string;
-    service: string;
-    totalSessions: number;
-    price: number;
-    calendlyEventTypeUri?: string | null;
-  }) => {
+  const handleEditClick = (pkg: typeof provider.providerPackages[0]) => {
     setEditingPkgId(pkg.id);
     setNewPackageService(pkg.service);
-    setNewPackageSessions(String(pkg.totalSessions));
-    setNewPackagePrice(String(pkg.price));
+    setNewPackageSessions(pkg.totalSessions.toString());
+    setNewPackagePrice(pkg.price.toString());
     setNewPackageEventUri(pkg.calendlyEventTypeUri || "");
+    setShowEditModal("Packages");
   };
 
   // ================= STRIPE CONNECT =======================
@@ -386,6 +381,42 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
     const authorizeUrl = `https://auth.calendly.com/oauth/authorize?${params.toString()}`;
     window.location.href = authorizeUrl;
   };
+
+
+    const savePackages = async () => {
+    // Ensure calendlyEventTypeUri selected
+    if (!newPackageEventUri) {
+      alert("Trebuie să selectezi tipul de ședință din Calendly.");
+      return;
+    }
+    // Build packages array
+    const allPackages = editingPkgId
+      ? localProvider.providerPackages.map(p =>
+          p.id === editingPkgId
+            ? { ...p, service: newPackageService.trim(), totalSessions: +newPackageSessions, price: +newPackagePrice, calendlyEventTypeUri: newPackageEventUri }
+            : p
+        )
+      : [
+          ...localProvider.providerPackages,
+          { id: '', service: newPackageService.trim(), totalSessions: +newPackageSessions, price: +newPackagePrice, calendlyEventTypeUri: newPackageEventUri }
+        ];
+
+    const res = await fetch(`/api/provider/${provider.id}/packages`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ packages: allPackages }),
+    });
+    if (!res.ok) {
+      console.error(await res.text());
+      return;
+    }
+    const { packages: updated } = await res.json();
+    setLocalProvider(prev => ({ ...prev, providerPackages: updated }));
+    // reset
+    setShowEditModal(""); setEditingPkgId(null);
+    setNewPackageService(""); setNewPackageSessions(""); setNewPackagePrice(""); setNewPackageEventUri("");
+  };
+
 
   // Render Stripe & Calendly connect sections
   const renderIntegrationSections = () => (
@@ -731,66 +762,64 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
           closeModal={() => {
             setShowEditModal("");
             setEditingPkgId(null);
+            setNewPackageService("");
+            setNewPackageSessions("");
+            setNewPackagePrice("");
+            setNewPackageEventUri("");
           }}
           title="Editează Tipuri de Ședințe"
         >
-          {/* 1. Select pentru evenimentul Calendly */}
+          {/* 1. Select obligatoriu pentru evenimentul Calendly */}
           <div className="mb-4">
-            <label
-              htmlFor="newPackageEventUri"
-              className="block mb-1 font-medium"
-            >
-              Alege şedinţă Calendly
+            <label htmlFor="newPackageEventUri" className="block mb-1 font-medium">
+              Tip Ședință Calendly <span className="text-red-500">*</span>
             </label>
             <select
               id="newPackageEventUri"
               className="w-full p-2 border rounded"
               value={newPackageEventUri}
-              onChange={(e) => setNewPackageEventUri(e.target.value)}
+              onChange={e => setNewPackageEventUri(e.target.value)}
             >
               <option value="">— Alege din Calendly —</option>
-              {calendlyEvents?.map((et) => (
-                <option key={et.uri} value={et.uri}>
-                  {et.name}
-                </option>
+              {calendlyEvents.map(et => (
+                <option key={et.uri} value={et.uri}>{et.name}</option>
               ))}
             </select>
           </div>
 
-          {/* 2. Form pentru pachet nou */}
+          {/* 2. Formular pachet nou sau editare */}
           <div className="mb-4 space-y-2">
             <input
               type="text"
               value={newPackageService}
-              onChange={(e) => setNewPackageService(e.target.value)}
+              onChange={e => setNewPackageService(e.target.value)}
               placeholder="Serviciu"
               className="w-full p-2 border rounded"
             />
             <input
               type="number"
               value={newPackageSessions}
-              onChange={(e) => setNewPackageSessions(e.target.value)}
+              onChange={e => setNewPackageSessions(e.target.value)}
               placeholder="Număr sesiuni"
               className="w-full p-2 border rounded"
             />
             <input
               type="number"
               value={newPackagePrice}
-              onChange={(e) => setNewPackagePrice(e.target.value)}
+              onChange={e => setNewPackagePrice(e.target.value)}
               placeholder="Preț (RON)"
               className="w-full p-2 border rounded"
             />
           </div>
 
-          {/* 3. Listare pachete existente cu buton de ștergere */}
+          {/* 3. Listare pachete existente */}
           <div className="mb-4">
             <h4 className="font-medium mb-2">Pachete existente</h4>
             <ul className="space-y-2 max-h-48 overflow-auto">
-              {localProvider.providerPackages.map((pkg) => (
+              {localProvider.providerPackages.map(pkg => (
                 <li key={pkg.id} className="flex justify-between items-center">
                   <span>
-                    {pkg.service} – {pkg.totalSessions} sesiuni @ {pkg.price}{" "}
-                    RON
+                    {pkg.service} – {pkg.totalSessions} sesiuni @ {pkg.price} RON
                   </span>
                   <div className="space-x-2">
                     <Button
@@ -802,7 +831,7 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
                     <Button
                       onClick={async () => {
                         const res = await fetch(
-                          `/api/provider/${localProvider.id}/packages/${pkg.id}`,
+                          `/api/provider/${provider.id}/packages/${pkg.id}`,
                           { method: "DELETE" }
                         );
                         if (!res.ok) {
@@ -813,10 +842,7 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
                           return;
                         }
                         const { packages: remaining } = await res.json();
-                        setLocalProvider((prev) => ({
-                          ...prev,
-                          providerPackages: remaining,
-                        }));
+                        setLocalProvider(prev => ({ ...prev, providerPackages: remaining }));
                       }}
                       className="text-red-600 hover:underline"
                     >
@@ -830,89 +856,20 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
 
           {/* 4. Buton adaugă / salvează */}
           <Button
-            className="py-3 w-full bg-primaryColor text-white hover:bg-secondaryColor"
+            className="py-3 w-full bg-primaryColor text-white hover:bg-secondaryColor disabled:opacity-50"
+            onClick={savePackages}
             disabled={
+              !newPackageEventUri ||
               !newPackageService.trim() ||
               !newPackageSessions ||
-              !newPackagePrice ||
-              !newPackageEventUri
+              !newPackagePrice
             }
-            onClick={async () => {
-              // Construim array-ul final pentru PUT
-              let allPackages;
-              if (editingPkgId) {
-                // update existing
-                allPackages = localProvider.providerPackages.map((pkg) =>
-                  pkg.id === editingPkgId
-                    ? {
-                        id: pkg.id,
-                        service: newPackageService.trim(),
-                        totalSessions: parseInt(newPackageSessions, 10),
-                        price: parseFloat(newPackagePrice),
-                        calendlyEventTypeUri: newPackageEventUri,
-                      }
-                    : {
-                        service: pkg.service,
-                        totalSessions: pkg.totalSessions,
-                        price: pkg.price,
-                        calendlyEventTypeUri:
-                          mappingInverse[pkg.id] || undefined,
-                      }
-                );
-              } else {
-                // add new
-                allPackages = [
-                  ...localProvider.providerPackages.map((pkg) => ({
-                    service: pkg.service,
-                    totalSessions: pkg.totalSessions,
-                    price: pkg.price,
-                    calendlyEventTypeUri: mappingInverse[pkg.id] || undefined,
-                  })),
-                  {
-                    service: newPackageService.trim(),
-                    totalSessions: parseInt(newPackageSessions, 10),
-                    price: parseFloat(newPackagePrice),
-                    calendlyEventTypeUri: newPackageEventUri,
-                  },
-                ];
-              }
-
-              const res = await fetch(
-                `/api/provider/${localProvider.id}/packages`,
-                {
-                  method: "PUT",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ packages: allPackages }),
-                }
-              );
-              if (!res.ok) {
-                console.error(
-                  "Eroare la actualizare pachete:",
-                  await res.text()
-                );
-                return;
-              }
-              const { packages: updated } = await res.json();
-              setLocalProvider((prev) => ({
-                ...prev,
-                providerPackages: updated,
-              }));
-
-              // Reset form & edit state
-              setEditingPkgId(null);
-              setNewPackageService("");
-              setNewPackageSessions("");
-              setNewPackagePrice("");
-              setNewPackageEventUri("");
-              setShowEditModal("");
-            }}
           >
-            {editingPkgId
-              ? "Salvează modificări"
-              : "Adaugă pachet nou și mapare"}
+            {editingPkgId ? "Salvează modificări" : "Adaugă pachet nou"}
           </Button>
         </Modal>
       )}
+
 
       {/* =================== Detalii Furnizor =================== */}
       <div className="max-w-3xl mx-auto bg-white shadow rounded p-6">

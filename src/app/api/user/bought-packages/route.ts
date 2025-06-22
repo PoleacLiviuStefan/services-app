@@ -3,13 +3,16 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import {prisma} from "@/lib/prisma";
 
 export async function GET() {
   // 1. Verificăm sesiunea
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) {
-    return NextResponse.json({ error: "Nu ești autentificat." }, { status: 401 });
+    return NextResponse.json(
+      { error: "Nu ești autentificat." },
+      { status: 401 }
+    );
   }
   const userId = session.user.id;
 
@@ -41,7 +44,18 @@ export async function GET() {
         },
       },
       provider: {
-        select: { user: { select: { name: true } } },
+        select: {
+          user: { select: { name: true } },
+        },
+      },
+      invoices: {
+        select: {
+          id: true,
+          number: true,
+          url: true,
+          createdAt: true,
+        },
+        orderBy: { createdAt: "desc" },
       },
     },
   });
@@ -71,6 +85,15 @@ export async function GET() {
         },
         user: {
           select: { name: true },
+        },
+        invoices: {
+          select: {
+            id: true,
+            number: true,
+            url: true,
+            createdAt: true,
+          },
+          orderBy: { createdAt: "desc" },
         },
       },
     });

@@ -82,7 +82,18 @@ function GET() {
                                     }
                                 },
                                 provider: {
-                                    select: { user: { select: { name: true } } }
+                                    select: {
+                                        user: { select: { name: true } }
+                                    }
+                                },
+                                invoices: {
+                                    select: {
+                                        id: true,
+                                        number: true,
+                                        url: true,
+                                        createdAt: true
+                                    },
+                                    orderBy: { createdAt: "desc" }
                                 }
                             }
                         })];
@@ -112,6 +123,15 @@ function GET() {
                                 },
                                 user: {
                                     select: { name: true }
+                                },
+                                invoices: {
+                                    select: {
+                                        id: true,
+                                        number: true,
+                                        url: true,
+                                        createdAt: true
+                                    },
+                                    orderBy: { createdAt: "desc" }
                                 }
                             }
                         })];

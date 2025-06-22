@@ -2,14 +2,18 @@
 "use client";
 
 import React, { FC } from "react";
-import { BoughtPackage } from "@/interfaces/PackageInterface";
+import { Package } from "@/interfaces/PackageInterface";
 
 export interface BoughtPackageCardProps {
-  pkg: BoughtPackage;
+  pkg: Package;
   onBuy?: (packageId: string) => void; // optional, dacă n-ai nevoie de buton Buy aici
 }
 
 const BoughtPackageCard: FC<BoughtPackageCardProps> = ({ pkg, onBuy }) => {
+  const { totalSessions } = pkg.providerPackage;
+  const { usedSessions } = pkg;
+  const remaining = totalSessions - usedSessions;
+
   const expirationText = pkg.expiresAt
     ? `Expiră ${new Date(pkg.expiresAt).toLocaleDateString("ro-RO")}`
     : "Fără expirare";
@@ -19,7 +23,7 @@ const BoughtPackageCard: FC<BoughtPackageCardProps> = ({ pkg, onBuy }) => {
       <div>
         <h3 className="font-medium text-lg">{pkg.providerPackage.service}</h3>
         <p className="text-sm text-gray-600">
-          {pkg.providerPackage.totalSessions} sesiuni • {expirationText}
+          {totalSessions} sesiuni • {expirationText} • Rămase: {remaining}
         </p>
       </div>
       <div className="flex items-center space-x-4">

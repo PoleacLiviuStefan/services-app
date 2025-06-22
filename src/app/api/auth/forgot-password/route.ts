@@ -9,10 +9,22 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Email invalid.' }, { status: 400 })
   }
 
-  const user = await prisma.user.findUnique({ where: { email } })
+  // Căutare case-insensitive
+  const user = await prisma.user.findFirst({
+    where: {
+      email: {
+        equals: email,
+        mode: 'insensitive'
+      }
+    }
+  })
+
   if (!user) {
     // nu expune existența
-    return new NextResponse({"error":"No user found"}, { status: 404 })
+    return new NextResponse(
+      JSON.stringify({ error: 'No user found' }),
+      { status: 404 }
+    )
   }
 
   await prisma.passwordReset.deleteMany({ where: { userId: user.id } })
@@ -23,6 +35,5 @@ export async function POST(req: Request) {
   })
   await sendPasswordResetEmail(email, token)
 
-  // răspuns fără body
   return new NextResponse(null, { status: 204 })
 }

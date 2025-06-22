@@ -119,7 +119,7 @@ const ProfileMainInfo: React.FC<ProfileMainInfoProps> = ({ provider }) => {
                 <Icon className="-mb-[15px]">
                   <FaVideo size={20} />
                 </Icon>
-                <span className="border-[2px] border-primaryColor px-6 py-4 font-bold duration ease-in-out  rounded-md hover:bg-primaryColor hover:text-white">Cumpara Sedinte</span>
+                <Button className="border-[2px] border-primaryColor px-6 py-4 font-bold duration ease-in-out  rounded-md hover:bg-primaryColor hover:text-white">Cumpara Sedinte</Button>
               </Button>
                   <p className="font-bold">Pasii pentru a putea programa o consulatie:</p>
                   <ul>

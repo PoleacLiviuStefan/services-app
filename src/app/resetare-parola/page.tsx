@@ -8,7 +8,7 @@ interface PageProps {
 }
 
 export default async function Page({ searchParams }: PageProps) {
-   const token = searchParams.token
+   const { token } = await searchParams
 
   return (
     <div className="flex justify-center items-center min-h-screen w-full bg-gradient-to-t from-primaryColor to-secondaryColor">
