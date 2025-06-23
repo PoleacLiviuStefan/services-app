@@ -368,7 +368,7 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
     }
     const { codeChallenge } = await resp.json();
 
-    const clientId = process.env.NEXT_PUBLIC_CALENDLY_CLIENT_ID!;
+    const clientId = process.env.CALENDLY_CLIENT_ID!;
     const redirectUri = `${process.env.NEXT_PUBLIC_BASE_URL}/api/calendly/oauth/callback`;
     const params = new URLSearchParams({
       response_type: "code",
@@ -781,7 +781,7 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
               onChange={e => setNewPackageEventUri(e.target.value)}
             >
               <option value="">— Alege din Calendly —</option>
-              {calendlyEvents.map(et => (
+              {calendlyEvents?.map(et => (
                 <option key={et.uri} value={et.uri}>{et.name}</option>
               ))}
             </select>

@@ -1,0 +1,6 @@
+packages:
+  - '.'                    # Next.js-ul tău (site/)
+  - 'chat/apps/web'        # front-end chat
+  - 'chat/apps/server'     # backend chat-app
+  - 'chat/apps/docs'       # docs if vrei să-l pornești
+  - 'chat/packages/*'      # ui, typescript-config, eslint-config, etc.

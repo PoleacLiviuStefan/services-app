@@ -71,7 +71,7 @@ export async function POST(req: NextRequest) {
       if (expiresAt && new Date() < expiresAt) return false;
       const params = new URLSearchParams({
         grant_type:    "refresh_token",
-        client_id:     process.env.NEXT_PUBLIC_CALENDLY_CLIENT_ID!,
+        client_id:     process.env.CALENDLY_CLIENT_ID!,
         client_secret: process.env.CALENDLY_CLIENT_SECRET!,
         refresh_token: refreshToken,
       });

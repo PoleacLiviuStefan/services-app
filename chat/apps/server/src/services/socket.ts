@@ -4,14 +4,15 @@ import Redis from "ioredis"
 import "dotenv/config"
 import db from "./prisma"
 
-const redis = new Redis({
-  host:     process.env.REDIS_HOST,            // ex: "redis-scalable-ws-chat.a.aivencloud.com"
-  port:     Number(process.env.REDIS_PORT),    // ex: 10192
-  username: process.env.REDIS_USER,            // ex: "default"
-  password: process.env.REDIS_PASSWD,          // pusa în .env.local ca REDIS_PASSWD=<parola-ta>
-  tls:      {},                                // Aiven Redis cere TLS implicit
+const redisConfig = {
+  host:     process.env.REDIS_HOST,         // ex: "redis-host"
+  port:     Number(process.env.REDIS_PORT), // ex: 6379
+  username: process.env.REDIS_USER,         // ex: "default"
+  password: process.env.REDIS_PASSWD,       // ex: parola ta în .env
+  tls:      {},                             // dacă serverul cere TLS
   maxRetriesPerRequest: 5,
-}); 
+}
+
 
 const pub = new Redis(redisConfig) // Publisher
 const sub = new Redis(redisConfig) // Subscriber

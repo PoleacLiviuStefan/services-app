@@ -1,5 +1,11 @@
+import { config } from "dotenv"
+import path       from "path"
+
+// 1️⃣ Încarcă .env *îna­inte* de orice alt import
+config({ path: path.resolve(__dirname, "../../../.env") })
+
 import { Kafka, KafkaJSDeleteGroupsError, Producer } from "kafkajs"
-import path from "path"
+
 import fs from "fs"
 import db from "./prisma"
 
