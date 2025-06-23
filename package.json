@@ -7,6 +7,7 @@
     "dev": "next dev --turbopack",
     "build": "prisma generate && next build",
     "start-cron": "ts-node --esm scripts/ping-cron.ts",
+    "build-cron": "tsc --project tsconfig.json --outDir .cron-dist",
     "start": "next start",
     "lint": "next lint"
   },
