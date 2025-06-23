@@ -181,8 +181,30 @@ const ProfilePage: React.FC = () => {
   };
 
   // Name edit handlers omitted for brevity…
-  const handleEditName = () => { /* … */ };
-  const handleSaveName = async () => { /* … */ };
+  const handleEditNameClick = () => {
+    if (!provider) return;
+    setNameError(null);
+    setEditedName(provider.user.name);
+    setIsEditingName(true);
+  };
+  const handleSaveName = async () => {
+    if (!editedName.trim() || !provider) return setNameError('Numele nu poate fi gol.');
+    setIsSavingName(true);
+    try {
+      const res = await fetch(`/api/provider/${provider.id}/update-name`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: editedName.trim() })
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        setNameError(err.error || 'Eroare la salvare');
+      } else {
+        await fetchProviderBySlug();
+        await refreshSession();
+        setIsEditingName(false);
+      }
+    } catch { setNameError('Eroare de rețea'); }
+    finally { setIsSavingName(false); }
+  };
 
   if (status === 'loading') return <p className="text-center mt-20">Se încarcă...</p>;
   if (!session?.user) return null;
@@ -205,7 +227,7 @@ const ProfilePage: React.FC = () => {
                 <input value={editedName} onChange={e => setEditedName(e.target.value)} className="border px-3 py-1 w-full text-center rounded" />
                 {nameError && <p className="text-red-500 text-sm">{nameError}</p>}
                 <div className="flex space-x-2">
-                  <Button onClick={() => setIsEditingName(false)} className="px-4 py-2 bg-gray-300 rounded">Anulează</Button>
+                  <Button onClick={() => {setIsEditingName(false); setNameError(null);}} className="px-4 py-2 bg-gray-300 rounded">Anulează</Button>
                   <Button onClick={handleSaveName} disabled={isSavingName} className="px-4 py-2 bg-primaryColor text-white rounded">{isSavingName ? 'Salvez...' : 'Salvează'}</Button>
                 </div>
               </div>
