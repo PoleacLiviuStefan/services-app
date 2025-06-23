@@ -1,3 +1,4 @@
+// components/ScheduleMeeting.tsx
 'use client'
 import React, { useEffect, useState, useCallback } from "react";
 import Script from "next/script";
@@ -12,8 +13,8 @@ import Link from "next/link";
 
 interface ScheduleMeetingProps {
   providerId: string;
-  services: string[]; // lista serviciilor unice
-  availablePackages: BoughtPackage[]; // toate pachetele disponibile de la provider
+  services: string[];
+  availablePackages: BoughtPackage[];
   providerStripeAccountId?: string | null;
   locale?: string;
 }
@@ -24,24 +25,20 @@ export default function ScheduleMeeting({
   providerStripeAccountId,
   locale = "ro",
 }: ScheduleMeetingProps) {
-  // Calendly
   const [schedulingUrl, setSchedulingUrl] = useState<string>("");
   const [scriptReady, setScriptReady] = useState(false);
 
-  // pachetele cumpărate
   const [boughtPackages, setBoughtPackages] = useState<BoughtPackage[]>([]);
   const [loadingBought, setLoadingBought] = useState(false);
   const [errorBought, setErrorBought] = useState<string | null>(null);
 
-  // pagination state
   const pageSize = 5;
   const [currentPage, setCurrentPage] = useState(1);
 
-  // modal cumpărare
   const [showBuyModal, setShowBuyModal] = useState(false);
   const [selectedService, setSelectedService] = useState<string | null>(null);
 
-  // 1) Fetch URL-ul Calendly
+  // 1) Fetch Calendly URL
   useEffect(() => {
     if (!providerId) return;
     fetch(`/api/calendly/user?providerId=${providerId}`)
@@ -59,18 +56,16 @@ export default function ScheduleMeeting({
       });
   }, [providerId]);
 
-  // 2) Fetch pachetele cumpărate
+  // 2) Fetch bought packages
   useEffect(() => {
     setLoadingBought(true);
-    fetch(`/api/provider/${providerId}/bought-packages`, {
-      credentials: "include",
-    })
+    fetch(`/api/provider/${providerId}/bought-packages`, { credentials: "include" })
       .then(async (res) => {
         if (!res.ok) throw new Error("Nu am găsit pachetele cumpărate");
         return res.json();
       })
-      .then(({ soldPackages }) => {
-        setBoughtPackages(soldPackages);
+      .then(({ boughtPackages }) => {
+        setBoughtPackages(boughtPackages);
         setCurrentPage(1);
         setErrorBought(null);
       })
@@ -78,7 +73,7 @@ export default function ScheduleMeeting({
       .finally(() => setLoadingBought(false));
   }, [providerId]);
 
-  // 3) Handler postMessage din widget
+  // 3) Calendly message handler
   const onCalendlyMessage = useCallback(
     (e: MessageEvent) => {
       if (!e.data) return;
@@ -94,18 +89,7 @@ export default function ScheduleMeeting({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ providerId, scheduledEventUri }),
-        })
-          .then((r) => r.json().then((j) => ({ status: r.status, body: j })))
-          .then(({ status, body }) => {
-            if (status >= 400) {
-              console.error("[Calendly] backend error:", status, body);
-            } else {
-              console.log("[Calendly] backend saved ConsultingSession:", body.data);
-            }
-          })
-          .catch((err) =>
-            console.error("[Calendly] fetch error to /event-scheduled:", err)
-          );
+        });
       }
     },
     [providerId]
@@ -113,26 +97,29 @@ export default function ScheduleMeeting({
 
   useEffect(() => {
     window.addEventListener("message", onCalendlyMessage);
-    return () => {
-      window.removeEventListener("message", onCalendlyMessage);
-    };
+    return () => window.removeEventListener("message", onCalendlyMessage);
   }, [onCalendlyMessage]);
 
-  // 4) Init widget numai daca avem script + pachete + URL
+  // 4) Filtrăm pachete cu sesiuni rămase
+  const validPackages = boughtPackages.filter(
+    (pkg) => pkg.totalSessions - pkg.usedSessions > 0
+  );
+
+  // 5) Init widget only if we have script + URL + at least one valid package
   useEffect(() => {
-    if (!scriptReady || boughtPackages.length === 0 || !schedulingUrl) return;
+    if (!scriptReady || validPackages.length === 0 || !schedulingUrl) return;
     (window as any).Calendly.initInlineWidget({
       url: `${schedulingUrl}?locale=${locale}`,
       parentElement: document.getElementById("calendly-inline")!,
     });
-  }, [scriptReady, schedulingUrl, boughtPackages.length, locale]);
+  }, [scriptReady, schedulingUrl, validPackages.length, locale]);
 
   const openBuyModal = (svc: string) => {
     setSelectedService(svc);
     setShowBuyModal(true);
   };
 
-  const totalPages = Math.ceil(boughtPackages.length / pageSize);
+  const totalPages = Math.ceil(validPackages.length / pageSize);
 
   return (
     <>
@@ -146,21 +133,16 @@ export default function ScheduleMeeting({
       <div className="max-w-2xl mx-auto mb-6">
         {loadingBought && <p>Se încarcă pachetele cumpărate…</p>}
         {errorBought && (
-          <p>
-            {errorBought === "Nu am găsit pachetele cumpărate" ? (
-              <>
-                <p>Autentifică-te mai întâi pentru a putea programa o ședință</p>
-                <Link href="/autentificare">
-                  <Button>Autentificare</Button>
-                </Link>
-              </>
-            ) : (
-              `Eroare: ${errorBought}`
-            )}
-          </p>
+          <p>{errorBought === "Nu am găsit pachetele cumpărate" ? (
+            <>
+              <p>Autentifică-te mai întâi pentru a putea programa o ședință</p>
+              <Link href="/autentificare"><Button>Autentificare</Button></Link>
+            </>
+          ) : `Eroare: ${errorBought}`}</p>
         )}
 
-        {!loadingBought && !errorBought && boughtPackages.length === 0 && (
+        {/* No valid packages */}
+        {!loadingBought && !errorBought && validPackages.length === 0 && (
           <>
             <h3 className="text-xl font-semibold mb-2">
               Alege un pachet înainte de a programa
@@ -178,16 +160,16 @@ export default function ScheduleMeeting({
           </>
         )}
 
-        {!loadingBought && !errorBought && boughtPackages.length > 0 && (
+        {/* Show valid packages and scheduling */}
+        {!loadingBought && !errorBought && validPackages.length > 0 && (
           <>
-            <h3 className="text-xl font-semibold mb-2">
-              Pachetele tale cumpărate
-            </h3>
+            <h3 className="text-xl font-semibold mb-2">Pachetele tale</h3>
             <ul className="space-y-2 mb-4">
-              {boughtPackages.slice((currentPage - 1) * pageSize, currentPage * pageSize)
+              {validPackages
+                .slice((currentPage - 1) * pageSize, currentPage * pageSize)
                 .map((pkg) => (
                   <BoughtPackageCard key={pkg.id} pkg={pkg} />
-              ))}
+                ))}
             </ul>
 
             <div className="flex justify-center items-center space-x-4 mb-4">
@@ -195,17 +177,13 @@ export default function ScheduleMeeting({
                 onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                 disabled={currentPage === 1}
                 className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50"
-              >
-                Anterior
-              </button>
+              >Anterior</button>
               <span>Pagina {currentPage} din {totalPages}</span>
               <button
                 onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
                 disabled={currentPage === totalPages}
                 className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50"
-              >
-                Următor
-              </button>
+              >Următor</button>
             </div>
 
             <h3 className="text-xl font-semibold mb-2">

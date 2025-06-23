@@ -107,6 +107,7 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
   const [savingMapping, setSavingMapping] = useState(false);
   const [newPackageEventUri, setNewPackageEventUri] = useState<string>("");
   const [editingPkgId, setEditingPkgId] = useState<string | null>(null);
+  const [attemptedSave, setAttemptedSave] = useState(false);
 
   const router = useRouter();
 
@@ -778,39 +779,97 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
               id="newPackageEventUri"
               className="w-full p-2 border rounded"
               value={newPackageEventUri}
-              onChange={e => setNewPackageEventUri(e.target.value)}
+              onChange={e => {setNewPackageEventUri(e.target.value);setAttemptedSave(false);}}
             >
               <option value="">— Alege din Calendly —</option>
               {calendlyEvents?.map(et => (
                 <option key={et.uri} value={et.uri}>{et.name}</option>
               ))}
             </select>
+            { !newPackageEventUri && attemptedSave && (
+  <p className="text-red-500 text-sm mt-1">
+    Trebuie să selectezi tipul de ședință.
+  </p>
+)}
           </div>
 
           {/* 2. Formular pachet nou sau editare */}
-          <div className="mb-4 space-y-2">
-            <input
-              type="text"
-              value={newPackageService}
-              onChange={e => setNewPackageService(e.target.value)}
-              placeholder="Serviciu"
-              className="w-full p-2 border rounded"
-            />
-            <input
-              type="number"
-              value={newPackageSessions}
-              onChange={e => setNewPackageSessions(e.target.value)}
-              placeholder="Număr sesiuni"
-              className="w-full p-2 border rounded"
-            />
-            <input
-              type="number"
-              value={newPackagePrice}
-              onChange={e => setNewPackagePrice(e.target.value)}
-              placeholder="Preț (RON)"
-              className="w-full p-2 border rounded"
-            />
-          </div>
+<div className="mb-4 space-y-2">
+  {/* Serviciu */}
+  <div>
+    <input
+      type="text"
+      value={newPackageService}
+      onChange={e => { setNewPackageService(e.target.value); setAttemptedSave(false); }}
+      placeholder="Serviciu"
+      className={`w-full p-2 border rounded ${
+        !newPackageService.trim() && attemptedSave ? 'border-red-500' : ''
+      }`}
+    />
+    { !newPackageService.trim() && attemptedSave && (
+      <p className="text-red-500 text-sm mt-1">
+        Trebuie să introduci un nume de serviciu.
+      </p>
+    )}
+  </div>
+
+  {/* Număr sesiuni */}
+  <div>
+    <input
+      type="number"
+      value={newPackageSessions}
+      onChange={e => { setNewPackageSessions(e.target.value); setAttemptedSave(false); }}
+      placeholder="Număr sesiuni"
+      className={`w-full p-2 border rounded ${
+        (!newPackageSessions || Number(newPackageSessions) <= 0) && attemptedSave
+          ? 'border-red-500'
+          : ''
+      }`}
+    />
+    { (!newPackageSessions || Number(newPackageSessions) <= 0) && attemptedSave && (
+      <p className="text-red-500 text-sm mt-1">
+        Trebuie să introduci un număr de sesiuni valid (>= 2).
+      </p>
+    )}
+  </div>
+
+  {/* Preț */}
+  <div>
+    <input
+      type="number"
+      value={newPackagePrice}
+      onChange={e => { setNewPackagePrice(e.target.value); setAttemptedSave(false); }}
+      placeholder="Preț (RON)"
+      className={`w-full p-2 border rounded ${
+        (!newPackagePrice || Number(newPackagePrice) <= 0) && attemptedSave
+          ? 'border-red-500'
+          : ''
+      }`}
+    />
+    { (!newPackagePrice || Number(newPackagePrice) <= 0) && attemptedSave && (
+      <p className="text-red-500 text-sm mt-1">
+        Trebuie să introduci un preț valid (>= 1 RON).
+      </p>
+    )}
+  </div>
+</div>
+
+                    {/* 4. Buton adaugă / salvează */}
+          <Button
+            className="py-3 w-full bg-primaryColor text-white hover:bg-secondaryColor disabled:opacity-50"
+            onClick={() => {
+  setAttemptedSave(true);
+  savePackages();
+}}
+            disabled={
+              !newPackageEventUri ||
+              !newPackageService.trim() ||
+              !newPackageSessions ||
+              !newPackagePrice
+            }
+          >
+            {editingPkgId ? "Salvează modificări" : "Adaugă pachet nou"}
+          </Button>
 
           {/* 3. Listare pachete existente */}
           <div className="mb-4">
@@ -854,19 +913,7 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
             </ul>
           </div>
 
-          {/* 4. Buton adaugă / salvează */}
-          <Button
-            className="py-3 w-full bg-primaryColor text-white hover:bg-secondaryColor disabled:opacity-50"
-            onClick={savePackages}
-            disabled={
-              !newPackageEventUri ||
-              !newPackageService.trim() ||
-              !newPackageSessions ||
-              !newPackagePrice
-            }
-          >
-            {editingPkgId ? "Salvează modificări" : "Adaugă pachet nou"}
-          </Button>
+
         </Modal>
       )}
 
@@ -904,7 +951,7 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
           </div>
 
           {/* Link Programări */}
-          <div className="h-full flex flex-col justify-between bg-gray-50 p-4 rounded">
+          {/* <div className="h-full flex flex-col justify-between bg-gray-50 p-4 rounded">
             <div>
               <strong>Link Programări:</strong>{" "}
               {localProvider.scheduleLink || "—"}
@@ -912,7 +959,7 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
             <EditButton
               showEditModal={() => setShowEditModal("ScheduleLink")}
             />
-          </div>
+          </div> */}
 
           {/* Reading */}
           <div className="h-full flex flex-col justify-between bg-gray-50 p-4 rounded">

@@ -282,8 +282,9 @@ const BuyPackageModal: FC<BuyPackageModalProps> = ({
               )}
             </div>
           )}
-
-          {selectedPackageId && !clientSecret && !paymentSuccess && (
+    {
+      !billingError &&
+          selectedPackageId && !clientSecret && !paymentSuccess && (
             <div className="mt-4 text-center">
               {error ? (
                 <div className="p-3 bg-red-100 text-red-700 rounded">
@@ -299,7 +300,8 @@ const BuyPackageModal: FC<BuyPackageModalProps> = ({
                 <p>Se pregătește formularul de plată…</p>
               )}
             </div>
-          )}
+          )
+        }
 
           {selectedPackageId && clientSecret && !paymentSuccess && !billingError && (
             <div className="flex flex-col items-center w-full mt-6">

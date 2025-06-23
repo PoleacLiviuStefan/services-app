@@ -11,21 +11,19 @@ export interface PackageCardProps {
 
 const PackageCard: FC<PackageCardProps> = ({ pkg, onBuy }) => {
   console.log("[PackageCard] Rendering package:", pkg);
-  const expirationText = pkg.expiresAt
-    ? `Expiră ${new Date(pkg.expiresAt).toLocaleDateString("ro-RO")}`
-    : "Fără expirare";
+
 
   return (
     <div className="flex justify-between items-center border border-gray-200 rounded-lg p-4 shadow-sm">
       <div>
-        <h3 className="font-medium text-lg">{pkg.name}</h3>
+        <h3 className="font-medium text-lg">{pkg.service}</h3>
         <p className="text-sm text-gray-600">
-          {pkg.totalSessions} sesiuni • {expirationText}
+          {pkg.totalSessions} sesiuni 
         </p>
       </div>
       <div className="flex items-center space-x-4">
         <span className="text-primaryColor font-semibold">
-          {pkg.price.toLocaleString("ro-RO")} RON
+          {pkg.price?.toLocaleString("ro-RO")} RON
         </span>
         <button
           type="button"
