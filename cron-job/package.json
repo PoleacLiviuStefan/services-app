@@ -1,8 +1,9 @@
 {
   "name": "cron-refresh-calendly",
   "version": "1.0.0",
+  "private": true,
   "scripts": {
-    "start": "ts-node --esm scripts/ping-cron.ts"
+    "start": "ts-node --esm ping-cron.ts"
   },
   "dependencies": {
     "node-fetch": "^3.0.0"
