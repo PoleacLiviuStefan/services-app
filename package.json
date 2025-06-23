@@ -11,7 +11,6 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "node-fetch": "^3.0.0",
     "@aws-sdk/client-s3": "^3.823.0",
     "@aws-sdk/s3-request-presigner": "^3.823.0",
     "@hookform/resolvers": "^5.0.1",
@@ -36,7 +35,8 @@
     "mime": "^4.0.7",
     "next": "15.1.7",
     "next-auth": "^4.24.11",
-    "nodemailer": "^7.0.3",
+    "node-fetch": "^3.0.0",
+    "nodemailer": "^6.10.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-easy-crop": "^5.4.2",
@@ -50,7 +50,6 @@
     "zustand": "^5.0.3"
   },
   "devDependencies": {
-    "ts-node": "^10.0.0",
     "@eslint/eslintrc": "^3",
     "@types/node": "^20",
     "@types/nodemailer": "^6.4.17",
@@ -61,6 +60,7 @@
     "postcss": "^8",
     "prisma": "^6.5.0",
     "tailwindcss": "^3.4.1",
+    "ts-node": "^10.0.0",
     "typescript": "^5"
   }
 }
