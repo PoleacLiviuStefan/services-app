@@ -1,8 +1,21 @@
 {
   "compilerOptions": {
-    "target": "ES2020",
-    "module": "ESNext",
+    "target": "ES2020",                       // modern enough pentru Node 16+
+    "module": "ESNext",                       // ESM, compatibil cu node-fetch v3
     "moduleResolution": "node",
-    "esModuleInterop": true
-  }
+    "esModuleInterop": true,                  // interop default-imports
+    "allowSyntheticDefaultImports": true,
+    "resolveJsonModule": true,
+    "strict": true,                           // activează toate verificările stricte
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,                     // să nu verifice toate declaration files
+    "outDir": "dist",                         // dacă rulezi tsc înainte de `node dist/...`
+    "types": ["node"]                         // importă tipurile Node.js
+  },
+  "include": [
+    "scripts/**/*.ts"                         // doar scripturile cron
+  ],
+  "exclude": [
+    "node_modules"
+  ]
 }
