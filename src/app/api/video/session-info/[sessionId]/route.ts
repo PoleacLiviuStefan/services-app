@@ -57,8 +57,16 @@ export async function GET(
     return NextResponse.json({ error: 'Nicio sesiune activă.' }, { status: 404 });
   }
 
+
   // Authorization
-  if (record.providerId !== currentUserId && record.clientId !== currentUserId) {
+  const isCurrentUserProvider = await prisma.provider.findUnique({
+  where: { id: record.providerId },
+  select: { id:true,
+    userId: true }
+});
+console.log('[Debug] isCurrentUserProvider:', isCurrentUserProvider);
+console.log("[Debug] record.clientId:", record.providerId);
+  if (!isCurrentUserProvider && record.clientId !== currentUserId) {
     console.log('[Debug] Unauthorized user');
     return NextResponse.json(
       { error: 'Nu faci parte din această sesiune.' },
@@ -78,7 +86,7 @@ export async function GET(
   const tokensMap = record.zoomTokens as Record<string,string>;
   console.log('[Debug] tokensMap:', tokensMap);
 
-  const token = tokensMap[currentUserId];
+  const token = tokensMap[isCurrentUserProvider.id];
   console.log('[Debug] token for user:', token);
   if (!token) {
     console.log('[Debug] No token for user');

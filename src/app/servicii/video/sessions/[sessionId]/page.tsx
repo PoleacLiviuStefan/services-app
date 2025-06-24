@@ -1,8 +1,6 @@
-// File: components/VideoSessionPage.tsx
-
 "use client";
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import { useParams } from 'next/navigation';
 
@@ -29,6 +27,10 @@ export default function VideoSessionPage() {
   const [error, setError]       = useState<string>('');
   const [loading, setLoading]   = useState(false);
   const [timeLeft, setTimeLeft] = useState<string>('');
+
+  // refs pentru elemente video și container remote
+  const localVideoRef = useRef<HTMLVideoElement>(null);
+  const remoteContainerRef = useRef<HTMLDivElement>(null);
 
   // Fetch session info
   const fetchSession = useCallback(async () => {
@@ -69,51 +71,74 @@ export default function VideoSessionPage() {
     return () => clearInterval(timer);
   }, [sessionInfo]);
 
-  // Initialize Zoom
+  // Initialize Zoom + debug preview
   useEffect(() => {
     if (!sessionInfo) return;
     (async () => {
       try {
-        await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        // solicită permisiuni media
+        const rawStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        // atașează fluxul brut pentru test în video element
+        if (localVideoRef.current) {
+          localVideoRef.current.srcObject = rawStream;
+          localVideoRef.current.play().catch(console.warn);
+        }
+
         const ZoomMod = await import('@zoom/videosdk');
         const ZoomVideo = (ZoomMod.default ?? ZoomMod) as any;
         const c = ZoomVideo.createClient();
-        await c.init('en-US','Global',{patchJsMedia:true});
+        await c.init('en-US', 'Global', { patchJsMedia: true });
+
+        // apel corect: token, topic, userName
         await c.join(
-          sessionInfo.sessionName,
           sessionInfo.token,
-          sessionInfo.userId
+          sessionInfo.sessionName,
+          auth?.user?.name || sessionInfo.userId
         );
+
         setClient(c);
         const ms = c.getMediaStream();
         setStream(ms);
-        await ms.startVideo({ videoElement: document.getElementById('local-video')! });
+
+        // curăță video brut după inițializare
+        if (localVideoRef.current) {
+          localVideoRef.current.srcObject = null;
+        }
+
+        // pornește video Zoom
+        if (!localVideoRef.current) throw new Error('Local video element not found');
+        await ms.startVideo({ videoElement: localVideoRef.current });
         setVideoOn(true);
         await ms.startAudio();
         setAudioOn(true);
+
+        // evenimente stream remote
         c.on('stream-updated', async (p: any, t: string) => {
           if (t !== 'video') return;
           const el = await ms.attachVideo(p.userId, 2);
           el.id = `remote-${p.userId}`;
-          document.getElementById('remote-videos')?.appendChild(el);
+          const container = remoteContainerRef.current;
+          if (container) container.appendChild(el);
         });
         c.on('stream-removed', (p: any, t: string) => {
           if (t !== 'video') return;
-          document.getElementById(`remote-${p.userId}`)?.remove();
+          const container = remoteContainerRef.current;
+          container?.querySelector(`#remote-${p.userId}`)?.remove();
         });
       } catch (e: any) {
+        console.error(e);
         setError(e.message);
       }
     })();
-  }, [sessionInfo]);
+  }, [sessionInfo, auth]);
 
   const toggleVideo = useCallback(async () => {
-    if (!stream) return;
+    if (!stream || !localVideoRef.current) return;
     if (isVideoOn) {
       await stream.stopVideo();
       setVideoOn(false);
     } else {
-      await stream.startVideo({ videoElement: document.getElementById('local-video')! });
+      await stream.startVideo({ videoElement: localVideoRef.current });
       setVideoOn(true);
     }
   }, [stream, isVideoOn]);
@@ -152,13 +177,19 @@ export default function VideoSessionPage() {
         </div>
         <p className="text-lg font-semibold">Timp rămas: {timeLeft}</p>
       </div>
+
+      {/* afișare eroare */}
+      {error && <p className="text-red-500">Eroare: {error}</p>}
+
       <div className="flex flex-col md:flex-row gap-4">
         <div className="flex-1">
           <h3 className="font-semibold mb-2">Tu ({auth.user.name})</h3>
           <video
-            id="local-video"
-            className="w-full bg-black rounded"
-            autoPlay playsInline muted
+            ref={localVideoRef}
+            className="w-full h-[350px] bg-black rounded"
+            autoPlay
+            playsInline
+            muted
           />
           <div className="mt-2 flex space-x-2">
             <button onClick={toggleVideo} className="px-4 py-2 bg-blue-600 text-white rounded">
@@ -171,7 +202,7 @@ export default function VideoSessionPage() {
         </div>
         <div className="flex-1">
           <h3 className="font-semibold mb-2">Furnizor ({sessionInfo.provider.name})</h3>
-          <div id="remote-videos" className="w-full h-[240px] bg-black rounded overflow-auto" />
+          <div ref={remoteContainerRef} className="w-full h-[350px] bg-black rounded overflow-auto" />
         </div>
       </div>
       <button onClick={leave} className="px-4 py-2 bg-red-600 text-white rounded">

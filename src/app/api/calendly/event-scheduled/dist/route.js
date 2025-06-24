@@ -60,7 +60,7 @@ function POST(req) {
                                 return [2 /*return*/, false];
                             params = new URLSearchParams({
                                 grant_type: "refresh_token",
-                                client_id: process.env.CALENDLY_CLIENT_ID,
+                                client_id: process.env.NEXT_PUBLIC_CALENDLY_CLIENT_ID,
                                 client_secret: process.env.CALENDLY_CLIENT_SECRET,
                                 refresh_token: refreshToken_1
                             });
