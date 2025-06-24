@@ -1,3 +1,5 @@
+// File: app/(protected)/video/[sessionId]/page.tsx
+
 'use client';
 
 import React, { useEffect, useState, useCallback, useRef } from 'react';
@@ -97,19 +99,20 @@ export default function VideoSessionPage() {
         setAudioOn(true);
 
         // Remote streams
-        zmClient.on('video-stream-added', async (payload: any) => {
-          if (!remoteContainerRef.current) return;
-          const { userId } = payload;
-          const videoEl = document.createElement('video');
-          videoEl.autoplay = true;
-          videoEl.playsInline = true;
-          remoteContainerRef.current.innerHTML = '';
-          remoteContainerRef.current.appendChild(videoEl);
-          await ms.renderVideo({ userId, videoElement: videoEl });
+        zmClient.on('stream-updated', async (payload: any, track: string) => {
+          if (track === 'video' && remoteContainerRef.current) {
+            const { userId } = payload;
+            const videoEl = document.createElement('video');
+            videoEl.autoplay = true;
+            videoEl.playsInline = true;
+            remoteContainerRef.current.innerHTML = '';
+            remoteContainerRef.current.appendChild(videoEl);
+            await ms.renderVideo({ userId, videoElement: videoEl });
+          }
         });
 
-        zmClient.on('video-stream-removed', (_payload: any) => {
-          if (remoteContainerRef.current) {
+        zmClient.on('stream-removed', (_payload: any, track: string) => {
+          if (track === 'video' && remoteContainerRef.current) {
             remoteContainerRef.current.innerHTML = '';
           }
         });
