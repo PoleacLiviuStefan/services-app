@@ -22,13 +22,13 @@ export default function VideoSessionPage() {
   const [client, setClient]           = useState<any>(null);
   const [stream, setStream]           = useState<any>(null);
   const [isVideoOn, setVideoOn]       = useState(false);
-  const [error, setError]             = useState<string>('');
   const [isAudioOn, setAudioOn]       = useState(false);
+  const [error, setError]             = useState<string>('');
   const [loading, setLoading]         = useState(false);
   const [timeLeft, setTimeLeft]       = useState<string>('');
 
   const localVideoRef = useRef<HTMLVideoElement>(null);
-  const remoteRef     = useRef<HTMLDivElement>(null);
+  const remoteVideoRef = useRef<HTMLVideoElement>(null);
 
   // Fetch session info
   useEffect(() => {
@@ -48,9 +48,13 @@ export default function VideoSessionPage() {
     if (!sessionInfo?.endDate) return;
     const interval = setInterval(() => {
       const diff = new Date(sessionInfo.endDate).getTime() - Date.now();
-      if (diff <= 0) { setTimeLeft('00:00'); clearInterval(interval); return; }
-      const m = String(Math.floor(diff / 60000)).padStart(2,'0');
-      const s = String(Math.floor((diff % 60000)/1000)).padStart(2,'0');
+      if (diff <= 0) {
+        setTimeLeft('00:00');
+        clearInterval(interval);
+        return;
+      }
+      const m = String(Math.floor(diff / 60000)).padStart(2, '0');
+      const s = String(Math.floor((diff % 60000) / 1000)).padStart(2, '0');
       setTimeLeft(`${m}:${s}`);
     }, 1000);
     return () => clearInterval(interval);
@@ -74,50 +78,62 @@ export default function VideoSessionPage() {
         await c.init('en-US', 'Global', { patchJsMedia: true });
 
         // Join Zoom session: signature, topic, userName
-        // Corrected join order: topic, signature, userName
-        console.log('Zoom join -> topic:', sessionInfo.sessionName, 'token:', sessionInfo.token, 'user:', auth.user.name);
+        // Correct join order: topic (sessionName), signature (token), userName
+        console.log('Joining Zoom with topic:', sessionInfo.sessionName, 'token:', sessionInfo.token, 'user:', auth.user.name);
         await c.join(
-          sessionInfo.sessionName,  // topic (<=200 chars)
-          sessionInfo.token,        // signature (JWT)
-          auth.user.name           // userName
+          sessionInfo.sessionName,
+          sessionInfo.token,
+          auth.user.name
         );
 
         setClient(c);
         const ms = c.getMediaStream();
         setStream(ms);
 
-        // Remove preview
+        // Remove local preview once Zoom stream starts
         if (localVideoRef.current) localVideoRef.current.srcObject = null;
 
-        // Start local video
-        await ms.startVideo({ videoElement: localVideoRef.current! });
+        // Retry helper for camera
+        const retryStartVideo = async (attempts = 5, delay = 500) => {
+          for (let i = 0; i < attempts; i++) {
+            try {
+              await ms.startVideo({ videoElement: localVideoRef.current! });
+              return;
+            } catch (err: any) {
+              if (err.errorCode === 6105 && i < attempts - 1) {
+                await new Promise(res => setTimeout(res, delay));
+                continue;
+              }
+              throw err;
+            }
+          }
+        };
+
+        await retryStartVideo();
         setVideoOn(true);
 
-        // Attach remote streams using renderVideo method
-        const containerId = `remote-container-${sessionId}`;
-        if (remoteRef.current) {
-          remoteRef.current.id = containerId;
-        }
+        // Remote streams: attach video and audio
         c.on('stream-updated', async (payload: any, type: string) => {
-          if (type === 'video') {
-            // Render remote video into container
-            ms.renderVideo({ userId: payload.userId, tagId: containerId });
+          if (type === 'video' && remoteVideoRef.current) {
+            const el = await ms.attachVideo(payload.userId, 2);
+            remoteVideoRef.current.srcObject = el.srcObject;
           }
           if (type === 'audio') {
-            // Attach remote audio
             const audioEl = await ms.attachAudio(payload.userId);
             audioEl.id = `remote-audio-${payload.userId}`;
-            remoteRef.current?.appendChild(audioEl);
+            document.body.appendChild(audioEl);
+            setAudioOn(true);
           }
         });
 
         c.on('stream-removed', (payload: any, type: string) => {
-          if (type === 'video') {
-            // Clear container
-            remoteRef.current!.innerHTML = '';
+          if (type === 'video' && remoteVideoRef.current) {
+            remoteVideoRef.current.srcObject = null;
           }
           if (type === 'audio') {
-            remoteRef.current?.querySelector(`#remote-audio-${payload.userId}`)?.remove();
+            const audioEl = document.getElementById(`remote-audio-${payload.userId}`);
+            audioEl?.remove();
+            setAudioOn(false);
           }
         });
       } catch (e: any) {
@@ -127,15 +143,27 @@ export default function VideoSessionPage() {
     })();
   }, [sessionInfo, auth, sessionId]);
 
+  // Toggle local video
   const toggleVideo = useCallback(async () => {
     if (!stream || !localVideoRef.current) return;
     try {
       if (isVideoOn) await stream.stopVideo();
       else await stream.startVideo({ videoElement: localVideoRef.current });
       setVideoOn(v => !v);
-    } catch (e: any) { setError(e.message); }
+    } catch (e: any) {
+      setError(e.message);
+    }
   }, [stream, isVideoOn]);
 
+  // Toggle remote audio mute
+  const toggleAudio = useCallback(() => {
+    document.querySelectorAll('audio#remote-audio').forEach((audio: HTMLAudioElement) => {
+      audio.muted = !audio.muted;
+    });
+    setAudioOn(a => !a);
+  }, []);
+
+  // Leave session
   const leave = useCallback(async () => {
     if (!client) return;
     await client.leave().catch(() => {});
@@ -151,6 +179,7 @@ export default function VideoSessionPage() {
 
   return (
     <div className="p-4 space-y-4">
+      {/* Header */}
       <div className="flex justify-between">
         <div>
           <p>Client: {sessionInfo.client.name}</p>
@@ -159,14 +188,17 @@ export default function VideoSessionPage() {
         <p>Timp rămas: {timeLeft}</p>
       </div>
 
+      {/* Error */}
       {error && <p className="text-red-500">Eroare: {error}</p>}
 
+      {/* Video Panels */}
       <div className="flex gap-4 h-80">
+        {/* Local Video */}
         <div className="flex-1 flex flex-col">
           <h3>Tu ({auth.user.name})</h3>
           <video
             ref={localVideoRef}
-            className="flex-1 bg-black rounded"
+            className="flex-1 bg-black rounded object-cover"
             autoPlay
             playsInline
             muted
@@ -180,16 +212,7 @@ export default function VideoSessionPage() {
               {isVideoOn ? 'Oprește Video' : 'Pornește Video'}
             </button>
             <button
-              onClick={async () => {
-                if (!stream) return;
-                try {
-                  if (isAudioOn) await stream.stopAudio();
-                  else await stream.startAudio();
-                  setAudioOn(a => !a);
-                } catch (e: any) {
-                  setError(e.message);
-                }
-              }}
+              onClick={toggleAudio}
               disabled={!stream}
               className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg shadow"
             >
@@ -197,12 +220,28 @@ export default function VideoSessionPage() {
             </button>
           </div>
         </div>
+
+        {/* Remote Video */}
         <div className="flex-1 flex flex-col">
           <h3>Furnizor ({sessionInfo.provider.name})</h3>
-          <div ref={remoteRef} className="flex-1 bg-black rounded overflow-hidden relative" />
+          <video
+            ref={remoteVideoRef}
+            className="flex-1 bg-black rounded object-cover"
+            autoPlay
+            playsInline
+          />
         </div>
       </div>
-      <button onClick={leave} className="btn btn-red">Părăsește sesiunea</button>
+
+      {/* Leave Button */}
+      <div className="flex justify-end">
+        <button
+          onClick={leave}
+          className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg shadow"
+        >
+          Părăsește sesiunea
+        </button>
+      </div>
     </div>
   );
 }
