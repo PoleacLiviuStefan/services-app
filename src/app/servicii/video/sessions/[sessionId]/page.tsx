@@ -98,22 +98,37 @@ export default function VideoSessionPage() {
         await ms.startAudio();
         setAudioOn(true);
 
-        // Remote streams
+        // Remote streams: support multiple users
+        // Keep track of remote video elements
+        const remoteVideos: Record<string, HTMLVideoElement> = {};
         zmClient.on('stream-updated', async (payload: any, track: string) => {
           if (track === 'video' && remoteContainerRef.current) {
             const { userId } = payload;
+            // If already rendering this user's video, skip
+            if (remoteVideos[userId]) return;
             const videoEl = document.createElement('video');
             videoEl.autoplay = true;
             videoEl.playsInline = true;
-            remoteContainerRef.current.innerHTML = '';
-            remoteContainerRef.current.appendChild(videoEl);
+            videoEl.id = `remote-video-${userId}`;
+            // Optional: label
+            const wrapper = document.createElement('div');
+            wrapper.className = 'flex-1 bg-black rounded overflow-hidden';
+            wrapper.appendChild(videoEl);
+            remoteContainerRef.current.appendChild(wrapper);
+            remoteVideos[userId] = videoEl;
             await ms.renderVideo({ userId, videoElement: videoEl });
           }
         });
 
         zmClient.on('stream-removed', (_payload: any, track: string) => {
           if (track === 'video' && remoteContainerRef.current) {
-            remoteContainerRef.current.innerHTML = '';
+            const { userId } = _payload;
+            const videoEl = remoteVideos[userId];
+            if (videoEl) {
+              const parent = videoEl.parentElement;
+              parent?.remove();
+              delete remoteVideos[userId];
+            }
           }
         });
 
