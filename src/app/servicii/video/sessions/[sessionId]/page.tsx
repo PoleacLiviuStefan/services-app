@@ -1,5 +1,3 @@
-// File: app/(protected)/video/[sessionId]/page.tsx
-
 'use client';
 
 import React, { useEffect, useState, useCallback, useRef } from 'react';
@@ -29,8 +27,10 @@ export default function VideoSessionPage() {
   const [error, setError] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [timeLeft, setTimeLeft] = useState<string>('');
+  const [participants, setParticipants] = useState<any[]>([]);
 
   const localContainerRef = useRef<HTMLDivElement>(null);
+  const remoteAudioRef = useRef<HTMLDivElement>(null);
   const remoteContainerRef = useRef<HTMLDivElement>(null);
 
   // Fetch session info
@@ -67,76 +67,179 @@ export default function VideoSessionPage() {
   // Initialize and join Zoom session
   useEffect(() => {
     if (!sessionInfo || !auth?.user) return;
-    (async () => {
+    
+    const initializeZoom = async () => {
       try {
+        console.log('Initializing Zoom with:', {
+          sessionName: sessionInfo.sessionName,
+          userId: sessionInfo.userId,
+          userName: auth.user.name
+        });
+
         const zmClient = ZoomVideo.createClient();
         await zmClient.init('en-US', 'Global', { patchJsMedia: true });
+        
+        // Join with the correct user identity
         await zmClient.join(
           sessionInfo.sessionName,
           sessionInfo.token,
-          auth.user.name,
+          auth.user.name || 'Unknown User',
           ''
         );
+        
+        console.log('Successfully joined Zoom session');
         setClient(zmClient);
 
         const ms = zmClient.getMediaStream();
         setMediaStream(ms);
 
-        // Local video preview
+        // Set up participant tracking
+        const updateParticipants = () => {
+          const allUsers = zmClient.getAllUser();
+          console.log('Current participants:', allUsers);
+          setParticipants(allUsers);
+        };
+
+        // Initial participant list
+        updateParticipants();
+
+        // Listen for participant changes
+        zmClient.on('user-added', (payload: any) => {
+          console.log('User added:', payload);
+          updateParticipants();
+        });
+
+        zmClient.on('user-removed', (payload: any) => {
+          console.log('User removed:', payload);
+          updateParticipants();
+        });
+
+        // Local video setup
         if (localContainerRef.current) {
-          const videoEl = document.createElement('video');
-          videoEl.muted = true;
-          videoEl.autoplay = true;
-          videoEl.playsInline = true;
-          localContainerRef.current.innerHTML = '';
-          localContainerRef.current.appendChild(videoEl);
-          await ms.startVideo({ videoElement: videoEl });
-          setVideoOn(true);
+          try {
+            const videoEl = document.createElement('video');
+            videoEl.muted = true;
+            videoEl.autoplay = true;
+            videoEl.playsInline = true;
+            videoEl.style.width = '100%';
+            videoEl.style.height = '100%';
+            videoEl.style.objectFit = 'cover';
+            
+            localContainerRef.current.innerHTML = '';
+            localContainerRef.current.appendChild(videoEl);
+            
+            await ms.startVideo({ videoElement: videoEl });
+            setVideoOn(true);
+            console.log('Local video started');
+          } catch (videoError) {
+            console.warn('Failed to start local video:', videoError);
+          }
         }
 
         // Start audio
-        await ms.startAudio();
-        setAudioOn(true);
+        try {
+          await ms.startAudio();
+          setAudioOn(true);
+          console.log('Audio started');
+        } catch (audioError) {
+          console.warn('Failed to start audio:', audioError);
+        }
 
-        // Remote streams: support multiple users
-        // Keep track of remote video elements
+        // Remote streams handling
         const remoteVideos: Record<string, HTMLVideoElement> = {};
-        zmClient.on('stream-updated', async (payload: any, track: string) => {
-          if (track === 'video' && remoteContainerRef.current) {
-            const { userId } = payload;
-            // If already rendering this user's video, skip
-            if (remoteVideos[userId]) return;
-            const videoEl = document.createElement('video');
-            videoEl.autoplay = true;
-            videoEl.playsInline = true;
-            videoEl.id = `remote-video-${userId}`;
-            // Optional: label
-            const wrapper = document.createElement('div');
-            wrapper.className = 'flex-1 bg-black rounded overflow-hidden';
-            wrapper.appendChild(videoEl);
-            remoteContainerRef.current.appendChild(wrapper);
-            remoteVideos[userId] = videoEl;
-            await ms.renderVideo({ userId, videoElement: videoEl });
+        
+        zmClient.on('stream-updated', async (payload: any) => {
+          console.log('Stream updated:', payload);
+          const { userId, action, type } = payload;
+          
+          if (type === 'video' && action === 'Start') {
+            if (remoteContainerRef.current && !remoteVideos[userId]) {
+              try {
+                const videoEl = document.createElement('video');
+                videoEl.autoplay = true;
+                videoEl.playsInline = true;
+                videoEl.style.width = '100%';
+                videoEl.style.height = '100%';
+                videoEl.style.objectFit = 'cover';
+                videoEl.id = `remote-video-${userId}`;
+                
+                const wrapper = document.createElement('div');
+                wrapper.className = 'flex-1 bg-black rounded overflow-hidden';
+                wrapper.appendChild(videoEl);
+                
+                remoteContainerRef.current.appendChild(wrapper);
+                remoteVideos[userId] = videoEl;
+                
+                await ms.renderVideo(videoEl, userId);
+                console.log('Remote video rendered for user:', userId);
+              } catch (renderError) {
+                console.error('Failed to render remote video:', renderError);
+              }
+            }
           }
-        });
-
-        zmClient.on('stream-removed', (_payload: any, track: string) => {
-          if (track === 'video' && remoteContainerRef.current) {
-            const { userId } = _payload;
+          
+          if (type === 'video' && action === 'Stop') {
             const videoEl = remoteVideos[userId];
-            if (videoEl) {
-              const parent = videoEl.parentElement;
-              parent?.remove();
+            if (videoEl && videoEl.parentElement) {
+              videoEl.parentElement.remove();
               delete remoteVideos[userId];
+              console.log('Remote video removed for user:', userId);
+            }
+          }
+          
+          if (type === 'audio' && action === 'Start') {
+            if (remoteAudioRef.current) {
+              try {
+                const audioEl = await ms.attachAudio(userId);
+                if (audioEl) {
+                  audioEl.autoplay = true;
+                  remoteAudioRef.current.appendChild(audioEl);
+                  console.log('Remote audio attached for user:', userId);
+                }
+              } catch (audioError) {
+                console.error('Failed to attach remote audio:', audioError);
+              }
             }
           }
         });
 
+        // Handle user leaving
+        zmClient.on('user-removed', (payload: any) => {
+          const { userId } = payload;
+          
+          // Clean up video
+          const videoEl = remoteVideos[userId];
+          if (videoEl && videoEl.parentElement) {
+            videoEl.parentElement.remove();
+            delete remoteVideos[userId];
+          }
+          
+          // Clean up audio
+          if (remoteAudioRef.current) {
+            const audioElements = remoteAudioRef.current.querySelectorAll('audio');
+            audioElements.forEach(audio => {
+              if (audio.id && audio.id.includes(userId)) {
+                audio.remove();
+              }
+            });
+          }
+        });
+
       } catch (e: any) {
-        console.error('Zoom init error:', e);
-        setError(e.message);
+        console.error('Zoom initialization error:', e);
+        setError(`Eroare la conectarea la sesiune: ${e.message}`);
       }
-    })();
+    };
+
+    initializeZoom();
+
+    // Cleanup function
+    return () => {
+      if (client) {
+        client.leave().catch(console.error);
+        client.destroy();
+      }
+    };
   }, [sessionInfo, auth]);
 
   const toggleVideo = useCallback(async () => {
@@ -144,72 +247,131 @@ export default function VideoSessionPage() {
     try {
       if (isVideoOn) {
         await mediaStream.stopVideo();
+        setVideoOn(false);
       } else {
         const videoEl = localContainerRef.current.querySelector('video');
         if (videoEl) {
           await mediaStream.startVideo({ videoElement: videoEl });
+          setVideoOn(true);
         }
       }
-      setVideoOn(v => !v);
     } catch (e: any) {
-      setError(e.message);
+      console.error('Toggle video error:', e);
+      setError(`Eroare video: ${e.message}`);
     }
   }, [mediaStream, isVideoOn]);
 
   const toggleAudio = useCallback(async () => {
     if (!mediaStream) return;
     try {
-      if (isAudioOn) await mediaStream.stopAudio();
-      else await mediaStream.startAudio();
-      setAudioOn(a => !a);
+      if (isAudioOn) {
+        await mediaStream.stopAudio();
+        setAudioOn(false);
+      } else {
+        await mediaStream.startAudio();
+        setAudioOn(true);
+      }
     } catch (e: any) {
-      setError(e.message);
+      console.error('Toggle audio error:', e);
+      setError(`Eroare audio: ${e.message}`);
     }
   }, [mediaStream, isAudioOn]);
 
   const leave = useCallback(async () => {
     if (!client) return;
-    await client.leave().catch(() => {});
-    client.destroy();
-    setClient(null);
-    setMediaStream(null);
-    setSessionInfo(null);
+    try {
+      await client.leave();
+      client.destroy();
+      setClient(null);
+      setMediaStream(null);
+      setSessionInfo(null);
+      // Redirect or show success message
+      window.location.href = '/dashboard';
+    } catch (e) {
+      console.error('Error leaving session:', e);
+    }
   }, [client]);
+
+  // Determine if current user is provider or client
+  const isProvider = sessionInfo && auth?.user && sessionInfo.provider.id === auth.user.id;
+  const otherParticipant = isProvider ? sessionInfo?.client : sessionInfo?.provider;
 
   if (status === 'loading' || loading) return <p>Se încarcă sesiunea...</p>;
   if (!auth?.user) return <p>Unauthorized</p>;
+  if (error) return <p className="text-red-500">Eroare: {error}</p>;
   if (!sessionInfo) return <p>Se pregătește sesiunea...</p>;
 
   return (
     <div className="p-4 space-y-4">
-      <div className="flex justify-between">
+      <div className="flex justify-between items-center">
         <div>
-          <p>Client: {sessionInfo.client.name}</p>
-          <p>Furnizor: {sessionInfo.provider.name}</p>
+          <p><strong>Client:</strong> {sessionInfo.client.name}</p>
+          <p><strong>Furnizor:</strong> {sessionInfo.provider.name}</p>
+          <p><strong>Participanți activi:</strong> {participants.length}</p>
         </div>
-        <p>Timp rămas: {timeLeft}</p>
+        <div className="text-right">
+          <p className="text-lg font-semibold">Timp rămas: {timeLeft}</p>
+          <p className="text-sm text-gray-600">
+            Sesiune: {new Date(sessionInfo.startDate).toLocaleTimeString()} - {new Date(sessionInfo.endDate).toLocaleTimeString()}
+          </p>
+        </div>
       </div>
-      {error && <p className="text-red-500">Eroare: {error}</p>}
-      <div className="flex gap-4 h-80">
+
+      <div className="flex gap-4 h-96">
+        {/* Local video */}
         <div className="flex-1 flex flex-col">
-          <h3>Tu ({auth.user.name})</h3>
+          <h3 className="mb-2 font-semibold">
+            Tu ({auth.user.name}) {isProvider ? '(Furnizor)' : '(Client)'}
+          </h3>
           <div ref={localContainerRef} className="flex-1 bg-black rounded overflow-hidden" />
           <div className="mt-2 flex space-x-2">
-            <button onClick={toggleVideo} disabled={!mediaStream} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow">
+            <button 
+              onClick={toggleVideo} 
+              disabled={!mediaStream} 
+              className={`px-4 py-2 rounded-lg shadow text-white ${
+                isVideoOn ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'
+              }`}
+            >
               {isVideoOn ? 'Oprește Video' : 'Pornește Video'}
             </button>
-            <button onClick={toggleAudio} disabled={!mediaStream} className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg shadow">
+            <button 
+              onClick={toggleAudio} 
+              disabled={!mediaStream} 
+              className={`px-4 py-2 rounded-lg shadow text-white ${
+                isAudioOn ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'
+              }`}
+            >
               {isAudioOn ? 'Mute Audio' : 'Unmute Audio'}
             </button>
           </div>
         </div>
+
+        {/* Remote video */}
         <div className="flex-1 flex flex-col">
-          <h3>Furnizor ({sessionInfo.provider.name})</h3>
-          <div ref={remoteContainerRef} className="flex-1 bg-black rounded overflow-hidden" />
+          <h3 className="mb-2 font-semibold">
+            {otherParticipant?.name} {isProvider ? '(Client)' : '(Furnizor)'}
+          </h3>
+          <div ref={remoteContainerRef} className="flex-1 bg-gray-800 rounded overflow-hidden flex items-center justify-center">
+            {participants.length <= 1 && (
+              <p className="text-white text-center">
+                Așteptăm ca {otherParticipant?.name} să se conecteze...
+              </p>
+            )}
+          </div>
         </div>
       </div>
-      <div className="flex justify-end">
-        <button onClick={leave} className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg shadow">
+
+      {/* Hidden audio container for remote audio */}
+      <div ref={remoteAudioRef} className="hidden" />
+
+      <div className="flex justify-between items-center">
+        <div className="text-sm text-gray-600">
+          Sesiune ID: {sessionId}
+        </div>
+        <button 
+          onClick={leave} 
+          className="px-6 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg shadow font-semibold"
+        >
           Părăsește sesiunea
         </button>
       </div>

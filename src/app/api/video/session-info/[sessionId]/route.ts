@@ -40,7 +40,6 @@ export async function GET(
   const record = await prisma.consultingSession.findFirst({
     where: {
       id: sessionId,
-
     },
     select: {
       providerId:      true,
@@ -57,16 +56,28 @@ export async function GET(
     return NextResponse.json({ error: 'Nicio sesiune activă.' }, { status: 404 });
   }
 
+  // Get provider's user ID
+  const providerRelation = await prisma.provider.findUnique({
+    where: { id: record.providerId },
+    select: { userId: true }
+  });
+  console.log('[Debug] providerRelation:', providerRelation);
+  if (!providerRelation) {
+    console.log('[Debug] Missing provider relation');
+    return NextResponse.json(
+      { error: 'Provider data missing.' },
+      { status: 500 }
+    );
+  }
 
-  // Authorization
-  const isCurrentUserProvider = await prisma.provider.findUnique({
-  where: { id: record.providerId },
-  select: { id:true,
-    userId: true }
-});
-console.log('[Debug] isCurrentUserProvider:', isCurrentUserProvider);
-console.log("[Debug] record.clientId:", record.providerId);
-  if (!isCurrentUserProvider && record.clientId !== currentUserId) {
+  // Authorization - check if current user is either the provider or the client
+  const isProvider = providerRelation.userId === currentUserId;
+  const isClient = record.clientId === currentUserId;
+  
+  console.log('[Debug] isProvider:', isProvider, 'isClient:', isClient);
+  console.log('[Debug] providerUserId:', providerRelation.userId, 'clientId:', record.clientId);
+
+  if (!isProvider && !isClient) {
     console.log('[Debug] Unauthorized user');
     return NextResponse.json(
       { error: 'Nu faci parte din această sesiune.' },
@@ -83,39 +94,43 @@ console.log("[Debug] record.clientId:", record.providerId);
       { status: 500 }
     );
   }
-  const tokensMap = record.zoomTokens as Record<string,string>;
+  const tokensMap = record.zoomTokens as Record<string, string>;
   console.log('[Debug] tokensMap:', tokensMap);
 
-  const token = tokensMap[isCurrentUserProvider.id];
-  console.log('[Debug] token for user:', token);
+  // Get the correct token for the current user
+  // For providers, use the provider ID as key
+  // For clients, use the client ID (user ID) as key
+  let tokenKey: string;
+  if (isProvider) {
+    tokenKey = record.providerId;
+  } else {
+    tokenKey = currentUserId; // client ID
+  }
+
+  const token = tokensMap[tokenKey];
+  console.log('[Debug] tokenKey:', tokenKey, 'token found:', !!token);
   if (!token) {
-    console.log('[Debug] No token for user');
+    console.log('[Debug] No token for user, available keys:', Object.keys(tokensMap));
     return NextResponse.json(
       { error: 'Token Zoom indisponibil.' },
       { status: 500 }
     );
   }
 
-    // Fetch provider's User record and existing client's User record
-  // record.providerId refers to Provider.id, not User.id
-  const providerRelation = await prisma.provider.findUnique({
-    where: { id: record.providerId },
-    select: { userId: true }
-  });
-  console.log('[Debug] providerRelation:', providerRelation);
-  if (!providerRelation) {
-    console.log('[Debug] Missing provider relation');
-    return NextResponse.json(
-      { error: 'Provider data missing.' },
-      { status: 500 }
-    );
-  }
-  const [prUser, clUser] = await Promise.all([
-    prisma.user.findUnique({ where: { id: providerRelation.userId }, select: { id: true, name: true } }),
-    prisma.user.findUnique({ where: { id: record.clientId       }, select: { id: true, name: true } }),
+  // Fetch both user records
+  const [providerUser, clientUser] = await Promise.all([
+    prisma.user.findUnique({ 
+      where: { id: providerRelation.userId }, 
+      select: { id: true, name: true } 
+    }),
+    prisma.user.findUnique({ 
+      where: { id: record.clientId }, 
+      select: { id: true, name: true } 
+    }),
   ]);
-  console.log('[Debug] prUser:', prUser, 'clUser:', clUser);
-  if (!prUser || !clUser) {
+  
+  console.log('[Debug] providerUser:', providerUser, 'clientUser:', clientUser);
+  if (!providerUser || !clientUser) {
     console.log('[Debug] Missing user data for provider or client');
     return NextResponse.json(
       { error: 'User data missing.' },
@@ -130,8 +145,8 @@ console.log("[Debug] record.clientId:", record.providerId);
     userId:      currentUserId,
     startDate:   record.startDate!.toISOString(),
     endDate:     record.endDate!.toISOString(),
-    provider:    { id: prUser.id, name: prUser.name! },
-    client:      { id: clUser.id, name: clUser.name! },
+    provider:    { id: providerUser.id, name: providerUser.name! },
+    client:      { id: clientUser.id, name: clientUser.name! },
   };
   console.log('[Debug] response:', response);
 
