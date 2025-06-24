@@ -1,4 +1,3 @@
-// File: app/api/calendly/user/route.ts
 export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
@@ -10,6 +9,7 @@ export async function GET(req: NextRequest) {
     // 1) Extragem providerId (= userId al provider-ului) din query
     const { searchParams } = new URL(req.url);
     const providerId = searchParams.get("providerId");
+    console.log('[Debug] providerId param:', providerId);
     if (!providerId) {
       return NextResponse.json(
         { error: "Lipsește parametrul providerId în query." },
@@ -26,6 +26,7 @@ export async function GET(req: NextRequest) {
         calendlyUserUri:      true,
       },
     });
+    console.log('[Debug] dbPr record:', dbPr);
     if (
       !dbPr ||
       !dbPr.calendlyAccessToken ||
@@ -46,6 +47,7 @@ export async function GET(req: NextRequest) {
 
     // 3) Helper de refresh (va fi chemat doar pe 401)
     async function doRefresh(): Promise<boolean> {
+      console.log('[Debug] Attempting token refresh');
       if (!refreshToken) return false;
       const params = new URLSearchParams({
         grant_type:    "refresh_token",
@@ -58,8 +60,10 @@ export async function GET(req: NextRequest) {
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: params.toString(),
       });
+      console.log('[Debug] Refresh response status:', r.status);
       if (!r.ok) return false;
       const j = await r.json();
+      console.log('[Debug] Refresh response json:', j);
       token        = j.access_token;
       refreshToken = j.refresh_token;
       // Salvăm în DB tokenurile noi
@@ -88,14 +92,19 @@ export async function GET(req: NextRequest) {
         }
       );
 
+    console.log('[Debug] Fetching event_types with token');
     let evtRes = await fetchEventTypes();
+    console.log('[Debug] Initial event_types status:', evtRes.status);
     if (evtRes.status === 401) {
       const refreshed = await doRefresh();
+      console.log('[Debug] Token refreshed:', refreshed);
       if (refreshed) {
         evtRes = await fetchEventTypes();
+        console.log('[Debug] Retry event_types status:', evtRes.status);
       }
     }
     const evtJson = await evtRes.json();
+    console.log('[Debug] event_types response json:', evtJson);
 
     if (
       !evtRes.ok ||
@@ -124,6 +133,7 @@ export async function GET(req: NextRequest) {
       evtJson.collection.find((et: any) => et.active) ||
       evtJson.collection[0];
 
+    console.log('[Debug] firstActive:', firstActive);
     if (!firstActive.scheduling_url) {
       return NextResponse.json(
         { error: "Nu am găsit scheduling_url valid." },

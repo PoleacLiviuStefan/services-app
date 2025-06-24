@@ -16,72 +16,56 @@ interface SessionInfo {
 
 export default function VideoSessionPage() {
   const { data: auth, status } = useSession();
-  const params = useParams();
-  const sessionId = params?.sessionId;
+  const { sessionId } = useParams();
 
   const [sessionInfo, setSessionInfo] = useState<SessionInfo | null>(null);
-  const [client, setClient]     = useState<any>(null);
-  const [stream, setStream]     = useState<any>(null);
-  const [isVideoOn, setVideoOn] = useState(false);
-  const [isAudioOn, setAudioOn] = useState(false);
-  const [error, setError]       = useState<string>('');
-  const [loading, setLoading]   = useState(false);
-  const [timeLeft, setTimeLeft] = useState<string>('');
+  const [client, setClient]           = useState<any>(null);
+  const [stream, setStream]           = useState<any>(null);
+  const [isVideoOn, setVideoOn]       = useState(false);
+  const [isAudioOn, setAudioOn]       = useState(false);
+  const [error, setError]             = useState<string>('');
+  const [loading, setLoading]         = useState(false);
+  const [timeLeft, setTimeLeft]       = useState<string>('');
 
-  // refs pentru elemente video și container remote
   const localVideoRef = useRef<HTMLVideoElement>(null);
-  const remoteContainerRef = useRef<HTMLDivElement>(null);
+  const remoteRef     = useRef<HTMLDivElement>(null);
 
   // Fetch session info
-  const fetchSession = useCallback(async () => {
+  useEffect(() => {
     if (!sessionId) return;
     setLoading(true);
-    try {
-      const res = await fetch(`/api/video/session-info/${sessionId}`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || res.statusText);
-      setSessionInfo(data);
-    } catch (e: any) {
-      setError(e.message);
-    } finally {
-      setLoading(false);
-    }
+    fetch(`/api/video/session-info/${sessionId}`)
+      .then(res => res.json().then(data => {
+        if (!res.ok) throw new Error(data.error || res.statusText);
+        setSessionInfo(data);
+      }))
+      .catch(e => setError(e.message))
+      .finally(() => setLoading(false));
   }, [sessionId]);
 
-  useEffect(() => {
-    fetchSession();
-  }, [fetchSession]);
-
-  // Countdown timer
+  // Countdown
   useEffect(() => {
     if (!sessionInfo?.endDate) return;
-    const timer = setInterval(() => {
-      const now = Date.now();
-      const end = new Date(sessionInfo.endDate).getTime();
-      const diff = end - now;
-      if (diff <= 0) {
-        setTimeLeft('00:00');
-        clearInterval(timer);
-        return;
-      }
-      const mins = Math.floor(diff / 60000).toString().padStart(2, '0');
-      const secs = Math.floor((diff % 60000) / 1000).toString().padStart(2, '0');
-      setTimeLeft(`${mins}:${secs}`);
+    const interval = setInterval(() => {
+      const diff = new Date(sessionInfo.endDate).getTime() - Date.now();
+      if (diff <= 0) { setTimeLeft('00:00'); clearInterval(interval); return; }
+      const m = String(Math.floor(diff / 60000)).padStart(2,'0');
+      const s = String(Math.floor((diff % 60000)/1000)).padStart(2,'0');
+      setTimeLeft(`${m}:${s}`);
     }, 1000);
-    return () => clearInterval(timer);
+    return () => clearInterval(interval);
   }, [sessionInfo]);
 
-  // Initialize Zoom + debug preview
+  // Initialize Zoom
   useEffect(() => {
-    if (!sessionInfo) return;
+    if (!sessionInfo || !auth?.user) return;
     (async () => {
       try {
-        // solicită permisiuni media
-        const rawStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-        // atașează fluxul brut pentru test în video element
+        // Local preview
+        const raw = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
         if (localVideoRef.current) {
-          localVideoRef.current.srcObject = rawStream;
-          localVideoRef.current.play().catch(console.warn);
+          localVideoRef.current.srcObject = raw;
+          await localVideoRef.current.play();
         }
 
         const ZoomMod = await import('@zoom/videosdk');
@@ -89,125 +73,107 @@ export default function VideoSessionPage() {
         const c = ZoomVideo.createClient();
         await c.init('en-US', 'Global', { patchJsMedia: true });
 
-        // apel corect: token, topic, userName
+        // Join Zoom session: signature (JWT), sessionName (topic), userName
         await c.join(
-          sessionInfo.token,
-          sessionInfo.sessionName,
-          auth?.user?.name || sessionInfo.userId
+          sessionInfo.sessionName, // topic (must be <200 chars)
+          sessionInfo.token,       // signature (JWT)
+          auth.user.name || sessionInfo.userId // userName
+         || sessionInfo.userId
         );
 
         setClient(c);
         const ms = c.getMediaStream();
         setStream(ms);
 
-        // curăță video brut după inițializare
-        if (localVideoRef.current) {
-          localVideoRef.current.srcObject = null;
-        }
+        // Remove preview
+        if (localVideoRef.current) localVideoRef.current.srcObject = null;
 
-        // pornește video Zoom
-        if (!localVideoRef.current) throw new Error('Local video element not found');
-        await ms.startVideo({ videoElement: localVideoRef.current });
+        // Start video & audio
+        await ms.startVideo({ videoElement: localVideoRef.current! });
         setVideoOn(true);
         await ms.startAudio();
         setAudioOn(true);
 
-        // evenimente stream remote
-        c.on('stream-updated', async (p: any, t: string) => {
+        // Remote streams
+        c.on('stream-updated', async (p:any, t:string) => {
           if (t !== 'video') return;
           const el = await ms.attachVideo(p.userId, 2);
           el.id = `remote-${p.userId}`;
-          const container = remoteContainerRef.current;
-          if (container) container.appendChild(el);
+          remoteRef.current?.appendChild(el);
         });
-        c.on('stream-removed', (p: any, t: string) => {
+        c.on('stream-removed', (p:any, t:string) => {
           if (t !== 'video') return;
-          const container = remoteContainerRef.current;
-          container?.querySelector(`#remote-${p.userId}`)?.remove();
+          remoteRef.current?.querySelector(`#remote-${p.userId}`)?.remove();
         });
-      } catch (e: any) {
-        console.error(e);
+      } catch (e:any) {
+        console.error('Zoom init error:', e);
         setError(e.message);
       }
     })();
   }, [sessionInfo, auth]);
 
   const toggleVideo = useCallback(async () => {
-    if (!stream || !localVideoRef.current) return;
-    if (isVideoOn) {
-      await stream.stopVideo();
-      setVideoOn(false);
-    } else {
-      await stream.startVideo({ videoElement: localVideoRef.current });
-      setVideoOn(true);
-    }
+    if (!stream) return;
+    try {
+      if (isVideoOn) await stream.stopVideo();
+      else await stream.startVideo({ videoElement: localVideoRef.current! });
+      setVideoOn(v => !v);
+    } catch(e:any) { setError(e.message); }
   }, [stream, isVideoOn]);
 
   const toggleAudio = useCallback(async () => {
     if (!stream) return;
-    if (isAudioOn) {
-      await stream.stopAudio();
-      setAudioOn(false);
-    } else {
-      await stream.startAudio();
-      setAudioOn(true);
-    }
+    try {
+      if (isAudioOn) await stream.stopAudio();
+      else await stream.startAudio();
+      setAudioOn(a => !a);
+    } catch(e:any) { setError(e.message); }
   }, [stream, isAudioOn]);
 
   const leave = useCallback(async () => {
     if (!client) return;
-    await client.leave();
+    await client.leave().catch(()=>{});
     client.destroy();
     setClient(null);
     setStream(null);
     setSessionInfo(null);
   }, [client]);
 
-  if (status === 'loading' || loading) return <p>Se încarcă sesiunea video...</p>;
+  if (status === 'loading' || loading) return <p>Se încarcă sesiunea...</p>;
   if (!auth?.user) return <p>Unauthorized</p>;
-  if (!sessionId) return <p>ID sesiune invalid.</p>;
   if (!sessionInfo) return <p>Se pregătește sesiunea...</p>;
 
   return (
     <div className="p-4 space-y-4">
-      <div className="flex flex-col sm:flex-row sm:justify-between">
+      <div className="flex justify-between">
         <div>
-          <p className="font-medium">Client: {sessionInfo.client.name}</p>
-          <p className="font-medium">Furnizor: {sessionInfo.provider.name}</p>
+          <p>Client: {sessionInfo.client.name}</p>
+          <p>Furnizor: {sessionInfo.provider.name}</p>
         </div>
-        <p className="text-lg font-semibold">Timp rămas: {timeLeft}</p>
+        <p>Timp rămas: {timeLeft}</p>
       </div>
 
-      {/* afișare eroare */}
       {error && <p className="text-red-500">Eroare: {error}</p>}
 
-      <div className="flex flex-col md:flex-row gap-4">
+      <div className="flex gap-4">
         <div className="flex-1">
-          <h3 className="font-semibold mb-2">Tu ({auth.user.name})</h3>
-          <video
-            ref={localVideoRef}
-            className="w-full h-[350px] bg-black rounded"
-            autoPlay
-            playsInline
-            muted
-          />
-          <div className="mt-2 flex space-x-2">
-            <button onClick={toggleVideo} className="px-4 py-2 bg-blue-600 text-white rounded">
+          <h3>Tu ({auth.user.name})</h3>
+          <video ref={localVideoRef} className="w-full h-80 bg-black rounded" autoPlay playsInline muted />
+          <div className="mt-2 flex gap-2">
+            <button onClick={toggleVideo} disabled={!stream} className="btn">
               {isVideoOn ? 'Oprește Video' : 'Pornește Video'}
             </button>
-            <button onClick={toggleAudio} className="px-4 py-2 bg-blue-600 text-white rounded">
+            <button onClick={toggleAudio} disabled={!stream} className="btn">
               {isAudioOn ? 'Mute Microfon' : 'Unmute Microfon'}
             </button>
           </div>
         </div>
         <div className="flex-1">
-          <h3 className="font-semibold mb-2">Furnizor ({sessionInfo.provider.name})</h3>
-          <div ref={remoteContainerRef} className="w-full h-[350px] bg-black rounded overflow-auto" />
+          <h3>Furnizor ({sessionInfo.provider.name})</h3>
+          <div ref={remoteRef} className="w-full h-80 bg-black rounded overflow-auto" />
         </div>
       </div>
-      <button onClick={leave} className="px-4 py-2 bg-red-600 text-white rounded">
-        Părăsește sesiunea
-      </button>
+      <button onClick={leave} className="btn btn-red">Părăsește sesiunea</button>
     </div>
   );
 }
