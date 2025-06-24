@@ -62,7 +62,7 @@ export default function VideoSessionPage() {
     (async () => {
       try {
         // Local preview
-        const raw = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        const raw = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
         if (localVideoRef.current) {
           localVideoRef.current.srcObject = raw;
           await localVideoRef.current.play();
@@ -73,12 +73,11 @@ export default function VideoSessionPage() {
         const c = ZoomVideo.createClient();
         await c.init('en-US', 'Global', { patchJsMedia: true });
 
-        // Join Zoom session: signature (JWT), sessionName (topic), userName
+        // Join Zoom session: signature, topic, userName
         await c.join(
-          sessionInfo.sessionName, // topic (must be <200 chars)
-          sessionInfo.token,       // signature (JWT)
-          auth.user.name || sessionInfo.userId // userName
-         || sessionInfo.userId
+          sessionInfo.token,
+          sessionInfo.sessionName,
+          auth.user.name
         );
 
         setClient(c);
@@ -88,24 +87,38 @@ export default function VideoSessionPage() {
         // Remove preview
         if (localVideoRef.current) localVideoRef.current.srcObject = null;
 
-        // Start video & audio
+        // Start local video
         await ms.startVideo({ videoElement: localVideoRef.current! });
         setVideoOn(true);
-        await ms.startAudio();
-        setAudioOn(true);
 
-        // Remote streams
-        c.on('stream-updated', async (p:any, t:string) => {
-          if (t !== 'video') return;
-          const el = await ms.attachVideo(p.userId, 2);
-          el.id = `remote-${p.userId}`;
-          remoteRef.current?.appendChild(el);
+        // Attach remote streams
+        c.on('stream-updated', async (p: any, t: string) => {
+          if (t === 'video') {
+            const vidEl = await ms.attachVideo(p.userId, 2);
+            vidEl.id = `remote-video-${p.userId}`;
+            vidEl.autoplay = true;
+            vidEl.playsInline = true;
+            vidEl.className = 'w-full h-full';
+            remoteRef.current?.appendChild(vidEl);
+          }
+          if (t === 'audio') {
+            const audEl = await ms.attachAudio(p.userId);
+            audEl.id = `remote-audio-${p.userId}`;
+            remoteRef.current?.appendChild(audEl);
+            setAudioOn(true);
+          }
         });
-        c.on('stream-removed', (p:any, t:string) => {
-          if (t !== 'video') return;
-          remoteRef.current?.querySelector(`#remote-${p.userId}`)?.remove();
+
+        c.on('stream-removed', (p: any, t: string) => {
+          if (t === 'video') {
+            remoteRef.current?.querySelector(`#remote-video-${p.userId}`)?.remove();
+          }
+          if (t === 'audio') {
+            remoteRef.current?.querySelector(`#remote-audio-${p.userId}`)?.remove();
+            setAudioOn(false);
+          }
         });
-      } catch (e:any) {
+      } catch (e: any) {
         console.error('Zoom init error:', e);
         setError(e.message);
       }
@@ -118,21 +131,12 @@ export default function VideoSessionPage() {
       if (isVideoOn) await stream.stopVideo();
       else await stream.startVideo({ videoElement: localVideoRef.current! });
       setVideoOn(v => !v);
-    } catch(e:any) { setError(e.message); }
+    } catch (e: any) { setError(e.message); }
   }, [stream, isVideoOn]);
-
-  const toggleAudio = useCallback(async () => {
-    if (!stream) return;
-    try {
-      if (isAudioOn) await stream.stopAudio();
-      else await stream.startAudio();
-      setAudioOn(a => !a);
-    } catch(e:any) { setError(e.message); }
-  }, [stream, isAudioOn]);
 
   const leave = useCallback(async () => {
     if (!client) return;
-    await client.leave().catch(()=>{});
+    await client.leave().catch(() => {});
     client.destroy();
     setClient(null);
     setStream(null);
@@ -155,22 +159,17 @@ export default function VideoSessionPage() {
 
       {error && <p className="text-red-500">Eroare: {error}</p>}
 
-      <div className="flex gap-4">
-        <div className="flex-1">
+      <div className="flex gap-4 h-80">
+        <div className="flex-1 flex flex-col">
           <h3>Tu ({auth.user.name})</h3>
-          <video ref={localVideoRef} className="w-full h-80 bg-black rounded" autoPlay playsInline muted />
-          <div className="mt-2 flex gap-2">
-            <button onClick={toggleVideo} disabled={!stream} className="btn">
-              {isVideoOn ? 'Oprește Video' : 'Pornește Video'}
-            </button>
-            <button onClick={toggleAudio} disabled={!stream} className="btn">
-              {isAudioOn ? 'Mute Microfon' : 'Unmute Microfon'}
-            </button>
-          </div>
+          <video ref={localVideoRef} className="flex-1 bg-black rounded" autoPlay playsInline muted />
+          <button onClick={toggleVideo} disabled={!stream} className="btn mt-2">
+            {isVideoOn ? 'Oprește Video' : 'Pornește Video'}
+          </button>
         </div>
-        <div className="flex-1">
+        <div className="flex-1 flex flex-col">
           <h3>Furnizor ({sessionInfo.provider.name})</h3>
-          <div ref={remoteRef} className="w-full h-80 bg-black rounded overflow-auto" />
+          <div ref={remoteRef} className="flex-1 bg-black rounded overflow-hidden relative" />
         </div>
       </div>
       <button onClick={leave} className="btn btn-red">Părăsește sesiunea</button>
