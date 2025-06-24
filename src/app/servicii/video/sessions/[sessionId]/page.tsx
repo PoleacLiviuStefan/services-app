@@ -22,8 +22,8 @@ export default function VideoSessionPage() {
   const [client, setClient]           = useState<any>(null);
   const [stream, setStream]           = useState<any>(null);
   const [isVideoOn, setVideoOn]       = useState(false);
-  const [isAudioOn, setAudioOn]       = useState(false);
   const [error, setError]             = useState<string>('');
+  const [isAudioOn, setAudioOn]       = useState(false);
   const [loading, setLoading]         = useState(false);
   const [timeLeft, setTimeLeft]       = useState<string>('');
 
@@ -74,10 +74,12 @@ export default function VideoSessionPage() {
         await c.init('en-US', 'Global', { patchJsMedia: true });
 
         // Join Zoom session: signature, topic, userName
+        // Corrected join order: topic, signature, userName
+        console.log('Zoom join -> topic:', sessionInfo.sessionName, 'token:', sessionInfo.token, 'user:', auth.user.name);
         await c.join(
-          sessionInfo.token,
-          sessionInfo.sessionName,
-          auth.user.name
+          sessionInfo.sessionName,  // topic (<=200 chars)
+          sessionInfo.token,        // signature (JWT)
+          auth.user.name           // userName
         );
 
         setClient(c);
@@ -91,31 +93,31 @@ export default function VideoSessionPage() {
         await ms.startVideo({ videoElement: localVideoRef.current! });
         setVideoOn(true);
 
-        // Attach remote streams
-        c.on('stream-updated', async (p: any, t: string) => {
-          if (t === 'video') {
-            const vidEl = await ms.attachVideo(p.userId, 2);
-            vidEl.id = `remote-video-${p.userId}`;
-            vidEl.autoplay = true;
-            vidEl.playsInline = true;
-            vidEl.className = 'w-full h-full';
-            remoteRef.current?.appendChild(vidEl);
+        // Attach remote streams using renderVideo method
+        const containerId = `remote-container-${sessionId}`;
+        if (remoteRef.current) {
+          remoteRef.current.id = containerId;
+        }
+        c.on('stream-updated', async (payload: any, type: string) => {
+          if (type === 'video') {
+            // Render remote video into container
+            ms.renderVideo({ userId: payload.userId, tagId: containerId });
           }
-          if (t === 'audio') {
-            const audEl = await ms.attachAudio(p.userId);
-            audEl.id = `remote-audio-${p.userId}`;
-            remoteRef.current?.appendChild(audEl);
-            setAudioOn(true);
+          if (type === 'audio') {
+            // Attach remote audio
+            const audioEl = await ms.attachAudio(payload.userId);
+            audioEl.id = `remote-audio-${payload.userId}`;
+            remoteRef.current?.appendChild(audioEl);
           }
         });
 
-        c.on('stream-removed', (p: any, t: string) => {
-          if (t === 'video') {
-            remoteRef.current?.querySelector(`#remote-video-${p.userId}`)?.remove();
+        c.on('stream-removed', (payload: any, type: string) => {
+          if (type === 'video') {
+            // Clear container
+            remoteRef.current!.innerHTML = '';
           }
-          if (t === 'audio') {
-            remoteRef.current?.querySelector(`#remote-audio-${p.userId}`)?.remove();
-            setAudioOn(false);
+          if (type === 'audio') {
+            remoteRef.current?.querySelector(`#remote-audio-${payload.userId}`)?.remove();
           }
         });
       } catch (e: any) {
@@ -123,13 +125,13 @@ export default function VideoSessionPage() {
         setError(e.message);
       }
     })();
-  }, [sessionInfo, auth]);
+  }, [sessionInfo, auth, sessionId]);
 
   const toggleVideo = useCallback(async () => {
-    if (!stream) return;
+    if (!stream || !localVideoRef.current) return;
     try {
       if (isVideoOn) await stream.stopVideo();
-      else await stream.startVideo({ videoElement: localVideoRef.current! });
+      else await stream.startVideo({ videoElement: localVideoRef.current });
       setVideoOn(v => !v);
     } catch (e: any) { setError(e.message); }
   }, [stream, isVideoOn]);
@@ -162,10 +164,38 @@ export default function VideoSessionPage() {
       <div className="flex gap-4 h-80">
         <div className="flex-1 flex flex-col">
           <h3>Tu ({auth.user.name})</h3>
-          <video ref={localVideoRef} className="flex-1 bg-black rounded" autoPlay playsInline muted />
-          <button onClick={toggleVideo} disabled={!stream} className="btn mt-2">
-            {isVideoOn ? 'Oprește Video' : 'Pornește Video'}
-          </button>
+          <video
+            ref={localVideoRef}
+            className="flex-1 bg-black rounded"
+            autoPlay
+            playsInline
+            muted
+          />
+          <div className="mt-2 flex space-x-2">
+            <button
+              onClick={toggleVideo}
+              disabled={!stream}
+              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shadow"
+            >
+              {isVideoOn ? 'Oprește Video' : 'Pornește Video'}
+            </button>
+            <button
+              onClick={async () => {
+                if (!stream) return;
+                try {
+                  if (isAudioOn) await stream.stopAudio();
+                  else await stream.startAudio();
+                  setAudioOn(a => !a);
+                } catch (e: any) {
+                  setError(e.message);
+                }
+              }}
+              disabled={!stream}
+              className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg shadow"
+            >
+              {isAudioOn ? 'Mute Audio' : 'Unmute Audio'}
+            </button>
+          </div>
         </div>
         <div className="flex-1 flex flex-col">
           <h3>Furnizor ({sessionInfo.provider.name})</h3>
