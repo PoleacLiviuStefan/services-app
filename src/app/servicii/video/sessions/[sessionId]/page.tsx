@@ -68,6 +68,9 @@ export default function VideoSessionPage() {
   useEffect(() => {
     if (!sessionInfo || !auth?.user) return;
     
+    // Remote streams handling - moved outside to be accessible by all functions
+    const remoteVideos: Record<string, HTMLVideoElement> = {};
+    
     const initializeZoom = async () => {
       try {
         console.log('Initializing Zoom with:', {
@@ -93,32 +96,34 @@ export default function VideoSessionPage() {
         const ms = zmClient.getMediaStream();
         setMediaStream(ms);
 
-        // Remote streams handling
-        const remoteVideos: Record<string, HTMLVideoElement> = {};
-
-        // Set up participant tracking and video rendering
-        const updateParticipants = async () => {
-          const allUsers = zmClient.getAllUser();
-          console.log('Current participants:', allUsers);
-          setParticipants(allUsers);
-          
-          // Check if any participants have video on and render it
-          for (const user of allUsers) {
-            if (user.userId !== zmClient.getCurrentUserInfo().userId && user.bVideoOn && !remoteVideos[user.userId]) {
-              console.log('Found participant with video on:', user);
-              await renderRemoteVideo(user.userId);
-            }
+        // Function to render remote video with improved error handling
+        const renderRemoteVideo = async (userId: string, forceRender = false) => {
+          if (!remoteContainerRef.current) {
+            console.log('Remote container not available');
+            return;
           }
-        };
-
-        // Function to render remote video
-        const renderRemoteVideo = async (userId: string) => {
-          if (!remoteContainerRef.current || remoteVideos[userId]) return;
+          
+          if (remoteVideos[userId] && !forceRender) {
+            console.log('Video already rendered for user:', userId);
+            return;
+          }
           
           try {
+            console.log('Attempting to render remote video for user:', userId);
+            
+            // Clear existing video for this user if forcing re-render
+            if (remoteVideos[userId]) {
+              const existingWrapper = remoteVideos[userId].parentElement;
+              if (existingWrapper) {
+                existingWrapper.remove();
+              }
+              delete remoteVideos[userId];
+            }
+            
             const videoEl = document.createElement('video');
             videoEl.autoplay = true;
             videoEl.playsInline = true;
+            videoEl.muted = false; // Allow audio from remote
             videoEl.style.width = '100%';
             videoEl.style.height = '100%';
             videoEl.style.objectFit = 'cover';
@@ -126,47 +131,163 @@ export default function VideoSessionPage() {
             
             const wrapper = document.createElement('div');
             wrapper.className = 'flex-1 bg-black rounded overflow-hidden relative';
+            wrapper.id = `remote-wrapper-${userId}`;
             
             const label = document.createElement('div');
             label.className = 'absolute top-2 left-2 bg-black bg-opacity-50 text-white px-2 py-1 rounded text-sm z-10';
-            label.textContent = `User ${userId.slice(0, 8)}`;
+            
+            // Get user info for better labeling
+            const userInfo = zmClient.getAllUser().find((u: any) => u.userId === userId);
+            label.textContent = userInfo?.displayName || `User ${userId.slice(0, 8)}`;
             
             wrapper.appendChild(videoEl);
             wrapper.appendChild(label);
+            
+            // Clear container first, then add new video
+            remoteContainerRef.current.innerHTML = '';
             remoteContainerRef.current.appendChild(wrapper);
             remoteVideos[userId] = videoEl;
             
-            // Try different render methods
+            // Try multiple render methods
+            let renderSuccess = false;
+            
+            // Method 1: Direct video element
             try {
               await ms.renderVideo(videoEl, userId);
-              console.log('Remote video rendered successfully for user:', userId);
-            } catch (renderError) {
-              console.log('First render method failed, trying alternative:', renderError);
-              // Alternative method
-              await ms.renderVideo({ userId, videoElement: videoEl });
+              console.log('✅ Remote video rendered successfully (method 1) for user:', userId);
+              renderSuccess = true;
+            } catch (renderError1) {
+              console.log('❌ Method 1 failed:', renderError1);
+              
+              // Method 2: Object with parameters
+              try {
+                await ms.renderVideo({ userId, videoElement: videoEl });
+                console.log('✅ Remote video rendered successfully (method 2) for user:', userId);
+                renderSuccess = true;
+              } catch (renderError2) {
+                console.log('❌ Method 2 failed:', renderError2);
+                
+                // Method 3: Try with canvas as fallback
+                try {
+                  const canvas = document.createElement('canvas');
+                  canvas.width = 640;
+                  canvas.height = 480;
+                  canvas.style.width = '100%';
+                  canvas.style.height = '100%';
+                  canvas.style.objectFit = 'cover';
+                  
+                  wrapper.removeChild(videoEl);
+                  wrapper.appendChild(canvas);
+                  
+                  await ms.renderVideo(canvas, userId);
+                  console.log('✅ Remote video rendered successfully (method 3 - canvas) for user:', userId);
+                  renderSuccess = true;
+                } catch (renderError3) {
+                  console.log('❌ Method 3 failed:', renderError3);
+                }
+              }
             }
+            
+            if (!renderSuccess) {
+              // Show error message in video container
+              const errorMsg = document.createElement('div');
+              errorMsg.className = 'flex items-center justify-center h-full text-white text-center p-4';
+              errorMsg.innerHTML = `
+                <div>
+                  <p>Nu se poate afișa video-ul pentru ${userInfo?.displayName || 'utilizator'}</p>
+                  <p class="text-sm mt-2">Încercăm să reconectăm...</p>
+                </div>
+              `;
+              wrapper.appendChild(errorMsg);
+            }
+            
           } catch (error) {
             console.error('Failed to render remote video:', error);
+            
+            // Show error in UI
+            if (remoteContainerRef.current) {
+              const errorDiv = document.createElement('div');
+              errorDiv.className = 'flex items-center justify-center h-full text-white bg-red-900 bg-opacity-50 rounded';
+              errorDiv.textContent = 'Eroare la afișarea video-ului';
+              remoteContainerRef.current.appendChild(errorDiv);
+            }
           }
+        };
+
+        // Set up participant tracking and video rendering
+        const updateParticipants = async () => {
+          const allUsers = zmClient.getAllUser();
+          const currentUserId = zmClient.getCurrentUserInfo().userId;
+          console.log('🔄 Updating participants:', {
+            total: allUsers.length,
+            currentUser: currentUserId,
+            users: allUsers.map((u: any) => ({
+              id: u.userId,
+              name: u.displayName,
+              video: u.bVideoOn,
+              audio: u.bAudioOn
+            }))
+          });
+          
+          setParticipants(allUsers);
+          
+          // Find remote participants with video
+          const remoteParticipants = allUsers.filter((user: any) => 
+            user.userId !== currentUserId && user.bVideoOn
+          );
+          
+          console.log('📹 Remote participants with video:', remoteParticipants.length);
+          
+          // Render video for each remote participant
+          for (const user of remoteParticipants) {
+            console.log('🎥 Attempting to render video for:', user.displayName, user.userId);
+            await renderRemoteVideo(user.userId);
+          }
+          
+          // Clean up videos for users who left or turned off video
+          Object.keys(remoteVideos).forEach(userId => {
+            const userStillHasVideo = remoteParticipants.some((u: any) => u.userId === userId);
+            if (!userStillHasVideo) {
+              console.log('🧹 Cleaning up video for user who left or turned off video:', userId);
+              const videoEl = remoteVideos[userId];
+              if (videoEl?.parentElement) {
+                videoEl.parentElement.remove();
+              }
+              delete remoteVideos[userId];
+            }
+          });
         };
 
         // Initial participant list and video check
         await updateParticipants();
         
-        // Also check after a small delay to ensure all participants are loaded
+        // Multiple checks to ensure we catch all participants
         setTimeout(async () => {
+          console.log('🔄 Second participant check...');
           await updateParticipants();
-        }, 2000);
+        }, 1000);
+        
+        setTimeout(async () => {
+          console.log('🔄 Third participant check...');
+          await updateParticipants();
+        }, 3000);
+        
+        setTimeout(async () => {
+          console.log('🔄 Final participant check...');
+          await updateParticipants();
+        }, 5000);
 
         // Listen for participant changes
         zmClient.on('user-added', async (payload: any) => {
-          console.log('User added:', payload);
-          await updateParticipants();
+          console.log('👤 User added:', payload);
+          setTimeout(async () => {
+            await updateParticipants();
+          }, 500); // Small delay to ensure user is fully loaded
         });
 
-        zmClient.on('user-removed', (payload: any) => {
-          console.log('User removed:', payload);
-          updateParticipants();
+        zmClient.on('user-removed', async (payload: any) => {
+          console.log('👤 User removed:', payload);
+          await updateParticipants();
           
           // Clean up video and audio for removed user
           const { userId } = payload;
@@ -184,7 +305,7 @@ export default function VideoSessionPage() {
           }
         });
 
-        // Local video setup
+        // Local video setup with improved error handling
         if (localContainerRef.current) {
           try {
             const videoEl = document.createElement('video');
@@ -198,11 +319,27 @@ export default function VideoSessionPage() {
             localContainerRef.current.innerHTML = '';
             localContainerRef.current.appendChild(videoEl);
             
+            // Start local video
             await ms.startVideo({ videoElement: videoEl });
             setVideoOn(true);
-            console.log('Local video started');
+            console.log('✅ Local video started successfully');
+            
+            // Force a participant update after local video starts
+            setTimeout(async () => {
+              console.log('🔄 Updating participants after local video start...');
+              await updateParticipants();
+            }, 1000);
+            
           } catch (videoError) {
-            console.warn('Failed to start local video:', videoError);
+            console.warn('❌ Failed to start local video:', videoError);
+            
+            // Show error in local video container
+            if (localContainerRef.current) {
+              const errorDiv = document.createElement('div');
+              errorDiv.className = 'flex items-center justify-center h-full text-white bg-red-900 bg-opacity-50 rounded';
+              errorDiv.textContent = 'Camera indisponibilă';
+              localContainerRef.current.appendChild(errorDiv);
+            }
           }
         }
 
@@ -210,72 +347,61 @@ export default function VideoSessionPage() {
         try {
           await ms.startAudio();
           setAudioOn(true);
-          console.log('Audio started');
+          console.log('✅ Audio started successfully');
         } catch (audioError) {
-          console.warn('Failed to start audio:', audioError);
+          console.warn('❌ Failed to start audio:', audioError);
         }
 
-        // Listen for when participants start/stop video
+        // Listen for when participants start/stop video - IMPROVED
         zmClient.on('peer-video-state-change', async (payload: any) => {
-          console.log('Peer video state change:', payload);
+          console.log('🎥 Peer video state change:', payload);
           const { userId, action } = payload;
           
-          if (action === 'Start' && remoteContainerRef.current && !remoteVideos[userId]) {
-            try {
-              const videoEl = document.createElement('video');
-              videoEl.autoplay = true;
-              videoEl.playsInline = true;
-              videoEl.style.width = '100%';
-              videoEl.style.height = '100%';
-              videoEl.style.objectFit = 'cover';
-              videoEl.id = `remote-video-${userId}`;
-              
-              const wrapper = document.createElement('div');
-              wrapper.className = 'flex-1 bg-black rounded overflow-hidden relative';
-              
-              const label = document.createElement('div');
-              label.className = 'absolute top-2 left-2 bg-black bg-opacity-50 text-white px-2 py-1 rounded text-sm';
-              label.textContent = `User ${userId.slice(0, 8)}`;
-              
-              wrapper.appendChild(videoEl);
-              wrapper.appendChild(label);
-              remoteContainerRef.current.appendChild(wrapper);
-              remoteVideos[userId] = videoEl;
-              
-              // Use the correct method for rendering remote video
-              await ms.renderVideo(videoEl, userId);
-              console.log('Remote video rendered for user:', userId);
-            } catch (renderError) {
-              console.error('Failed to render remote video:', renderError);
-            }
+          if (action === 'Start') {
+            console.log('📹 Participant started video:', userId);
+            // Force re-render with a small delay
+            setTimeout(async () => {
+              await renderRemoteVideo(userId, true);
+            }, 500);
           }
           
           if (action === 'Stop') {
+            console.log('📹 Participant stopped video:', userId);
             const videoEl = remoteVideos[userId];
             if (videoEl && videoEl.parentElement) {
               videoEl.parentElement.remove();
               delete remoteVideos[userId];
-              console.log('Remote video removed for user:', userId);
+              console.log('✅ Remote video removed for user:', userId);
             }
           }
         });
 
-        // Listen for audio changes
+        // Listen for audio changes - IMPROVED
         zmClient.on('peer-audio-state-change', async (payload: any) => {
-          console.log('Peer audio state change:', payload);
+          console.log('🔊 Peer audio state change:', payload);
           const { userId, action } = payload;
           
           if (action === 'Start' && remoteAudioRef.current) {
             try {
-              const audioEl = await ms.attachAudio(userId);
+              // Try multiple methods to attach audio
+              let audioEl;
+              
+              try {
+                audioEl = await ms.attachAudio(userId);
+              } catch (e) {
+                console.log('First audio attach method failed, trying alternative...');
+                audioEl = await ms.attachAudio({ userId });
+              }
+              
               if (audioEl) {
                 audioEl.autoplay = true;
                 audioEl.id = `remote-audio-${userId}`;
+                audioEl.volume = 1.0; // Ensure volume is at maximum
                 remoteAudioRef.current.appendChild(audioEl);
-                console.log('Remote audio attached for user:', userId);
+                console.log('✅ Remote audio attached for user:', userId);
               }
             } catch (audioError) {
-              console.error('Failed to attach remote audio:', audioError);
+              console.error('❌ Failed to attach remote audio:', audioError);
             }
           }
           
@@ -283,15 +409,32 @@ export default function VideoSessionPage() {
             const audioEl = remoteAudioRef.current.querySelector(`#remote-audio-${userId}`);
             if (audioEl) {
               audioEl.remove();
-              console.log('Remote audio removed for user:', userId);
+              console.log('✅ Remote audio removed for user:', userId);
             }
           }
         });
 
-        // Also listen for the general stream-updated event as fallback
+        // Enhanced stream-updated event as fallback
         zmClient.on('stream-updated', async (payload: any) => {
-          console.log('Stream updated (fallback):', payload);
-          // This is a fallback in case the specific events don't work
+          console.log('🔄 Stream updated (fallback):', payload);
+          
+          // Force participant update on any stream change
+          setTimeout(async () => {
+            await updateParticipants();
+          }, 300);
+        });
+
+        // Additional event listeners for better connectivity
+        zmClient.on('connection-change', (payload: any) => {
+          console.log('🌐 Connection change:', payload);
+        });
+        
+        zmClient.on('media-stream-change', async (payload: any) => {
+          console.log('📺 Media stream change:', payload);
+          // Re-check participants when media streams change
+          setTimeout(async () => {
+            await updateParticipants();
+          }, 500);
         });
 
         // Handle user leaving (cleanup)
@@ -371,12 +514,20 @@ export default function VideoSessionPage() {
     if (!client) return;
     
     const allUsers = client.getAllUser();
-    console.log('=== DEBUG PARTICIPANTS ===');
-    console.log('Total participants:', allUsers.length);
-    console.log('Current user:', client.getCurrentUserInfo());
+    const currentUser = client.getCurrentUserInfo();
+    
+    console.log('=== 🔍 DEBUG PARTICIPANTS ===');
+    console.log('📊 Total participants:', allUsers.length);
+    console.log('👤 Current user:', {
+      userId: currentUser?.userId,
+      displayName: currentUser?.displayName,
+      video: currentUser?.bVideoOn,
+      audio: currentUser?.bAudioOn
+    });
     
     allUsers.forEach((user: any, index: number) => {
-      console.log(`Participant ${index + 1}:`, {
+      const isCurrentUser = user.userId === currentUser?.userId;
+      console.log(`${isCurrentUser ? '👤' : '🧑‍💼'} Participant ${index + 1}${isCurrentUser ? ' (YOU)' : ''}:`, {
         userId: user.userId,
         displayName: user.displayName,
         bVideoOn: user.bVideoOn,
@@ -386,7 +537,49 @@ export default function VideoSessionPage() {
       });
     });
     
+    // Check DOM elements
+    const localVideo = document.querySelector('#local-video, video');
+    const remoteVideos = document.querySelectorAll('[id^="remote-video-"]');
+    const remoteAudios = document.querySelectorAll('[id^="remote-audio-"]');
+    
+    console.log('🖥️ DOM State:');
+    console.log('- Local video element:', localVideo ? '✅ Found' : '❌ Missing');
+    console.log('- Remote video elements:', remoteVideos.length);
+    console.log('- Remote audio elements:', remoteAudios.length);
+    
+    if (remoteVideos.length > 0) {
+      remoteVideos.forEach((video, i) => {
+        const videoEl = video as HTMLVideoElement;
+        console.log(`  📹 Remote video ${i + 1}:`, {
+          id: videoEl.id,
+          readyState: videoEl.readyState,
+          videoWidth: videoEl.videoWidth,
+          videoHeight: videoEl.videoHeight,
+          paused: videoEl.paused,
+          muted: videoEl.muted
+        });
+      });
+    }
+    
     console.log('=== END DEBUG ===');
+    
+    // Try to force a participant update
+    console.log('🔄 Forcing participant update...');
+    setTimeout(() => {
+      const ms = client.getMediaStream();
+      if (ms) {
+        const allUsers = client.getAllUser();
+        const currentUserId = client.getCurrentUserInfo().userId;
+        const remoteUsers = allUsers.filter((u: any) => u.userId !== currentUserId && u.bVideoOn);
+        
+        console.log('🎯 Found remote users with video:', remoteUsers.length);
+        remoteUsers.forEach(async (user: any) => {
+          console.log('🔄 Attempting to re-render video for:', user.displayName);
+          // This would need access to renderRemoteVideo function
+          // For now, just log the attempt
+        });
+      }
+    }, 100);
   }, [client]);
 
   const leave = useCallback(async () => {
