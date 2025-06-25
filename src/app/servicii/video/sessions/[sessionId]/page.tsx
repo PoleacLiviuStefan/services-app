@@ -215,32 +215,15 @@ export default function VideoSessionPage() {
         
         console.log('✅ Successfully joined Zoom session');
         setClient(zmClient);
+        
+        // IMPORTANT: Set connection status to connected after successful join
+        // The connection-change event might not fire in all cases
         setConnectionStatus('connected');
         
         const ms = zmClient.getMediaStream();
         setMediaStream(ms);
         
-        // Start local video
-        if (localVideoRef.current) {
-          try {
-            await ms.startVideo({ videoElement: localVideoRef.current });
-            setVideoOn(true);
-            console.log('✅ Local video started');
-          } catch (videoError) {
-            console.warn('⚠️ Local video failed:', videoError);
-          }
-        }
-        
-        // Start audio
-        try {
-          await ms.startAudio();
-          setAudioOn(true);
-          console.log('✅ Audio started');
-        } catch (audioError) {
-          console.warn('⚠️ Audio failed:', audioError);
-        }
-        
-        // Set up event listeners
+        // Set up event listeners BEFORE starting media
         zmClient.on('user-added', (payload: any) => {
           console.log('👤 User added:', payload);
           setTimeout(updateParticipants, 500);
@@ -288,10 +271,35 @@ export default function VideoSessionPage() {
           updateParticipants();
         });
         
+        // Listen for connection changes
         zmClient.on('connection-change', (payload: any) => {
           console.log('🌐 Connection change:', payload);
-          setConnectionStatus(payload.state || 'connected');
+          if (payload.state) {
+            setConnectionStatus(payload.state);
+          }
         });
+        
+        // Start local video
+        if (localVideoRef.current) {
+          try {
+            // Use the new renderVideo method instead of the deprecated videoElement parameter
+            await ms.renderVideo(localVideoRef.current, zmClient.getCurrentUserInfo()?.userId || '');
+            await ms.startVideo();
+            setVideoOn(true);
+            console.log('✅ Local video started');
+          } catch (videoError) {
+            console.warn('⚠️ Local video failed:', videoError);
+          }
+        }
+        
+        // Start audio
+        try {
+          await ms.startAudio();
+          setAudioOn(true);
+          console.log('✅ Audio started');
+        } catch (audioError) {
+          console.warn('⚠️ Audio failed:', audioError);
+        }
         
         // Initial participant update
         setTimeout(updateParticipants, 1000);
@@ -313,15 +321,23 @@ export default function VideoSessionPage() {
   }, [sessionInfo, auth, updateParticipants, handleRemoteVideo, handleRemoteAudio, cleanup]);
 
   const toggleVideo = useCallback(async () => {
-    if (!mediaStream || !localVideoRef.current) return;
+    if (!mediaStream || !client) return;
     
     try {
       if (isVideoOn) {
         await mediaStream.stopVideo();
+        // Stop rendering local video
+        if (localVideoRef.current && client.getCurrentUserInfo()?.userId) {
+          await mediaStream.stopRenderVideo(localVideoRef.current, client.getCurrentUserInfo()!.userId);
+        }
         setVideoOn(false);
         console.log('📹 Video stopped');
       } else {
-        await mediaStream.startVideo({ videoElement: localVideoRef.current });
+        await mediaStream.startVideo();
+        // Start rendering local video
+        if (localVideoRef.current && client.getCurrentUserInfo()?.userId) {
+          await mediaStream.renderVideo(localVideoRef.current, client.getCurrentUserInfo()!.userId);
+        }
         setVideoOn(true);
         console.log('📹 Video started');
       }
@@ -329,7 +345,7 @@ export default function VideoSessionPage() {
       console.error('❌ Toggle video error:', error);
       setError(`Eroare video: ${error.message}`);
     }
-  }, [mediaStream, isVideoOn]);
+  }, [mediaStream, isVideoOn, client]);
 
   const toggleAudio = useCallback(async () => {
     if (!mediaStream) return;
@@ -470,7 +486,7 @@ export default function VideoSessionPage() {
           <div className="flex gap-2">
             <button 
               onClick={toggleVideo} 
-              disabled={!mediaStream}
+              disabled={!mediaStream || connectionStatus !== 'connected'}
               className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${
                 isVideoOn 
                   ? 'bg-red-600 hover:bg-red-700 text-white' 
@@ -481,7 +497,7 @@ export default function VideoSessionPage() {
             </button>
             <button 
               onClick={toggleAudio} 
-              disabled={!mediaStream}
+              disabled={!mediaStream || connectionStatus !== 'connected'}
               className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${
                 isAudioOn 
                   ? 'bg-red-600 hover:bg-red-700 text-white' 
