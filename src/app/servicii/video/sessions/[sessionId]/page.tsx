@@ -3,16 +3,24 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import { useParams } from 'next/navigation';
-import ZoomVideo, { MediaStream } from '@zoom/videosdk';
+import ZoomVideo, { MediaStream, VideoClient } from '@zoom/videosdk';
 
 interface SessionInfo {
   sessionName: string;
-  token:       string;
-  userId:      string;
-  startDate:   string;
-  endDate:     string;
-  provider:    { id: string; name: string };
-  client:      { id: string; name: string };
+  token: string;
+  userId: string;
+  startDate: string;
+  endDate: string;
+  provider: { id: string; name: string };
+  client: { id: string; name: string };
+}
+
+interface ZoomUser {
+  userId: string;
+  displayName: string;
+  bVideoOn: boolean;
+  bAudioOn: boolean;
+  isHost?: boolean;
 }
 
 export default function VideoSessionPage() {
@@ -20,18 +28,20 @@ export default function VideoSessionPage() {
   const { sessionId } = useParams();
 
   const [sessionInfo, setSessionInfo] = useState<SessionInfo | null>(null);
-  const [client, setClient] = useState<any>(null);
+  const [client, setClient] = useState<VideoClient | null>(null);
   const [mediaStream, setMediaStream] = useState<MediaStream | null>(null);
   const [isVideoOn, setVideoOn] = useState(false);
   const [isAudioOn, setAudioOn] = useState(false);
   const [error, setError] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [timeLeft, setTimeLeft] = useState<string>('');
-  const [participants, setParticipants] = useState<any[]>([]);
+  const [participants, setParticipants] = useState<ZoomUser[]>([]);
+  const [connectionStatus, setConnectionStatus] = useState<string>('disconnected');
 
-  const localContainerRef = useRef<HTMLDivElement>(null);
+  const localVideoRef = useRef<HTMLVideoElement>(null);
+  const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const remoteAudioRef = useRef<HTMLDivElement>(null);
-  const remoteContainerRef = useRef<HTMLDivElement>(null);
+  const initializationRef = useRef(false);
 
   // Fetch session info
   useEffect(() => {
@@ -64,25 +74,138 @@ export default function VideoSessionPage() {
     return () => clearInterval(interval);
   }, [sessionInfo]);
 
-  // Initialize and join Zoom session
-  useEffect(() => {
-    if (!sessionInfo || !auth?.user) return;
+  // Clean up function
+  const cleanup = useCallback(async () => {
+    console.log('🧹 Starting cleanup...');
     
-    // Remote streams handling - moved outside to be accessible by all functions
-    const remoteVideos: Record<string, HTMLVideoElement> = {};
+    if (mediaStream) {
+      try {
+        if (isVideoOn) await mediaStream.stopVideo();
+        if (isAudioOn) await mediaStream.stopAudio();
+      } catch (e) {
+        console.warn('Cleanup media error:', e);
+      }
+    }
+    
+    if (client) {
+      try {
+        await client.leave();
+        ZoomVideo.destroyClient();
+      } catch (e) {
+        console.warn('Cleanup client error:', e);
+      }
+    }
+    
+    // Clear refs
+    if (localVideoRef.current) {
+      localVideoRef.current.srcObject = null;
+    }
+    if (remoteVideoRef.current) {
+      remoteVideoRef.current.srcObject = null;
+    }
+    if (remoteAudioRef.current) {
+      remoteAudioRef.current.innerHTML = '';
+    }
+    
+    setClient(null);
+    setMediaStream(null);
+    setVideoOn(false);
+    setAudioOn(false);
+    setParticipants([]);
+    setConnectionStatus('disconnected');
+  }, [client, mediaStream, isVideoOn, isAudioOn]);
+
+  // Handle remote user video
+  const handleRemoteVideo = useCallback(async (userId: string, action: 'start' | 'stop') => {
+    if (!mediaStream || !remoteVideoRef.current) return;
+    
+    try {
+      if (action === 'start') {
+        console.log('🎥 Starting remote video for:', userId);
+        await mediaStream.renderVideo(remoteVideoRef.current, userId);
+        console.log('✅ Remote video rendered successfully');
+      } else {
+        console.log('🎥 Stopping remote video for:', userId);
+        await mediaStream.stopRenderVideo(remoteVideoRef.current, userId);
+        remoteVideoRef.current.srcObject = null;
+      }
+    } catch (error) {
+      console.error('❌ Remote video error:', error);
+    }
+  }, [mediaStream]);
+
+  // Handle remote user audio
+  const handleRemoteAudio = useCallback(async (userId: string, action: 'start' | 'stop') => {
+    if (!mediaStream || !remoteAudioRef.current) return;
+    
+    try {
+      if (action === 'start') {
+        console.log('🔊 Starting remote audio for:', userId);
+        const audioElement = await mediaStream.attachAudio(userId);
+        if (audioElement) {
+          audioElement.id = `remote-audio-${userId}`;
+          remoteAudioRef.current.appendChild(audioElement);
+          console.log('✅ Remote audio attached successfully');
+        }
+      } else {
+        console.log('🔊 Stopping remote audio for:', userId);
+        const audioElement = remoteAudioRef.current.querySelector(`#remote-audio-${userId}`);
+        if (audioElement) {
+          audioElement.remove();
+        }
+      }
+    } catch (error) {
+      console.error('❌ Remote audio error:', error);
+    }
+  }, [mediaStream]);
+
+  // Update participants list
+  const updateParticipants = useCallback(() => {
+    if (!client) return;
+    
+    try {
+      const allUsers = client.getAllUser();
+      const currentUserId = client.getCurrentUserInfo()?.userId;
+      
+      console.log('👥 Updating participants:', {
+        total: allUsers.length,
+        currentUser: currentUserId
+      });
+      
+      setParticipants(allUsers);
+      
+      // Handle remote video/audio for other participants
+      const remoteUsers = allUsers.filter((user: ZoomUser) => user.userId !== currentUserId);
+      remoteUsers.forEach((user: ZoomUser) => {
+        if (user.bVideoOn) {
+          handleRemoteVideo(user.userId, 'start');
+        }
+        if (user.bAudioOn) {
+          handleRemoteAudio(user.userId, 'start');
+        }
+      });
+      
+    } catch (error) {
+      console.error('❌ Error updating participants:', error);
+    }
+  }, [client, handleRemoteVideo, handleRemoteAudio]);
+
+  // Initialize Zoom session
+  useEffect(() => {
+    if (!sessionInfo || !auth?.user || initializationRef.current) return;
+    
+    initializationRef.current = true;
     
     const initializeZoom = async () => {
       try {
-        console.log('Initializing Zoom with:', {
-          sessionName: sessionInfo.sessionName,
-          userId: sessionInfo.userId,
-          userName: auth.user.name
-        });
-
+        console.log('🚀 Initializing Zoom session...');
+        setConnectionStatus('connecting');
+        
+        // Create and initialize client
         const zmClient = ZoomVideo.createClient();
         await zmClient.init('en-US', 'Global', { patchJsMedia: true });
         
-        // Join with the correct user identity
+        // Join session
         await zmClient.join(
           sessionInfo.sessionName,
           sessionInfo.token,
@@ -90,602 +213,351 @@ export default function VideoSessionPage() {
           ''
         );
         
-        console.log('Successfully joined Zoom session');
+        console.log('✅ Successfully joined Zoom session');
         setClient(zmClient);
-
+        setConnectionStatus('connected');
+        
         const ms = zmClient.getMediaStream();
         setMediaStream(ms);
-
-        // Function to render remote video with improved error handling
-        const renderRemoteVideo = async (userId: string, forceRender = false) => {
-          if (!remoteContainerRef.current) {
-            console.log('Remote container not available');
-            return;
-          }
-          
-          if (remoteVideos[userId] && !forceRender) {
-            console.log('Video already rendered for user:', userId);
-            return;
-          }
-          
+        
+        // Start local video
+        if (localVideoRef.current) {
           try {
-            console.log('Attempting to render remote video for user:', userId);
-            
-            // Clear existing video for this user if forcing re-render
-            if (remoteVideos[userId]) {
-              const existingWrapper = remoteVideos[userId].parentElement;
-              if (existingWrapper) {
-                existingWrapper.remove();
-              }
-              delete remoteVideos[userId];
-            }
-            
-            const videoEl = document.createElement('video');
-            videoEl.autoplay = true;
-            videoEl.playsInline = true;
-            videoEl.muted = false; // Allow audio from remote
-            videoEl.style.width = '100%';
-            videoEl.style.height = '100%';
-            videoEl.style.objectFit = 'cover';
-            videoEl.id = `remote-video-${userId}`;
-            
-            const wrapper = document.createElement('div');
-            wrapper.className = 'flex-1 bg-black rounded overflow-hidden relative';
-            wrapper.id = `remote-wrapper-${userId}`;
-            
-            const label = document.createElement('div');
-            label.className = 'absolute top-2 left-2 bg-black bg-opacity-50 text-white px-2 py-1 rounded text-sm z-10';
-            
-            // Get user info for better labeling
-            const userInfo = zmClient.getAllUser().find((u: any) => u.userId === userId);
-            label.textContent = userInfo?.displayName || `User ${userId.slice(0, 8)}`;
-            
-            wrapper.appendChild(videoEl);
-            wrapper.appendChild(label);
-            
-            // Clear container first, then add new video
-            remoteContainerRef.current.innerHTML = '';
-            remoteContainerRef.current.appendChild(wrapper);
-            remoteVideos[userId] = videoEl;
-            
-            // Try multiple render methods
-            let renderSuccess = false;
-            
-            // Method 1: Direct video element
-            try {
-              await ms.renderVideo(videoEl, userId);
-              console.log('✅ Remote video rendered successfully (method 1) for user:', userId);
-              renderSuccess = true;
-            } catch (renderError1) {
-              console.log('❌ Method 1 failed:', renderError1);
-              
-              // Method 2: Object with parameters
-              try {
-                await ms.renderVideo({ userId, videoElement: videoEl });
-                console.log('✅ Remote video rendered successfully (method 2) for user:', userId);
-                renderSuccess = true;
-              } catch (renderError2) {
-                console.log('❌ Method 2 failed:', renderError2);
-                
-                // Method 3: Try with canvas as fallback
-                try {
-                  const canvas = document.createElement('canvas');
-                  canvas.width = 640;
-                  canvas.height = 480;
-                  canvas.style.width = '100%';
-                  canvas.style.height = '100%';
-                  canvas.style.objectFit = 'cover';
-                  
-                  wrapper.removeChild(videoEl);
-                  wrapper.appendChild(canvas);
-                  
-                  await ms.renderVideo(canvas, userId);
-                  console.log('✅ Remote video rendered successfully (method 3 - canvas) for user:', userId);
-                  renderSuccess = true;
-                } catch (renderError3) {
-                  console.log('❌ Method 3 failed:', renderError3);
-                }
-              }
-            }
-            
-            if (!renderSuccess) {
-              // Show error message in video container
-              const errorMsg = document.createElement('div');
-              errorMsg.className = 'flex items-center justify-center h-full text-white text-center p-4';
-              errorMsg.innerHTML = `
-                <div>
-                  <p>Nu se poate afișa video-ul pentru ${userInfo?.displayName || 'utilizator'}</p>
-                  <p class="text-sm mt-2">Încercăm să reconectăm...</p>
-                </div>
-              `;
-              wrapper.appendChild(errorMsg);
-            }
-            
-          } catch (error) {
-            console.error('Failed to render remote video:', error);
-            
-            // Show error in UI
-            if (remoteContainerRef.current) {
-              const errorDiv = document.createElement('div');
-              errorDiv.className = 'flex items-center justify-center h-full text-white bg-red-900 bg-opacity-50 rounded';
-              errorDiv.textContent = 'Eroare la afișarea video-ului';
-              remoteContainerRef.current.appendChild(errorDiv);
-            }
-          }
-        };
-
-        // Set up participant tracking and video rendering
-        const updateParticipants = async () => {
-          const allUsers = zmClient.getAllUser();
-          const currentUserId = zmClient.getCurrentUserInfo().userId;
-          console.log('🔄 Updating participants:', {
-            total: allUsers.length,
-            currentUser: currentUserId,
-            users: allUsers.map((u: any) => ({
-              id: u.userId,
-              name: u.displayName,
-              video: u.bVideoOn,
-              audio: u.bAudioOn
-            }))
-          });
-          
-          setParticipants(allUsers);
-          
-          // Find remote participants with video
-          const remoteParticipants = allUsers.filter((user: any) => 
-            user.userId !== currentUserId && user.bVideoOn
-          );
-          
-          console.log('📹 Remote participants with video:', remoteParticipants.length);
-          
-          // Render video for each remote participant
-          for (const user of remoteParticipants) {
-            console.log('🎥 Attempting to render video for:', user.displayName, user.userId);
-            await renderRemoteVideo(user.userId);
-          }
-          
-          // Clean up videos for users who left or turned off video
-          Object.keys(remoteVideos).forEach(userId => {
-            const userStillHasVideo = remoteParticipants.some((u: any) => u.userId === userId);
-            if (!userStillHasVideo) {
-              console.log('🧹 Cleaning up video for user who left or turned off video:', userId);
-              const videoEl = remoteVideos[userId];
-              if (videoEl?.parentElement) {
-                videoEl.parentElement.remove();
-              }
-              delete remoteVideos[userId];
-            }
-          });
-        };
-
-        // Initial participant list and video check
-        await updateParticipants();
-        
-        // Multiple checks to ensure we catch all participants
-        setTimeout(async () => {
-          console.log('🔄 Second participant check...');
-          await updateParticipants();
-        }, 1000);
-        
-        setTimeout(async () => {
-          console.log('🔄 Third participant check...');
-          await updateParticipants();
-        }, 3000);
-        
-        setTimeout(async () => {
-          console.log('🔄 Final participant check...');
-          await updateParticipants();
-        }, 5000);
-
-        // Listen for participant changes
-        zmClient.on('user-added', async (payload: any) => {
-          console.log('👤 User added:', payload);
-          setTimeout(async () => {
-            await updateParticipants();
-          }, 500); // Small delay to ensure user is fully loaded
-        });
-
-        zmClient.on('user-removed', async (payload: any) => {
-          console.log('👤 User removed:', payload);
-          await updateParticipants();
-          
-          // Clean up video and audio for removed user
-          const { userId } = payload;
-          const videoEl = remoteVideos[userId];
-          if (videoEl && videoEl.parentElement) {
-            videoEl.parentElement.remove();
-            delete remoteVideos[userId];
-          }
-          
-          if (remoteAudioRef.current) {
-            const audioEl = remoteAudioRef.current.querySelector(`#remote-audio-${userId}`);
-            if (audioEl) {
-              audioEl.remove();
-            }
-          }
-        });
-
-        // Local video setup with improved error handling
-        if (localContainerRef.current) {
-          try {
-            const videoEl = document.createElement('video');
-            videoEl.muted = true;
-            videoEl.autoplay = true;
-            videoEl.playsInline = true;
-            videoEl.style.width = '100%';
-            videoEl.style.height = '100%';
-            videoEl.style.objectFit = 'cover';
-            
-            localContainerRef.current.innerHTML = '';
-            localContainerRef.current.appendChild(videoEl);
-            
-            // Start local video
-            await ms.startVideo({ videoElement: videoEl });
+            await ms.startVideo({ videoElement: localVideoRef.current });
             setVideoOn(true);
-            console.log('✅ Local video started successfully');
-            
-            // Force a participant update after local video starts
-            setTimeout(async () => {
-              console.log('🔄 Updating participants after local video start...');
-              await updateParticipants();
-            }, 1000);
-            
+            console.log('✅ Local video started');
           } catch (videoError) {
-            console.warn('❌ Failed to start local video:', videoError);
-            
-            // Show error in local video container
-            if (localContainerRef.current) {
-              const errorDiv = document.createElement('div');
-              errorDiv.className = 'flex items-center justify-center h-full text-white bg-red-900 bg-opacity-50 rounded';
-              errorDiv.textContent = 'Camera indisponibilă';
-              localContainerRef.current.appendChild(errorDiv);
-            }
+            console.warn('⚠️ Local video failed:', videoError);
           }
         }
-
+        
         // Start audio
         try {
           await ms.startAudio();
           setAudioOn(true);
-          console.log('✅ Audio started successfully');
+          console.log('✅ Audio started');
         } catch (audioError) {
-          console.warn('❌ Failed to start audio:', audioError);
+          console.warn('⚠️ Audio failed:', audioError);
         }
-
-        // Listen for when participants start/stop video - IMPROVED
-        zmClient.on('peer-video-state-change', async (payload: any) => {
+        
+        // Set up event listeners
+        zmClient.on('user-added', (payload: any) => {
+          console.log('👤 User added:', payload);
+          setTimeout(updateParticipants, 500);
+        });
+        
+        zmClient.on('user-removed', (payload: any) => {
+          console.log('👤 User removed:', payload);
+          const { userId } = payload;
+          
+          // Clean up remote media
+          if (remoteVideoRef.current) {
+            handleRemoteVideo(userId, 'stop');
+          }
+          if (remoteAudioRef.current) {
+            const audioEl = remoteAudioRef.current.querySelector(`#remote-audio-${userId}`);
+            if (audioEl) audioEl.remove();
+          }
+          
+          updateParticipants();
+        });
+        
+        zmClient.on('peer-video-state-change', (payload: any) => {
           console.log('🎥 Peer video state change:', payload);
           const { userId, action } = payload;
           
           if (action === 'Start') {
-            console.log('📹 Participant started video:', userId);
-            // Force re-render with a small delay
-            setTimeout(async () => {
-              await renderRemoteVideo(userId, true);
-            }, 500);
+            setTimeout(() => handleRemoteVideo(userId, 'start'), 300);
+          } else if (action === 'Stop') {
+            handleRemoteVideo(userId, 'stop');
           }
           
-          if (action === 'Stop') {
-            console.log('📹 Participant stopped video:', userId);
-            const videoEl = remoteVideos[userId];
-            if (videoEl && videoEl.parentElement) {
-              videoEl.parentElement.remove();
-              delete remoteVideos[userId];
-              console.log('✅ Remote video removed for user:', userId);
-            }
-          }
+          updateParticipants();
         });
-
-        // Listen for audio changes - IMPROVED
-        zmClient.on('peer-audio-state-change', async (payload: any) => {
+        
+        zmClient.on('peer-audio-state-change', (payload: any) => {
           console.log('🔊 Peer audio state change:', payload);
           const { userId, action } = payload;
           
-          if (action === 'Start' && remoteAudioRef.current) {
-            try {
-              // Try multiple methods to attach audio
-              let audioEl;
-              
-              try {
-                audioEl = await ms.attachAudio(userId);
-              } catch (e) {
-                console.log('First audio attach method failed, trying alternative...');
-                audioEl = await ms.attachAudio({ userId });
-              }
-              
-              if (audioEl) {
-                audioEl.autoplay = true;
-                audioEl.id = `remote-audio-${userId}`;
-                audioEl.volume = 1.0; // Ensure volume is at maximum
-                remoteAudioRef.current.appendChild(audioEl);
-                console.log('✅ Remote audio attached for user:', userId);
-              }
-            } catch (audioError) {
-              console.error('❌ Failed to attach remote audio:', audioError);
-            }
+          if (action === 'Start') {
+            setTimeout(() => handleRemoteAudio(userId, 'start'), 300);
+          } else if (action === 'Stop') {
+            handleRemoteAudio(userId, 'stop');
           }
           
-          if (action === 'Stop' && remoteAudioRef.current) {
-            const audioEl = remoteAudioRef.current.querySelector(`#remote-audio-${userId}`);
-            if (audioEl) {
-              audioEl.remove();
-              console.log('✅ Remote audio removed for user:', userId);
-            }
-          }
-        });
-
-        // Enhanced stream-updated event as fallback
-        zmClient.on('stream-updated', async (payload: any) => {
-          console.log('🔄 Stream updated (fallback):', payload);
-          
-          // Force participant update on any stream change
-          setTimeout(async () => {
-            await updateParticipants();
-          }, 300);
-        });
-
-        // Additional event listeners for better connectivity
-        zmClient.on('connection-change', (payload: any) => {
-          console.log('🌐 Connection change:', payload);
+          updateParticipants();
         });
         
-        zmClient.on('media-stream-change', async (payload: any) => {
-          console.log('📺 Media stream change:', payload);
-          // Re-check participants when media streams change
-          setTimeout(async () => {
-            await updateParticipants();
-          }, 500);
+        zmClient.on('connection-change', (payload: any) => {
+          console.log('🌐 Connection change:', payload);
+          setConnectionStatus(payload.state || 'connected');
         });
-
-        // Handle user leaving (cleanup)
-        zmClient.on('user-removed', (payload: any) => {
-          const { userId } = payload;
-          console.log('Cleaning up for removed user:', userId);
-          
-          // Clean up video
-          const videoEl = remoteVideos[userId];
-          if (videoEl && videoEl.parentElement) {
-            videoEl.parentElement.remove();
-            delete remoteVideos[userId];
-          }
-          
-          // Clean up audio
-          if (remoteAudioRef.current) {
-            const audioEl = remoteAudioRef.current.querySelector(`#remote-audio-${userId}`);
-            if (audioEl) {
-              audioEl.remove();
-            }
-          }
-        });
-
-      } catch (e: any) {
-        console.error('Zoom initialization error:', e);
-        setError(`Eroare la conectarea la sesiune: ${e.message}`);
+        
+        // Initial participant update
+        setTimeout(updateParticipants, 1000);
+        
+      } catch (error: any) {
+        console.error('❌ Zoom initialization error:', error);
+        setError(`Eroare la conectarea la sesiune: ${error.message}`);
+        setConnectionStatus('failed');
+        initializationRef.current = false;
       }
     };
-
+    
     initializeZoom();
-
-    // Cleanup function
+    
+    // Cleanup on unmount
     return () => {
-      if (client) {
-        client.leave().catch(console.error);
-        client.destroy();
-      }
+      cleanup();
     };
-  }, [sessionInfo, auth]);
+  }, [sessionInfo, auth, updateParticipants, handleRemoteVideo, handleRemoteAudio, cleanup]);
 
   const toggleVideo = useCallback(async () => {
-    if (!mediaStream || !localContainerRef.current) return;
+    if (!mediaStream || !localVideoRef.current) return;
+    
     try {
       if (isVideoOn) {
         await mediaStream.stopVideo();
         setVideoOn(false);
+        console.log('📹 Video stopped');
       } else {
-        const videoEl = localContainerRef.current.querySelector('video');
-        if (videoEl) {
-          await mediaStream.startVideo({ videoElement: videoEl });
-          setVideoOn(true);
-        }
+        await mediaStream.startVideo({ videoElement: localVideoRef.current });
+        setVideoOn(true);
+        console.log('📹 Video started');
       }
-    } catch (e: any) {
-      console.error('Toggle video error:', e);
-      setError(`Eroare video: ${e.message}`);
+    } catch (error: any) {
+      console.error('❌ Toggle video error:', error);
+      setError(`Eroare video: ${error.message}`);
     }
   }, [mediaStream, isVideoOn]);
 
   const toggleAudio = useCallback(async () => {
     if (!mediaStream) return;
+    
     try {
       if (isAudioOn) {
         await mediaStream.stopAudio();
         setAudioOn(false);
+        console.log('🔇 Audio muted');
       } else {
         await mediaStream.startAudio();
         setAudioOn(true);
+        console.log('🔊 Audio unmuted');
       }
-    } catch (e: any) {
-      console.error('Toggle audio error:', e);
-      setError(`Eroare audio: ${e.message}`);
+    } catch (error: any) {
+      console.error('❌ Toggle audio error:', error);
+      setError(`Eroare audio: ${error.message}`);
     }
   }, [mediaStream, isAudioOn]);
 
-  const debugParticipants = useCallback(() => {
+  const leave = useCallback(async () => {
+    await cleanup();
+    window.location.href = '/dashboard';
+  }, [cleanup]);
+
+  const debugInfo = useCallback(() => {
     if (!client) return;
     
     const allUsers = client.getAllUser();
     const currentUser = client.getCurrentUserInfo();
     
-    console.log('=== 🔍 DEBUG PARTICIPANTS ===');
-    console.log('📊 Total participants:', allUsers.length);
-    console.log('👤 Current user:', {
-      userId: currentUser?.userId,
-      displayName: currentUser?.displayName,
-      video: currentUser?.bVideoOn,
-      audio: currentUser?.bAudioOn
-    });
-    
-    allUsers.forEach((user: any, index: number) => {
-      const isCurrentUser = user.userId === currentUser?.userId;
-      console.log(`${isCurrentUser ? '👤' : '🧑‍💼'} Participant ${index + 1}${isCurrentUser ? ' (YOU)' : ''}:`, {
-        userId: user.userId,
-        displayName: user.displayName,
-        bVideoOn: user.bVideoOn,
-        bAudioOn: user.bAudioOn,
-        isHost: user.isHost,
-        isManager: user.isManager
-      });
-    });
-    
-    // Check DOM elements
-    const localVideo = document.querySelector('#local-video, video');
-    const remoteVideos = document.querySelectorAll('[id^="remote-video-"]');
-    const remoteAudios = document.querySelectorAll('[id^="remote-audio-"]');
-    
-    console.log('🖥️ DOM State:');
-    console.log('- Local video element:', localVideo ? '✅ Found' : '❌ Missing');
-    console.log('- Remote video elements:', remoteVideos.length);
-    console.log('- Remote audio elements:', remoteAudios.length);
-    
-    if (remoteVideos.length > 0) {
-      remoteVideos.forEach((video, i) => {
-        const videoEl = video as HTMLVideoElement;
-        console.log(`  📹 Remote video ${i + 1}:`, {
-          id: videoEl.id,
-          readyState: videoEl.readyState,
-          videoWidth: videoEl.videoWidth,
-          videoHeight: videoEl.videoHeight,
-          paused: videoEl.paused,
-          muted: videoEl.muted
-        });
-      });
-    }
-    
+    console.log('=== 🔍 DEBUG INFO ===');
+    console.log('Connection Status:', connectionStatus);
+    console.log('Total Participants:', allUsers.length);
+    console.log('Current User:', currentUser);
+    console.log('All Users:', allUsers);
+    console.log('Local Video On:', isVideoOn);
+    console.log('Local Audio On:', isAudioOn);
+    console.log('Local Video Element:', localVideoRef.current);
+    console.log('Remote Video Element:', remoteVideoRef.current);
+    console.log('Media Stream:', mediaStream);
     console.log('=== END DEBUG ===');
-    
-    // Try to force a participant update
-    console.log('🔄 Forcing participant update...');
-    setTimeout(() => {
-      const ms = client.getMediaStream();
-      if (ms) {
-        const allUsers = client.getAllUser();
-        const currentUserId = client.getCurrentUserInfo().userId;
-        const remoteUsers = allUsers.filter((u: any) => u.userId !== currentUserId && u.bVideoOn);
-        
-        console.log('🎯 Found remote users with video:', remoteUsers.length);
-        remoteUsers.forEach(async (user: any) => {
-          console.log('🔄 Attempting to re-render video for:', user.displayName);
-          // This would need access to renderRemoteVideo function
-          // For now, just log the attempt
-        });
-      }
-    }, 100);
-  }, [client]);
+  }, [client, connectionStatus, isVideoOn, isAudioOn, mediaStream]);
 
-  const leave = useCallback(async () => {
-    if (!client) return;
-    try {
-      await client.leave();
-      client.destroy();
-      setClient(null);
-      setMediaStream(null);
-      setSessionInfo(null);
-      // Redirect or show success message
-      window.location.href = '/dashboard';
-    } catch (e) {
-      console.error('Error leaving session:', e);
-    }
-  }, [client]);
-
-  // Determine if current user is provider or client
+  // Determine user role and other participant
   const isProvider = sessionInfo && auth?.user && sessionInfo.provider.id === auth.user.id;
   const otherParticipant = isProvider ? sessionInfo?.client : sessionInfo?.provider;
+  const currentUserId = client?.getCurrentUserInfo()?.userId;
+  const remoteParticipants = participants.filter(p => p.userId !== currentUserId);
 
-  if (status === 'loading' || loading) return <p>Se încarcă sesiunea...</p>;
-  if (!auth?.user) return <p>Unauthorized</p>;
-  if (error) return <p className="text-red-500">Eroare: {error}</p>;
-  if (!sessionInfo) return <p>Se pregătește sesiunea...</p>;
+  if (status === 'loading' || loading) {
+    return <div className="flex items-center justify-center h-64">Se încarcă sesiunea...</div>;
+  }
+  
+  if (!auth?.user) {
+    return <div className="text-red-500">Acces neautorizat</div>;
+  }
+  
+  if (error) {
+    return (
+      <div className="text-red-500 p-4 bg-red-50 rounded-lg">
+        <p className="font-semibold">Eroare:</p>
+        <p>{error}</p>
+        <button 
+          onClick={() => window.location.reload()} 
+          className="mt-2 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+        >
+          Reîncarcă pagina
+        </button>
+      </div>
+    );
+  }
+  
+  if (!sessionInfo) {
+    return <div className="flex items-center justify-center h-64">Se pregătește sesiunea...</div>;
+  }
 
   return (
-    <div className="p-4 space-y-4">
-      <div className="flex justify-between items-center">
-        <div>
-          <p><strong>Client:</strong> {sessionInfo.client.name}</p>
-          <p><strong>Furnizor:</strong> {sessionInfo.provider.name}</p>
-          <p><strong>Participanți activi:</strong> {participants.length}</p>
-        </div>
-        <div className="text-right">
-          <p className="text-lg font-semibold">Timp rămas: {timeLeft}</p>
-          <p className="text-sm text-gray-600">
-            Sesiune: {new Date(sessionInfo.startDate).toLocaleTimeString()} - {new Date(sessionInfo.endDate).toLocaleTimeString()}
-          </p>
+    <div className="max-w-6xl mx-auto p-4 space-y-6">
+      {/* Header */}
+      <div className="bg-white rounded-lg shadow p-4">
+        <div className="flex justify-between items-center">
+          <div className="space-y-1">
+            <h2 className="text-xl font-bold">Sesiune Video</h2>
+            <p><strong>Client:</strong> {sessionInfo.client.name}</p>
+            <p><strong>Furnizor:</strong> {sessionInfo.provider.name}</p>
+            <div className="flex items-center gap-2">
+              <span className="text-sm">Status:</span>
+              <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                connectionStatus === 'connected' ? 'bg-green-100 text-green-800' :
+                connectionStatus === 'connecting' ? 'bg-yellow-100 text-yellow-800' :
+                'bg-red-100 text-red-800'
+              }`}>
+                {connectionStatus === 'connected' ? 'Conectat' : 
+                 connectionStatus === 'connecting' ? 'Se conectează...' : 'Deconectat'}
+              </span>
+            </div>
+          </div>
+          <div className="text-right space-y-1">
+            <p className="text-2xl font-bold text-blue-600">⏰ {timeLeft}</p>
+            <p className="text-sm text-gray-600">
+              {new Date(sessionInfo.startDate).toLocaleTimeString()} - {new Date(sessionInfo.endDate).toLocaleTimeString()}
+            </p>
+            <p className="text-sm text-gray-500">
+              Participanți: {participants.length} | Conectați: {remoteParticipants.filter(p => p.bVideoOn || p.bAudioOn).length + 1}
+            </p>
+          </div>
         </div>
       </div>
 
-      <div className="flex gap-4 h-96">
-        {/* Local video */}
-        <div className="flex-1 flex flex-col">
-          <h3 className="mb-2 font-semibold">
-            Tu ({auth.user.name}) {isProvider ? '(Furnizor)' : '(Client)'}
-          </h3>
-          <div ref={localContainerRef} className="flex-1 bg-black rounded overflow-hidden" />
-          <div className="mt-2 flex space-x-2">
+      {/* Video Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Local Video */}
+        <div className="bg-white rounded-lg shadow p-4">
+          <div className="flex justify-between items-center mb-3">
+            <h3 className="font-semibold text-lg">
+              📹 Tu ({auth.user.name})
+              <span className="text-sm font-normal text-gray-600 ml-2">
+                {isProvider ? '(Furnizor)' : '(Client)'}
+              </span>
+            </h3>
+            <div className="flex gap-2">
+              <span className={`w-3 h-3 rounded-full ${isVideoOn ? 'bg-green-500' : 'bg-red-500'}`} title={isVideoOn ? 'Video pornit' : 'Video oprit'} />
+              <span className={`w-3 h-3 rounded-full ${isAudioOn ? 'bg-green-500' : 'bg-red-500'}`} title={isAudioOn ? 'Audio pornit' : 'Audio oprit'} />
+            </div>
+          </div>
+          
+          <div className="aspect-video bg-gray-900 rounded-lg overflow-hidden mb-3">
+            <video 
+              ref={localVideoRef}
+              autoPlay 
+              playsInline 
+              muted 
+              className="w-full h-full object-cover"
+            />
+          </div>
+          
+          <div className="flex gap-2">
             <button 
               onClick={toggleVideo} 
-              disabled={!mediaStream} 
-              className={`px-4 py-2 rounded-lg shadow text-white ${
-                isVideoOn ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'
-              }`}
+              disabled={!mediaStream}
+              className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${
+                isVideoOn 
+                  ? 'bg-red-600 hover:bg-red-700 text-white' 
+                  : 'bg-green-600 hover:bg-green-700 text-white'
+              } disabled:opacity-50 disabled:cursor-not-allowed`}
             >
-              {isVideoOn ? 'Oprește Video' : 'Pornește Video'}
+              {isVideoOn ? '📹 Oprește Video' : '📹 Pornește Video'}
             </button>
             <button 
               onClick={toggleAudio} 
-              disabled={!mediaStream} 
-              className={`px-4 py-2 rounded-lg shadow text-white ${
-                isAudioOn ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'
-              }`}
+              disabled={!mediaStream}
+              className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${
+                isAudioOn 
+                  ? 'bg-red-600 hover:bg-red-700 text-white' 
+                  : 'bg-green-600 hover:bg-green-700 text-white'
+              } disabled:opacity-50 disabled:cursor-not-allowed`}
             >
-              {isAudioOn ? 'Mute Audio' : 'Unmute Audio'}
-            </button>
-            <button 
-              onClick={debugParticipants} 
-              className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow text-sm"
-            >
-              Debug
+              {isAudioOn ? '🔇 Mute' : '🔊 Unmute'}
             </button>
           </div>
         </div>
 
-        {/* Remote video */}
-        <div className="flex-1 flex flex-col">
-          <h3 className="mb-2 font-semibold">
-            {otherParticipant?.name} {isProvider ? '(Client)' : '(Furnizor)'}
-          </h3>
-          <div ref={remoteContainerRef} className="flex-1 bg-gray-800 rounded overflow-hidden flex items-center justify-center">
-            {participants.length <= 1 && (
-              <p className="text-white text-center">
-                Așteptăm ca {otherParticipant?.name} să se conecteze...
-              </p>
+        {/* Remote Video */}
+        <div className="bg-white rounded-lg shadow p-4">
+          <div className="flex justify-between items-center mb-3">
+            <h3 className="font-semibold text-lg">
+              👤 {otherParticipant?.name || 'Participant'}
+              <span className="text-sm font-normal text-gray-600 ml-2">
+                {isProvider ? '(Client)' : '(Furnizor)'}
+              </span>
+            </h3>
+            {remoteParticipants.length > 0 && (
+              <div className="flex gap-2">
+                <span className={`w-3 h-3 rounded-full ${remoteParticipants[0]?.bVideoOn ? 'bg-green-500' : 'bg-red-500'}`} title="Video" />
+                <span className={`w-3 h-3 rounded-full ${remoteParticipants[0]?.bAudioOn ? 'bg-green-500' : 'bg-red-500'}`} title="Audio" />
+              </div>
+            )}
+          </div>
+          
+          <div className="aspect-video bg-gray-900 rounded-lg overflow-hidden flex items-center justify-center">
+            {remoteParticipants.length === 0 ? (
+              <div className="text-center text-gray-400">
+                <div className="text-4xl mb-2">⏳</div>
+                <p>Așteptăm ca {otherParticipant?.name} să se conecteze...</p>
+              </div>
+            ) : !remoteParticipants[0]?.bVideoOn ? (
+              <div className="text-center text-gray-400">
+                <div className="text-4xl mb-2">📹</div>
+                <p>{remoteParticipants[0]?.displayName || 'Participantul'} nu și-a pornit camera</p>
+              </div>
+            ) : (
+              <video 
+                ref={remoteVideoRef}
+                autoPlay 
+                playsInline 
+                className="w-full h-full object-cover"
+              />
             )}
           </div>
         </div>
       </div>
 
-      {/* Hidden audio container for remote audio */}
-      <div ref={remoteAudioRef} className="hidden" />
-
-      <div className="flex justify-between items-center">
-        <div className="text-sm text-gray-600">
-          Sesiune ID: {sessionId}
+      {/* Controls */}
+      <div className="bg-white rounded-lg shadow p-4">
+        <div className="flex justify-between items-center">
+          <div className="flex gap-2">
+            <button 
+              onClick={debugInfo}
+              className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium"
+            >
+              🔍 Debug Info
+            </button>
+            <span className="text-sm text-gray-500 self-center">
+              Sesiune ID: {sessionId}
+            </span>
+          </div>
+          <button 
+            onClick={leave}
+            className="px-6 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-semibold transition-colors"
+          >
+            🚪 Părăsește sesiunea
+          </button>
         </div>
-        <button 
-          onClick={leave} 
-          className="px-6 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg shadow font-semibold"
-        >
-          Părăsește sesiunea
-        </button>
       </div>
+
+      {/* Hidden audio container */}
+      <div ref={remoteAudioRef} className="hidden" />
     </div>
   );
 }
