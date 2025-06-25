@@ -5,6 +5,7 @@ import type { NextRequest } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import jwt from 'jsonwebtoken';
 
 interface SessionInfo {
   sessionName: string;
@@ -14,6 +15,53 @@ interface SessionInfo {
   endDate:     string;
   provider:    { id: string; name: string };
   client:      { id: string; name: string };
+}
+
+// Helper function to generate Zoom token with current timestamp
+function generateZoomToken(sessionName: string, userId: string): string {
+  const now = Math.floor(Date.now() / 1000);
+  
+  const payload = {
+    app_key: process.env.ZOOM_SDK_KEY!,
+    version: 1,
+    tpc: sessionName, // topic/session name
+    role_type: 0, // participant
+    user_identity: userId,
+    iat: now,
+    exp: now + (60 * 60 * 2) // 2 hours from now
+  };
+
+  const token = jwt.sign(payload, process.env.ZOOM_SDK_SECRET!);
+  
+  console.log('[Debug] Generated new token for user:', userId, {
+    issuedAt: new Date(now * 1000).toISOString(),
+    expiresAt: new Date((now + (60 * 60 * 2)) * 1000).toISOString(),
+    sessionName,
+    userId
+  });
+  
+  return token;
+}
+
+// Helper function to validate if existing token is still valid
+function isTokenValid(token: string): boolean {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    const now = Math.floor(Date.now() / 1000);
+    const timeUntilExpiry = payload.exp - now;
+    
+    console.log('[Debug] Token validation:', {
+      expiresAt: new Date(payload.exp * 1000).toISOString(),
+      currentTime: new Date().toISOString(),
+      minutesUntilExpiry: Math.round(timeUntilExpiry / 60),
+      isValid: timeUntilExpiry > 300 // Valid if more than 5 minutes left
+    });
+    
+    return timeUntilExpiry > 300; // Require at least 5 minutes left
+  } catch (e) {
+    console.log('[Debug] Token parsing failed:', e);
+    return false;
+  }
 }
 
 export async function GET(
@@ -85,21 +133,24 @@ export async function GET(
     );
   }
 
-  // Extract and validate tokensMap
-  console.log('[Debug] raw zoomTokens:', record.zoomTokens);
-  if (!record.zoomTokens || typeof record.zoomTokens !== 'object') {
-    console.log('[Debug] Invalid zoomTokens');
+  // Validate required environment variables
+  if (!process.env.ZOOM_SDK_KEY || !process.env.ZOOM_SDK_SECRET) {
+    console.log('[Debug] Missing Zoom SDK environment variables');
     return NextResponse.json(
-      { error: 'Zoom tokens missing in DB.' },
+      { error: 'Zoom SDK configuration missing.' },
       { status: 500 }
     );
   }
-  const tokensMap = record.zoomTokens as Record<string, string>;
-  console.log('[Debug] tokensMap:', tokensMap);
 
-  // Get the correct token for the current user
-  // For providers, use the provider ID as key
-  // For clients, use the client ID (user ID) as key
+  // Extract and validate tokensMap from DB (existing tokens)
+  console.log('[Debug] raw zoomTokens:', record.zoomTokens);
+  let tokensMap: Record<string, string> = {};
+  if (record.zoomTokens && typeof record.zoomTokens === 'object') {
+    tokensMap = record.zoomTokens as Record<string, string>;
+  }
+  console.log('[Debug] existing tokensMap:', tokensMap);
+
+  // Determine the correct token key for the current user
   let tokenKey: string;
   if (isProvider) {
     tokenKey = record.providerId;
@@ -107,14 +158,40 @@ export async function GET(
     tokenKey = currentUserId; // client ID
   }
 
-  const token = tokensMap[tokenKey];
-  console.log('[Debug] tokenKey:', tokenKey, 'token found:', !!token);
-  if (!token) {
-    console.log('[Debug] No token for user, available keys:', Object.keys(tokensMap));
-    return NextResponse.json(
-      { error: 'Token Zoom indisponibil.' },
-      { status: 500 }
-    );
+  // Check if we have a valid existing token
+  const existingToken = tokensMap[tokenKey];
+  let token: string;
+  let needsUpdate = false;
+
+  if (existingToken && isTokenValid(existingToken)) {
+    console.log('[Debug] Using existing valid token for user:', tokenKey);
+    token = existingToken;
+  } else {
+    console.log('[Debug] Generating new token for user:', tokenKey, {
+      hasExistingToken: !!existingToken,
+      existingTokenValid: existingToken ? isTokenValid(existingToken) : false
+    });
+    
+    // Generate new token
+    token = generateZoomToken(record.zoomSessionName!, tokenKey);
+    
+    // Update the tokens map
+    tokensMap[tokenKey] = token;
+    needsUpdate = true;
+  }
+
+  // Update database with new token if needed
+  if (needsUpdate) {
+    try {
+      await prisma.consultingSession.update({
+        where: { id: sessionId },
+        data: { zoomTokens: tokensMap }
+      });
+      console.log('[Debug] Updated tokens in database for session:', sessionId);
+    } catch (updateError) {
+      console.error('[Debug] Failed to update tokens in database:', updateError);
+      // Continue anyway - the token is still valid for this request
+    }
   }
 
   // Fetch both user records
@@ -149,6 +226,18 @@ export async function GET(
     client:      { id: clientUser.id, name: clientUser.name! },
   };
   console.log('[Debug] response:', response);
+
+  // Log token info for debugging
+  try {
+    const tokenPayload = JSON.parse(atob(token.split('.')[1]));
+    console.log('[Debug] Final token info:', {
+      issuedAt: new Date(tokenPayload.iat * 1000).toISOString(),
+      expiresAt: new Date(tokenPayload.exp * 1000).toISOString(),
+      minutesUntilExpiry: Math.round((tokenPayload.exp - Math.floor(Date.now() / 1000)) / 60)
+    });
+  } catch (e) {
+    console.log('[Debug] Could not parse final token for logging');
+  }
 
   return NextResponse.json(response);
 }
