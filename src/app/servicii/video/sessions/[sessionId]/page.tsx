@@ -279,12 +279,22 @@ export default function VideoSessionPage() {
           }
         });
         
-        // Start local video
+        // Start local video - simplified approach
         if (localVideoRef.current) {
           try {
-            // Use the new renderVideo method instead of the deprecated videoElement parameter
-            await ms.renderVideo(localVideoRef.current, zmClient.getCurrentUserInfo()?.userId || '');
-            await ms.startVideo();
+            // Create a temporary video element as required by SDK
+            const tempVideo = document.createElement('video');
+            tempVideo.muted = true;
+            tempVideo.playsInline = true;
+            
+            // Start video with the temporary element
+            await ms.startVideo({ videoElement: tempVideo });
+            
+            // Copy the stream to our actual video element
+            if (tempVideo.srcObject && localVideoRef.current) {
+              localVideoRef.current.srcObject = tempVideo.srcObject;
+            }
+            
             setVideoOn(true);
             console.log('✅ Local video started');
           } catch (videoError) {
@@ -321,23 +331,27 @@ export default function VideoSessionPage() {
   }, [sessionInfo, auth, updateParticipants, handleRemoteVideo, handleRemoteAudio, cleanup]);
 
   const toggleVideo = useCallback(async () => {
-    if (!mediaStream || !client) return;
+    if (!mediaStream || !localVideoRef.current) return;
     
     try {
       if (isVideoOn) {
         await mediaStream.stopVideo();
-        // Stop rendering local video
-        if (localVideoRef.current && client.getCurrentUserInfo()?.userId) {
-          await mediaStream.stopRenderVideo(localVideoRef.current, client.getCurrentUserInfo()!.userId);
-        }
+        localVideoRef.current.srcObject = null;
         setVideoOn(false);
         console.log('📹 Video stopped');
       } else {
-        await mediaStream.startVideo();
-        // Start rendering local video
-        if (localVideoRef.current && client.getCurrentUserInfo()?.userId) {
-          await mediaStream.renderVideo(localVideoRef.current, client.getCurrentUserInfo()!.userId);
+        // Create temporary video element
+        const tempVideo = document.createElement('video');
+        tempVideo.muted = true;
+        tempVideo.playsInline = true;
+        
+        await mediaStream.startVideo({ videoElement: tempVideo });
+        
+        // Copy stream to our video element
+        if (tempVideo.srcObject && localVideoRef.current) {
+          localVideoRef.current.srcObject = tempVideo.srcObject;
         }
+        
         setVideoOn(true);
         console.log('📹 Video started');
       }
@@ -345,7 +359,7 @@ export default function VideoSessionPage() {
       console.error('❌ Toggle video error:', error);
       setError(`Eroare video: ${error.message}`);
     }
-  }, [mediaStream, isVideoOn, client]);
+  }, [mediaStream, isVideoOn]);
 
   const toggleAudio = useCallback(async () => {
     if (!mediaStream) return;
