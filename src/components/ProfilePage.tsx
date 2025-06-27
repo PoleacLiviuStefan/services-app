@@ -14,6 +14,7 @@ import Button from "@/components/atoms/button";
 import UserBoughtPackages from "./UserBoughtPackages";
 import UserSessions from "./UserSessions";
 import UserBillingDetails from "./UserBillingDetails";
+import UserConversations from "./UserConversations";
 import Cropper from "react-easy-crop";
 import { getCroppedImg } from "@/utils/cropImage";
 
@@ -50,6 +51,9 @@ interface ProviderProfile {
   };
 }
 
+// Actualizez tipul Tab pentru a include 'conversatii'
+type Tab = 'packages' | 'sessions' | 'billing' | 'conversatii';
+
 const ProfilePage: React.FC = () => {
   const { data: session, status, update: refreshSession } = useSession();
   const router = useRouter();
@@ -62,7 +66,7 @@ const ProfilePage: React.FC = () => {
   // Sync tab if URL changes
   useEffect(() => {
     const t = searchParams.get('tab') as Tab;
-    if (t === 'packages' || t === 'sessions' || t === 'billing') {
+    if (t === 'packages' || t === 'sessions' || t === 'billing' || t === 'conversatii') {
       setActiveTab(t);
     }
   }, [searchParams]);
@@ -151,7 +155,7 @@ const ProfilePage: React.FC = () => {
     }
   }, [session]);
 
-  // Avatar crop handlers omitted for brevity…
+  // Avatar crop handlers
   const onCropComplete = (_: any, pixels: any) => setCroppedAreaPixels(pixels);
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files?.[0]) {
@@ -180,7 +184,7 @@ const ProfilePage: React.FC = () => {
     }
   };
 
-  // Name edit handlers omitted for brevity…
+  // Name edit handlers
   const handleEditNameClick = () => {
     if (!provider) return;
     setNameError(null);
@@ -204,6 +208,14 @@ const ProfilePage: React.FC = () => {
       }
     } catch { setNameError('Eroare de rețea'); }
     finally { setIsSavingName(false); }
+  };
+
+  // Funcție pentru a actualiza URL-ul cu tab-ul selectat
+  const handleTabChange = (tab: Tab) => {
+    setActiveTab(tab);
+    const url = new URL(window.location.href);
+    url.searchParams.set('tab', tab);
+    router.replace(url.pathname + url.search, { scroll: false });
   };
 
   if (status === 'loading') return <p className="text-center mt-20">Se încarcă...</p>;
@@ -271,15 +283,55 @@ const ProfilePage: React.FC = () => {
       )}
 
       {/* Tabs */}
-      <div className="max-w-2xl mx-auto">
-        <nav className="flex border-b">
-          <button onClick={() => setActiveTab('packages')} className={`px-4 py-2 -mb-px text-sm font-medium ${activeTab==='packages'? 'border-b-2 border-primaryColor text-primaryColor':'text-gray-600'}`}>Pachete</button>
-          <button onClick={() => setActiveTab('sessions')} className={`ml-6 px-4 py-2 -mb-px text-sm font-medium ${activeTab==='sessions'? 'border-b-2 border-primaryColor text-primaryColor':'text-gray-600'}`}>Ședințe</button>
-          <button onClick={() => setActiveTab('billing')} className={`ml-6 px-4 py-2 -mb-px text-sm font-medium ${activeTab==='billing'? 'border-b-2 border-primaryColor text-primaryColor':'text-gray-600'}`}>Date Facturare</button>
+      <div className="max-w-4xl mx-auto">
+        <nav className="flex border-b overflow-x-auto">
+          <button 
+            onClick={() => handleTabChange('packages')} 
+            className={`px-4 py-2 -mb-px text-sm font-medium whitespace-nowrap ${
+              activeTab === 'packages' 
+                ? 'border-b-2 border-primaryColor text-primaryColor' 
+                : 'text-gray-600 hover:text-gray-800'
+            }`}
+          >
+            Pachete
+          </button>
+          <button 
+            onClick={() => handleTabChange('sessions')} 
+            className={`ml-6 px-4 py-2 -mb-px text-sm font-medium whitespace-nowrap ${
+              activeTab === 'sessions' 
+                ? 'border-b-2 border-primaryColor text-primaryColor' 
+                : 'text-gray-600 hover:text-gray-800'
+            }`}
+          >
+            Ședințe
+          </button>
+          <button 
+            onClick={() => handleTabChange('conversatii')} 
+            className={`ml-6 px-4 py-2 -mb-px text-sm font-medium whitespace-nowrap ${
+              activeTab === 'conversatii' 
+                ? 'border-b-2 border-primaryColor text-primaryColor' 
+                : 'text-gray-600 hover:text-gray-800'
+            }`}
+          >
+            Conversații
+          </button>
+          <button 
+            onClick={() => handleTabChange('billing')} 
+            className={`ml-6 px-4 py-2 -mb-px text-sm font-medium whitespace-nowrap ${
+              activeTab === 'billing' 
+                ? 'border-b-2 border-primaryColor text-primaryColor' 
+                : 'text-gray-600 hover:text-gray-800'
+            }`}
+          >
+            Date Facturare
+          </button>
         </nav>
+        
         <div className="mt-6">
-          {activeTab==='packages' ? <UserBoughtPackages isProvider={isProviderMode}/> :
-            activeTab==='sessions' ? <UserSessions/> : <UserBillingDetails/>}
+          {activeTab === 'packages' && <UserBoughtPackages isProvider={isProviderMode} />}
+          {activeTab === 'sessions' && <UserSessions />}
+          {activeTab === 'conversatii' && <UserConversations />}
+          {activeTab === 'billing' && <UserBillingDetails />}
         </div>
       </div>
 
@@ -287,7 +339,7 @@ const ProfilePage: React.FC = () => {
       {provider && !loadingProvider && <ProviderDetails provider={provider} />}
 
       {/* Admin */}
-      {session.user.role==='ADMIN' && (
+      {session.user.role === 'ADMIN' && (
         <div className="max-w-3xl mx-auto mt-10">
           <h3 className="text-lg font-semibold mb-4">Administrare Utilizatori</h3>
           <AdminPsychics physics={users} />

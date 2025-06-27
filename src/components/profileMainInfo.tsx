@@ -1,15 +1,16 @@
-// File: components/ProfileMainInfo.tsx
 "use client";
 
 import React, { useState } from "react";
 import Image from "next/image";
-import { FaPlay, FaStar, FaVideo } from "react-icons/fa";
+import Link from "next/link";
+import { FaPlay, FaStar, FaVideo, FaComments } from "react-icons/fa";
 import Icon from "./atoms/icon";
 import Button from "./atoms/button";
 import ViewVideoModal from "./ViewVideoModal";
 import BuyPackageModal from "./BuyPackageModal";
 import MainCharacteristic from "./ui/mainCharacteristic";
 import { ProviderInterface } from "@/interfaces/ProviderInterface";
+import { createConversationUrl } from "@/utils/userResolver";
 
 interface ProfileMainInfoProps {
   provider: ProviderInterface;
@@ -102,33 +103,37 @@ const ProfileMainInfo: React.FC<ProfileMainInfoProps> = ({ provider }) => {
             />
           </ul>
 
-          {/* butoane dinamice cu doar iconița de video */}
+          {/* Butoane de acțiuni */}
           <div className="flex flex-wrap justify-center gap-4">
-            
-              <Button
-              
-                onClick={() => {
-                  setSelectedService(services[0]);
-                  setShowBuyPackageModal(true);
-                }}
-                className={`flex flex-col
-                  p-3
-              
-                `}
-              >
-                <Icon className="-mb-[15px]">
-                  <FaVideo size={20} />
-                </Icon>
-                <Button className="border-[2px] border-primaryColor px-6 py-4 font-bold duration ease-in-out  rounded-md hover:bg-primaryColor hover:text-white">Cumpara Sedinte</Button>
+            {/* Buton Chat/Conversație - folosește URL-ul corect */}
+            <Link href={createConversationUrl(provider.name)}>
+              <Button className="flex items-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-md hover:bg-blue-700 transition-colors">
+                <FaComments size={20} />
+                <span>Conversație</span>
               </Button>
-                  <p className="font-bold">Pasii pentru a putea programa o consulatie:</p>
-                  <ul>
-                    <ol>1.Apasa pe butonul 'Cumpara Sedinte'</ol>
-                    <ol>2.Efectueaza Plata pentru suma afisata</ol>
-                    <ol>3.Apasa pe butonul 'Programare Sedinta' aflat putin mai jos si alege un interval disponibil.</ol>
+            </Link>
 
+            {/* Buton Programare Video */}
+            <Button
+              onClick={() => {
+                setSelectedService(services[0]);
+                setShowBuyPackageModal(true);
+              }}
+              className="flex items-center gap-2 border-2 border-primaryColor text-primaryColor px-6 py-3 rounded-md hover:bg-primaryColor hover:text-white transition-all duration-300"
+            >
+              <FaVideo size={20} />
+              <span>Cumpără Ședințe</span>
+            </Button>
+          </div>
 
-                  </ul>
+          {/* Instrucțiuni */}
+          <div className="mt-6 p-4 bg-gray-50 rounded-lg w-full">
+            <p className="font-bold text-gray-800 mb-3">Pașii pentru a putea programa o consultație:</p>
+            <ol className="list-decimal list-inside space-y-2 text-gray-700">
+              <li>Apasă pe butonul 'Cumpără Ședințe'</li>
+              <li>Efectuează plata pentru suma afișată</li>
+              <li>Apasă pe butonul 'Programare Ședință' aflat puțin mai jos și alege un interval disponibil</li>
+            </ol>
           </div>
         </div>
       </div>

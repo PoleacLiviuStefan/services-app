@@ -1,9 +1,9 @@
-'use client';
+"use client";
 
-import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { useSession } from 'next-auth/react';
-import { useParams } from 'next/navigation';
-import ZoomVideo from '@zoom/videosdk';
+import React, { useEffect, useState, useCallback, useRef } from "react";
+import { useSession } from "next-auth/react";
+import { useParams } from "next/navigation";
+import ZoomVideo from "@zoom/videosdk";
 
 interface SessionInfo {
   sessionName: string;
@@ -23,17 +23,21 @@ interface ZoomUser {
   isHost?: boolean;
 }
 
+// Global state to survive hot reloads
 declare global {
   interface Window {
-    __ZOOM_VIDEO_SESSION_DATA__?: {
+    __ZOOM_SESSION_STATE__?: {
       [key: string]: {
         client: any;
         mediaStream: any;
         isVideoOn: boolean;
         isAudioOn: boolean;
         connectionStatus: string;
-      }
-    }
+        isJoined: boolean;
+        participants: ZoomUser[];
+        lastActivity: number;
+      };
+    };
   }
 }
 
@@ -47,663 +51,836 @@ export default function VideoSessionPage() {
   const [mediaStream, setMediaStream] = useState<any>(null);
   const [isVideoOn, setVideoOn] = useState(false);
   const [isAudioOn, setAudioOn] = useState(false);
-  const [error, setError] = useState<string>('');
+  const [error, setError] = useState<string>("");
   const [loading, setLoading] = useState(false);
-  const [timeLeft, setTimeLeft] = useState<string>('');
+  const [timeLeft, setTimeLeft] = useState<string>("");
   const [participants, setParticipants] = useState<ZoomUser[]>([]);
-  const [connectionStatus, setConnectionStatus] = useState<string>('disconnected');
+  const [connectionStatus, setConnectionStatus] =
+    useState<string>("disconnected");
   const [isMediaReady, setIsMediaReady] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
-  
+
   // Video attachment tracking
   const [localVideoAttached, setLocalVideoAttached] = useState(false);
-  const [videoAttachmentMethod, setVideoAttachmentMethod] = useState<string>('');
-  const [retryCount, setRetryCount] = useState(0);
+  const [videoAttachmentMethod, setVideoAttachmentMethod] =
+    useState<string>("");
+  const [videoStreamReady, setVideoStreamReady] = useState(false);
+  const [cameraPermission, setCameraPermission] = useState<string>("prompt");
 
   // Refs
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
-  const remoteAudioRef = useRef<HTMLDivElement>(null);
-  const activeRemoteVideo = useRef<string | null>(null);
+  const attachmentTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const retryCountRef = useRef(0);
+  const mountedRef = useRef(true);
+  const initializationRef = useRef(false);
 
   // Session tracking
-  const sessionKey = `${sessionInfo?.sessionName || ''}_${auth?.user?.id || ''}`;
+  const sessionKey = `${sessionInfo?.sessionName || sessionId}_${
+    auth?.user?.id || "unknown"
+  }`;
 
   // Enhanced logging
   const log = (message: string, data?: any) => {
-    const timestamp = new Date().toISOString().split('T')[1].slice(0, -1);
-    console.log(`[${timestamp}] [VideoSession] ${message}`, data || '');
+    const timestamp = new Date().toISOString().split("T")[1].slice(0, -1);
+    console.log(`[${timestamp}] [VideoSession] ${message}`, data || "");
   };
 
   const logError = (message: string, error?: any) => {
-    const timestamp = new Date().toISOString().split('T')[1].slice(0, -1);
-    console.error(`[${timestamp}] [VideoSession ERROR] ${message}`, error || '');
+    const timestamp = new Date().toISOString().split("T")[1].slice(0, -1);
+    console.error(
+      `[${timestamp}] [VideoSession ERROR] ${message}`,
+      error || ""
+    );
   };
 
-  // Global session data management (persists across hot reloads)
-  const getGlobalSessionData = useCallback(() => {
-    if (!window.__ZOOM_VIDEO_SESSION_DATA__) {
-      window.__ZOOM_VIDEO_SESSION_DATA__ = {};
+  // Check camera permissions
+  const checkCameraPermission = useCallback(async () => {
+    try {
+      const result = await navigator.permissions.query({ name: 'camera' as PermissionName });
+      setCameraPermission(result.state);
+      result.addEventListener('change', () => {
+        setCameraPermission(result.state);
+      });
+    } catch (e) {
+      log("Could not check camera permission", e);
     }
-    return window.__ZOOM_VIDEO_SESSION_DATA__[sessionKey];
+  }, []);
+
+  // Global state management with hot reload support
+  const getGlobalState = useCallback(() => {
+    if (!window.__ZOOM_SESSION_STATE__) {
+      window.__ZOOM_SESSION_STATE__ = {};
+    }
+    return window.__ZOOM_SESSION_STATE__[sessionKey];
   }, [sessionKey]);
 
-  const setGlobalSessionData = useCallback((data: any) => {
-    if (!window.__ZOOM_VIDEO_SESSION_DATA__) {
-      window.__ZOOM_VIDEO_SESSION_DATA__ = {};
+  const setGlobalState = useCallback(
+    (state: any) => {
+      if (!window.__ZOOM_SESSION_STATE__) {
+        window.__ZOOM_SESSION_STATE__ = {};
+      }
+      window.__ZOOM_SESSION_STATE__[sessionKey] = {
+        ...state,
+        lastActivity: Date.now(),
+      };
+    },
+    [sessionKey]
+  );
+
+  const clearGlobalState = useCallback(() => {
+    if (
+      window.__ZOOM_SESSION_STATE__ &&
+      window.__ZOOM_SESSION_STATE__[sessionKey]
+    ) {
+      delete window.__ZOOM_SESSION_STATE__[sessionKey];
     }
-    window.__ZOOM_VIDEO_SESSION_DATA__[sessionKey] = data;
   }, [sessionKey]);
 
   // Token validation
-  const validateZoomToken = (token: string): { isValid: boolean; error?: string; expiresAt?: Date } => {
+  const validateZoomToken = (
+    token: string
+  ): { isValid: boolean; error?: string; expiresAt?: Date } => {
     try {
-      const payload = JSON.parse(atob(token.split('.')[1]));
+      const payload = JSON.parse(atob(token.split(".")[1]));
       const now = Math.floor(Date.now() / 1000);
       const expiresAt = new Date(payload.exp * 1000);
-      
+
       if (payload.exp < now) {
         return {
           isValid: false,
           error: `Token expirat la ${expiresAt.toISOString()}`,
-          expiresAt
+          expiresAt,
         };
       }
-      
+
       return { isValid: true, expiresAt };
     } catch (e) {
-      return { isValid: false, error: 'Token format invalid' };
+      return { isValid: false, error: "Token format invalid" };
     }
   };
 
-  // Direct DOM video attachment (bypasses React ref issues)
-  const attachLocalVideoDirectly = useCallback(async () => {
-    return new Promise<boolean>((resolve) => {
-      const attemptDirectAttachment = async (attempt = 1, maxAttempts = 5) => {
-        log(`🎥 Direct video attachment attempt ${attempt}/${maxAttempts}`);
-        
-        // Get global session data
-        const globalData = getGlobalSessionData();
-        if (!globalData?.mediaStream) {
-          log('MediaStream not available in global data');
-          if (attempt < maxAttempts) {
-            setTimeout(() => attemptDirectAttachment(attempt + 1, maxAttempts), 500);
-            return;
-          } else {
-            resolve(false);
-            return;
-          }
-        }
+  // Improved video attachment with proper stream readiness check
+  const attachLocalVideo = useCallback(async () => {
+    if (!mediaStream || !isVideoOn || !localVideoRef.current) return false;
+    const videoElement = localVideoRef.current;
 
-        // Use direct DOM query instead of React ref
-        const videoElement = document.querySelector('#local-video-element') as HTMLVideoElement;
-        if (!videoElement) {
-          log('Video element not found in DOM, retrying...');
-          if (attempt < maxAttempts) {
-            setTimeout(() => attemptDirectAttachment(attempt + 1, maxAttempts), 500);
-            return;
-          } else {
-            logError('Video element never found in DOM');
-            resolve(false);
-            return;
-          }
-        }
+    try {
+      // 1) First check if we have a video track
+      let videoTrack = null;
+      if (typeof mediaStream.getVideoTrack === 'function') {
+        videoTrack = mediaStream.getVideoTrack();
+      }
+      
+      log('👀 Attach video attempt:', {
+        hasMediaStream: !!mediaStream,
+        hasVideoTrack: !!videoTrack,
+        trackReadyState: videoTrack?.readyState,
+        hasAttachVideo: typeof mediaStream.attachVideo === 'function',
+        elementReady: !!videoElement
+      });
 
-        try {
-          log('🎥 Both global data and DOM element ready, attaching video');
-          
-          // Clear existing video
-          if (videoElement.srcObject) {
-            videoElement.srcObject = null;
-            videoElement.load();
-          }
+      // 2) Try the Zoom SDK attachVideo method
+      if (typeof mediaStream.attachVideo === 'function') {
+        await mediaStream.attachVideo(videoElement);
+        log('✅ attachVideo succeeded');
+        setLocalVideoAttached(true);
+        setVideoAttachmentMethod('zoom-sdk');
+        setVideoStreamReady(true);
+        return true;
+      }
 
-          let success = false;
-          let method = '';
+      // 3) Fallback: try getting the raw MediaStream
+  if (mediaStream.getMediaStream) {
+  const native = mediaStream.getMediaStream();
+  console.log("Fallback native tracks:", native.getVideoTracks().length);
+  videoElement.srcObject = native;
+  await videoElement.play();
+  return true;
+}
 
-          // Try attachVideo
-          if (typeof globalData.mediaStream.attachVideo === 'function') {
-            try {
-              await globalData.mediaStream.attachVideo(videoElement);
-              success = true;
-              method = 'attachVideo';
-              log('✅ Local video attached using attachVideo (direct DOM)');
-            } catch (e: any) {
-              logError('Direct attachVideo failed', e);
-            }
-          }
+      log('❌ No working attachment method found');
+      return false;
 
-          // Try renderVideo as fallback
-          if (!success && typeof globalData.mediaStream.renderVideo === 'function' && globalData.client) {
-            try {
-              const currentUser = globalData.client.getCurrentUserInfo();
-              if (currentUser && currentUser.userId) {
-                await globalData.mediaStream.renderVideo(videoElement, currentUser.userId);
-                success = true;
-                method = 'renderVideo';
-                log('✅ Local video attached using renderVideo (direct DOM)');
-              }
-            } catch (e: any) {
-              logError('Direct renderVideo failed', e);
-            }
-          }
+    } catch (err: any) {
+      logError('❌ Video attachment failed', err);
+      // If it's a permission error, update state
+      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+        setCameraPermission('denied');
+        setError('Camera access denied. Please allow camera access and refresh.');
+      }
+      return false;
+    }
+  }, [mediaStream, isVideoOn]);
 
-          if (success) {
-            setLocalVideoAttached(true);
-            setVideoAttachmentMethod(method);
-            setRetryCount(0);
-            log('✅ Direct video attachment successful', { method });
-          } else {
-            setLocalVideoAttached(false);
-            setVideoAttachmentMethod('');
-            logError('❌ All direct video attachment methods failed');
-          }
+  // Auto-retry video attachment with exponential backoff
+  const scheduleVideoRetry = useCallback(() => {
+    if (!mountedRef.current || retryCountRef.current >= 5) {
+      if (retryCountRef.current >= 5) {
+        logError("Maximum video attachment retries reached");
+        setError("Nu s-a putut conecta video-ul după mai multe încercări");
+      }
+      return;
+    }
 
-          resolve(success);
-        } catch (e: any) {
-          logError('Critical error in direct video attachment', e);
-          resolve(false);
-        }
-      };
+    const delay = Math.min(1000 * Math.pow(2, retryCountRef.current), 10000);
+    retryCountRef.current++;
 
-      attemptDirectAttachment();
-    });
-  }, [getGlobalSessionData]);
+    log(`Scheduling video retry ${retryCountRef.current}/5 in ${delay}ms`);
+
+    attachmentTimeoutRef.current = setTimeout(async () => {
+      if (!mountedRef.current) return;
+
+      const success = await attachLocalVideo();
+      if (!success && isVideoOn && mediaStream && mountedRef.current) {
+        scheduleVideoRetry();
+      }
+    }, delay);
+  }, [attachLocalVideo, isVideoOn, mediaStream]);
 
   // Enhanced cleanup function
-  const cleanup = useCallback(async () => {
-    log('🧹 Starting cleanup...');
-    
-    try {
-      const globalData = getGlobalSessionData();
-      
-      if (globalData) {
-        // Stop media streams
-        if (globalData.mediaStream) {
+  const cleanup = useCallback(
+    async (clearGlobal = false) => {
+      log("🧹 Starting cleanup...", { clearGlobal });
+
+      if (attachmentTimeoutRef.current) {
+        clearTimeout(attachmentTimeoutRef.current);
+        attachmentTimeoutRef.current = null;
+      }
+
+      const globalState = getGlobalState();
+
+      try {
+        if (globalState?.mediaStream) {
           try {
-            if (globalData.isVideoOn && typeof globalData.mediaStream.stopVideo === 'function') {
-              await globalData.mediaStream.stopVideo();
+            if (globalState.isVideoOn && typeof globalState.mediaStream.stopVideo === "function") {
+              await globalState.mediaStream.stopVideo();
             }
-            if (globalData.isAudioOn && typeof globalData.mediaStream.stopAudio === 'function') {
-              await globalData.mediaStream.stopAudio();
+            if (globalState.isAudioOn && typeof globalState.mediaStream.stopAudio === "function") {
+              await globalState.mediaStream.stopAudio();
             }
           } catch (e: any) {
-            logError('Error stopping media streams', e);
+            logError("Error stopping media streams", e);
           }
         }
 
-        // Clean up client
-        if (globalData.client) {
+        if (clearGlobal && globalState?.client) {
           try {
-            if (typeof globalData.client.off === 'function') {
-              globalData.client.off('user-added');
-              globalData.client.off('user-removed');
-              globalData.client.off('peer-video-state-change');
-              globalData.client.off('peer-audio-state-change');
-              globalData.client.off('connection-change');
+            if (typeof globalState.client.off === "function") {
+              globalState.client.off("user-added");
+              globalState.client.off("user-removed");
+              globalState.client.off("peer-video-state-change");
+              globalState.client.off("peer-audio-state-change");
+              globalState.client.off("connection-change");
             }
-            if (typeof globalData.client.leave === 'function') {
-              await globalData.client.leave();
+            if (typeof globalState.client.leave === "function") {
+              await globalState.client.leave();
             }
           } catch (e: any) {
-            logError('Error during client cleanup', e);
+            logError("Error during client cleanup", e);
           }
         }
 
-        // Destroy client
-        try {
-          if (typeof ZoomVideo.destroyClient === 'function') {
-            ZoomVideo.destroyClient();
+        if (clearGlobal) {
+          try {
+            if (typeof ZoomVideo.destroyClient === "function") {
+              ZoomVideo.destroyClient();
+            }
+          } catch (e: any) {
+            logError("Error destroying client", e);
           }
-        } catch (e: any) {
-          logError('Error destroying client', e);
         }
 
-        // Clear global session data
-        delete window.__ZOOM_VIDEO_SESSION_DATA__![sessionKey];
-      }
+        if (localVideoRef.current) {
+          localVideoRef.current.pause();
+          localVideoRef.current.srcObject = null;
+          localVideoRef.current.load();
+        }
 
-      // Clean up DOM elements directly
-      const localVideo = document.querySelector('#local-video-element') as HTMLVideoElement;
-      const remoteVideo = document.querySelector('#remote-video-element') as HTMLVideoElement;
-      
-      if (localVideo) {
-        localVideo.pause();
-        localVideo.srcObject = null;
-        localVideo.load();
-      }
-      
-      if (remoteVideo) {
-        remoteVideo.pause();
-        remoteVideo.srcObject = null;
-        remoteVideo.load();
-      }
+        if (remoteVideoRef.current) {
+          remoteVideoRef.current.pause();
+          remoteVideoRef.current.srcObject = null;
+          remoteVideoRef.current.load();
+        }
 
-      // Reset state
-      setClient(null);
-      setMediaStream(null);
-      setVideoOn(false);
-      setAudioOn(false);
-      setLocalVideoAttached(false);
-      setVideoAttachmentMethod('');
-      setRetryCount(0);
-      setParticipants([]);
-      setConnectionStatus('disconnected');
-      setIsMediaReady(false);
-      setIsInitialized(false);
-      
-      log('✅ Cleanup completed');
-    } catch (e: any) {
-      logError('Error during cleanup', e);
-    }
-  }, [getGlobalSessionData, sessionKey]);
+        if (clearGlobal) {
+          clearGlobalState();
+        }
+
+        if (mountedRef.current) {
+          setClient(null);
+          setMediaStream(null);
+          setVideoOn(false);
+          setAudioOn(false);
+          setLocalVideoAttached(false);
+          setVideoAttachmentMethod("");
+          setVideoStreamReady(false);
+          retryCountRef.current = 0;
+          setParticipants([]);
+          setConnectionStatus("disconnected");
+          setIsMediaReady(false);
+          setIsInitialized(false);
+        }
+
+        log("✅ Cleanup completed");
+      } catch (e: any) {
+        logError("Error during cleanup", e);
+      }
+    },
+    [getGlobalState, clearGlobalState]
+  );
 
   // Fetch session info
   useEffect(() => {
     if (!sessionId) return;
-    
-    log('Fetching session info', { sessionId });
+
+    log("Fetching session info", { sessionId });
     setLoading(true);
-    setError('');
-    
+    setError("");
+
     fetch(`/api/video/session-info/${sessionId}`)
-      .then(res => {
+      .then((res) => {
         if (!res.ok) {
           throw new Error(`HTTP ${res.status}: ${res.statusText}`);
         }
         return res.json();
       })
-      .then(data => {
-        log('Session info received', data);
+      .then((data) => {
+        if (!mountedRef.current) return;
+        log("Session info received", data);
         if (!data.sessionName || !data.token) {
-          throw new Error(data.error || 'Invalid session data');
+          throw new Error(data.error || "Invalid session data");
         }
         setSessionInfo(data);
       })
-      .catch(e => {
-        logError('Error fetching session info', e);
+      .catch((e) => {
+        if (!mountedRef.current) return;
+        logError("Error fetching session info", e);
         setError(`Eroare la încărcarea sesiunii: ${e.message}`);
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (mountedRef.current) {
+          setLoading(false);
+        }
+      });
   }, [sessionId]);
+
+  // Check camera permissions on mount
+  useEffect(() => {
+    checkCameraPermission();
+  }, [checkCameraPermission]);
 
   // Countdown timer
   useEffect(() => {
     if (!sessionInfo?.endDate) return;
-    
+
     const updateTimer = () => {
       const diff = new Date(sessionInfo.endDate).getTime() - Date.now();
       if (diff <= 0) {
-        setTimeLeft('00:00');
+        setTimeLeft("00:00");
         return false;
       }
-      const m = String(Math.floor(diff / 60000)).padStart(2, '0');
-      const s = String(Math.floor((diff % 60000) / 1000)).padStart(2, '0');
+      const m = String(Math.floor(diff / 60000)).padStart(2, "0");
+      const s = String(Math.floor((diff % 60000) / 1000)).padStart(2, "0");
       setTimeLeft(`${m}:${s}`);
       return true;
     };
-    
+
     updateTimer();
     const interval = setInterval(() => {
       if (!updateTimer()) {
         clearInterval(interval);
       }
     }, 1000);
-    
+
     return () => clearInterval(interval);
   }, [sessionInfo?.endDate]);
 
-  // Restore state from global data on mount/remount
+  // Restore state from global data on mount
   useEffect(() => {
-    const globalData = getGlobalSessionData();
-    if (globalData) {
-      log('🔄 Restoring state from global data', globalData);
-      setClient(globalData.client);
-      setMediaStream(globalData.mediaStream);
-      setVideoOn(globalData.isVideoOn);
-      setAudioOn(globalData.isAudioOn);
-      setConnectionStatus(globalData.connectionStatus);
-      setIsMediaReady(!!globalData.mediaStream);
-      setIsInitialized(!!globalData.client);
+    const globalState = getGlobalState();
+    if (globalState && globalState.isJoined) {
+      log("🔄 Restoring state from global data", {
+        connectionStatus: globalState.connectionStatus,
+        isVideoOn: globalState.isVideoOn,
+        isAudioOn: globalState.isAudioOn,
+        participants: globalState.participants?.length || 0,
+      });
 
-      // Try to reattach video if it was on
-      if (globalData.isVideoOn) {
+      setClient(globalState.client);
+      setMediaStream(globalState.mediaStream);
+      setVideoOn(globalState.isVideoOn);
+      setAudioOn(globalState.isAudioOn);
+      setConnectionStatus(globalState.connectionStatus);
+      setIsMediaReady(!!globalState.mediaStream);
+      setIsInitialized(true);
+      setParticipants(globalState.participants || []);
+
+      if (globalState.isVideoOn) {
         setTimeout(async () => {
-          const attached = await attachLocalVideoDirectly();
+          if (!mountedRef.current) return;
+          const attached = await attachLocalVideo();
           if (!attached) {
-            setRetryCount(prev => prev + 1);
+            scheduleVideoRetry();
           }
         }, 1000);
       }
     }
-  }, [getGlobalSessionData, attachLocalVideoDirectly]);
+  }, [getGlobalState, attachLocalVideo, scheduleVideoRetry]);
 
-  // Main Zoom initialization with global persistence
+  // Main Zoom initialization with hot reload protection
   useEffect(() => {
-    if (!sessionInfo || !auth?.user || isInitialized) {
+    if (!sessionInfo || !auth?.user || initializationRef.current) {
       return;
     }
 
-    // Check if already initialized globally
-    const globalData = getGlobalSessionData();
-    if (globalData && globalData.client) {
-      log('Using existing global session data');
+    const globalState = getGlobalState();
+    if (globalState && globalState.isJoined && globalState.client) {
+      log("Using existing global session data - skipping initialization");
       return;
     }
 
-    log('🚀 Starting NEW Zoom initialization', { sessionKey });
+    initializationRef.current = true;
+
+    log("🚀 Starting NEW Zoom initialization", { sessionKey });
 
     (async () => {
       try {
-        setConnectionStatus('connecting');
-        setError('');
-        
-        // Validate token
+        if (!mountedRef.current) return;
+
+        setConnectionStatus("connecting");
+        setError("");
+
         const tokenValidation = validateZoomToken(sessionInfo.token);
         if (!tokenValidation.isValid) {
           throw new Error(`Token invalid: ${tokenValidation.error}`);
         }
-        
-        // Clean slate
+
         try {
-          if (typeof ZoomVideo.destroyClient === 'function') {
-            ZoomVideo.destroyClient();
+          const existingGlobal = getGlobalState();
+          if (!existingGlobal || !existingGlobal.isJoined) {
+            if (typeof ZoomVideo.destroyClient === "function") {
+              ZoomVideo.destroyClient();
+            }
+            await new Promise((resolve) => setTimeout(resolve, 1000));
           }
-          await new Promise(resolve => setTimeout(resolve, 1000));
         } catch (e) {
-          // Ignore
+          // Ignore cleanup errors
         }
-        
-        // Create client
+
         const zmClient = ZoomVideo.createClient();
-        
-        // Initialize
-        await zmClient.init('en-US', 'Global', { 
+
+        // Initialize with settings optimized for camera issues
+        await zmClient.init("en-US", "Global", {
+           videoSourceTimeout: 30000,
           patchJsMedia: true,
-          stayAwake: true
+          stayAwake: true,
+          enforceMultipleVideos: false,
+          // Remove disableVideoDecodeAcceleration as it might cause issues
+          logLevel: "info",
+          leaveOnPageUnload: false,
         });
-        
-        // Join
+
+        // Join session using the token from backend (not process.env)
         await zmClient.join(
           sessionInfo.sessionName,
-          sessionInfo.token,
-          auth.user.name || 'Unknown User',
-          ''
+          sessionInfo.token, // Use token from backend, not process.env
+          auth.user.name || "Unknown User",
+          "" // No password
         );
-        
-        log('✅ Successfully joined session');
+
+        if (!mountedRef.current) {
+          await zmClient.leave();
+          return;
+        }
+
+        log("✅ Successfully joined session");
         setClient(zmClient);
-        setConnectionStatus('connected');
+        setConnectionStatus("connected");
         setIsInitialized(true);
 
-        // Get media stream
         const ms = zmClient.getMediaStream();
         setMediaStream(ms);
 
-        // Store in global data
-        const newGlobalData = {
+        const newGlobalState = {
           client: zmClient,
           mediaStream: ms,
           isVideoOn: false,
           isAudioOn: false,
-          connectionStatus: 'connected'
+          connectionStatus: "connected",
+          isJoined: true,
+          participants: [],
         };
-        setGlobalSessionData(newGlobalData);
+        setGlobalState(newGlobalState);
 
         // Set up event listeners
-        zmClient.on('user-added', (payload: any) => {
-          log('👤 User added', payload);
+        zmClient.on("user-added", (payload: any) => {
+          if (!mountedRef.current) return;
+          log("👤 User added", payload);
           setTimeout(() => {
-            if (zmClient && typeof zmClient.getAllUser === 'function') {
-              setParticipants(zmClient.getAllUser());
+            if (zmClient && typeof zmClient.getAllUser === "function" && mountedRef.current) {
+              const users = zmClient.getAllUser();
+              setParticipants(users);
+              const currentGlobal = getGlobalState();
+              if (currentGlobal) {
+                setGlobalState({ ...currentGlobal, participants: users });
+              }
             }
           }, 1000);
         });
-        
-        zmClient.on('user-removed', (payload: any) => {
-          log('👤 User removed', payload);
+
+        zmClient.on("user-removed", (payload: any) => {
+          if (!mountedRef.current) return;
+          log("👤 User removed", payload);
           setTimeout(() => {
-            if (zmClient && typeof zmClient.getAllUser === 'function') {
-              setParticipants(zmClient.getAllUser());
+            if (zmClient && typeof zmClient.getAllUser === "function" && mountedRef.current) {
+              const users = zmClient.getAllUser();
+              setParticipants(users);
+              const currentGlobal = getGlobalState();
+              if (currentGlobal) {
+                setGlobalState({ ...currentGlobal, participants: users });
+              }
             }
           }, 500);
         });
-        
-        zmClient.on('connection-change', (payload: any) => {
-          log('🔗 Connection state change', payload);
+
+        zmClient.on("connection-change", (payload: any) => {
+          if (!mountedRef.current) return;
+          log("🔗 Connection state change", payload);
           if (payload.state) {
             setConnectionStatus(payload.state);
-            // Update global data
-            const currentGlobalData = getGlobalSessionData();
-            if (currentGlobalData) {
-              currentGlobalData.connectionStatus = payload.state;
-              setGlobalSessionData(currentGlobalData);
+            const currentGlobal = getGlobalState();
+            if (currentGlobal) {
+              setGlobalState({
+                ...currentGlobal,
+                connectionStatus: payload.state,
+              });
             }
           }
         });
 
-        // Start media
-        try {
-          if (typeof ms.startVideo === 'function') {
-            await ms.startVideo();
-            setVideoOn(true);
-            log('✅ Video started');
-            
-            // Update global data
-            const currentGlobalData = getGlobalSessionData();
-            if (currentGlobalData) {
-              currentGlobalData.isVideoOn = true;
-              setGlobalSessionData(currentGlobalData);
-            }
-            
-            // Enhanced video attachment with longer delay for DOM readiness
-            setTimeout(async () => {
-              log('🎥 Starting direct video attachment process...');
-              const attached = await attachLocalVideoDirectly();
-              if (!attached) {
-                logError('Initial direct video attachment failed');
-                setRetryCount(prev => prev + 1);
-              }
-            }, 2000);
-          }
-        } catch (e: any) {
-          logError('Video start failed', e);
-        }
-
-        try {
-          if (typeof ms.startAudio === 'function') {
-            await ms.startAudio();
-            setAudioOn(true);
-            log('✅ Audio started');
-            
-            // Update global data
-            const currentGlobalData = getGlobalSessionData();
-            if (currentGlobalData) {
-              currentGlobalData.isAudioOn = true;
-              setGlobalSessionData(currentGlobalData);
-            }
-          }
-        } catch (e: any) {
-          logError('Audio start failed', e);
-        }
+        // Listen for video state changes
+        zmClient.on("peer-video-state-change", (payload: any) => {
+          if (!mountedRef.current) return;
+          log("📹 Peer video state change", payload);
+          // Handle remote video attachment here if needed
+        });
 
         setIsMediaReady(true);
-        
-        // Update participants
+
+        // Start with audio only initially for stability
+        try {
+          if (typeof ms.startAudio === "function") {
+            await ms.startAudio();
+            if (mountedRef.current) {
+              setAudioOn(true);
+              log("✅ Audio started");
+
+              const currentGlobal = getGlobalState();
+              if (currentGlobal) {
+                setGlobalState({ ...currentGlobal, isAudioOn: true });
+              }
+            }
+          }
+        } catch (e: any) {
+          logError("Audio start failed", e);
+          if (e.reason === 'INSUFFICIENT_PRIVILEGES') {
+            setError('Insufficient privileges to start audio. Please check microphone permissions.');
+          }
+        }
+
         setTimeout(() => {
-          if (zmClient && typeof zmClient.getAllUser === 'function') {
-            setParticipants(zmClient.getAllUser());
+          if (zmClient && typeof zmClient.getAllUser === "function" && mountedRef.current) {
+            const users = zmClient.getAllUser();
+            setParticipants(users);
+            const currentGlobal = getGlobalState();
+            if (currentGlobal) {
+              setGlobalState({ ...currentGlobal, participants: users });
+            }
           }
         }, 2000);
-        
+
       } catch (e: any) {
-        logError('❌ Zoom initialization failed', e);
+        if (!mountedRef.current) return;
+        logError("❌ Zoom initialization failed", e);
         setError(`Eroare la conectare: ${e.message}`);
-        setConnectionStatus('failed');
+        setConnectionStatus("failed");
         setIsInitialized(false);
+        initializationRef.current = false;
       }
     })();
 
-    // Cleanup on unmount
     return () => {
-      log('Component unmounting...');
-      // Don't cleanup global data immediately - let it persist for hot reloads
+      log("Component unmounting...");
+      cleanup(false);
     };
   }, [
     sessionInfo?.sessionName,
-    sessionInfo?.token, 
+    sessionInfo?.token,
     auth?.user?.name,
     auth?.user?.id,
     sessionKey,
-    isInitialized,
-    getGlobalSessionData,
-    setGlobalSessionData,
-    attachLocalVideoDirectly
+    getGlobalState,
+    setGlobalState,
+    cleanup,
   ]);
 
-  // Video toggle with global data sync
-  const toggleVideo = useCallback(async () => {
-    const globalData = getGlobalSessionData();
-    if (!globalData?.mediaStream || !isMediaReady || connectionStatus !== 'connected') {
-      return;
-    }
-    
-    try {
-      if (isVideoOn) {
-        if (typeof globalData.mediaStream.stopVideo === 'function') {
-          await globalData.mediaStream.stopVideo();
-        }
-        const localVideo = document.querySelector('#local-video-element') as HTMLVideoElement;
-        if (localVideo) {
-          localVideo.srcObject = null;
-          localVideo.load();
-        }
-        setVideoOn(false);
-        setLocalVideoAttached(false);
-        setVideoAttachmentMethod('');
-        
-        // Update global data
-        globalData.isVideoOn = false;
-        setGlobalSessionData(globalData);
-      } else {
-        if (typeof globalData.mediaStream.startVideo === 'function') {
-          await globalData.mediaStream.startVideo();
-          setVideoOn(true);
-          
-          // Update global data
-          globalData.isVideoOn = true;
-          setGlobalSessionData(globalData);
-          
-          // Try to attach with direct DOM
-          setTimeout(async () => {
-            const attached = await attachLocalVideoDirectly();
-            if (!attached) {
-              setRetryCount(prev => prev + 1);
-            }
-          }, 1000);
-        }
-      }
-    } catch (e: any) {
-      logError('Video toggle error', e);
-      setError(`Eroare video: ${e.message}`);
-    }
-  }, [isVideoOn, isMediaReady, connectionStatus, getGlobalSessionData, setGlobalSessionData, attachLocalVideoDirectly]);
+  // Component mount/unmount tracking
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
-  // Audio toggle with global data sync
+  // Video attachment effect
+  useEffect(() => {
+    if (isVideoOn && mediaStream && !localVideoAttached && mountedRef.current) {
+      log("Attempting video attachment due to state change");
+      setTimeout(async () => {
+        if (!mountedRef.current) return;
+        const success = await attachLocalVideo();
+        if (!success) {
+          scheduleVideoRetry();
+        }
+      }, 1000);
+    }
+  }, [isVideoOn, mediaStream, localVideoAttached, attachLocalVideo, scheduleVideoRetry]);
+
+async function waitForVideoReady(msTimeout = 20000, interval = 200): Promise<boolean> {
+  const start = Date.now();
+  while (Date.now() - start < msTimeout) {
+    const track = mediaStream?.getVideoTrack?.();
+    if (track?.readyState === "live") {
+      log("✅ Video track is live");
+      return true;
+    }
+    await new Promise(r => setTimeout(r, interval));
+  }
+  logError("⚠️ Video track did not become live in time");
+  return false;
+}
+
+  // Video toggle with global state sync
+const toggleVideo = useCallback(async () => {
+  const globalState = getGlobalState();
+  if (!globalState?.mediaStream || !isMediaReady || connectionStatus !== "connected") {
+    return;
+  }
+
+  try {
+    if (isVideoOn) {
+      // === STOP VIDEO ===
+      log("📹 Stopping local video");
+      if (typeof globalState.mediaStream.stopVideo === "function") {
+        await globalState.mediaStream.stopVideo();
+      }
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject = null;
+        localVideoRef.current.load();
+      }
+      setVideoOn(false);
+      setLocalVideoAttached(false);
+      setVideoAttachmentMethod("");
+      setVideoStreamReady(false);
+      retryCountRef.current = 0;
+
+      if (attachmentTimeoutRef.current) {
+        clearTimeout(attachmentTimeoutRef.current);
+        attachmentTimeoutRef.current = null;
+      }
+
+      setGlobalState({ ...globalState, isVideoOn: false });
+
+    } else {
+      // === START VIDEO ===
+      log("📹 Attempting to start local video");
+
+      // 1) Check camera permission
+      if (cameraPermission === "denied") {
+        setError("Camera access denied. Please allow camera access and refresh.");
+        return;
+      }
+
+      const videoEl = localVideoRef.current;
+      if (!videoEl) {
+        setError("Video element not ready yet");
+        return;
+      }
+
+      try {
+        // 2a) Non-SharedArrayBuffer browsers: pass the video element directly
+        if (typeof window.SharedArrayBuffer !== "function") {
+          await globalState.mediaStream.startVideo({
+            videoElement: videoEl,
+            videoQuality: "360p",
+            facingMode: "user",
+          });
+        }
+        // 2b) SAB-enabled browsers: start then render
+        else {
+          await globalState.mediaStream.startVideo({
+            videoQuality: "360p",
+            facingMode: "user",
+          });
+          globalState.mediaStream.renderVideo(videoEl);
+        }
+
+        log("✅ startVideo() succeeded");
+      } catch (e: any) {
+        logError("❌ startVideo() failed", e);
+        // handle SDK errors
+        if (e.reason === "INSUFFICIENT_PRIVILEGES") {
+          setError("Camera access denied. Please allow camera access and refresh.");
+          setCameraPermission("denied");
+        } else if (e.reason === "DEVICE_NOT_FOUND") {
+          setError("No camera found. Please connect a camera and refresh.");
+        } else {
+          setError(`Cannot start camera: ${e.message || e.reason}`);
+        }
+        return;
+      }
+
+      // 3) Update state (SDK has attached for you)
+      setVideoOn(true);
+      setGlobalState({ ...globalState, isVideoOn: true });
+      setLocalVideoAttached(true);
+      setVideoAttachmentMethod("zoom-sdk");
+      setVideoStreamReady(true);
+    }
+  } catch (e: any) {
+    logError("Video toggle error", e);
+    setError(`Video error: ${e.message}`);
+  }
+}, [
+  isVideoOn,
+  isMediaReady,
+  connectionStatus,
+  cameraPermission,
+  getGlobalState,
+  setGlobalState,
+]);
+
+
+
+  // Audio toggle with global state sync
   const toggleAudio = useCallback(async () => {
-    const globalData = getGlobalSessionData();
-    if (!globalData?.mediaStream || !isMediaReady || connectionStatus !== 'connected') {
+    const globalState = getGlobalState();
+    if (!globalState?.mediaStream || !isMediaReady || connectionStatus !== "connected") {
       return;
     }
-    
+
     try {
       if (isAudioOn) {
-        if (typeof globalData.mediaStream.stopAudio === 'function') {
-          await globalData.mediaStream.stopAudio();
+        if (typeof globalState.mediaStream.stopAudio === "function") {
+          await globalState.mediaStream.stopAudio();
           setAudioOn(false);
-          globalData.isAudioOn = false;
-          setGlobalSessionData(globalData);
+          setGlobalState({ ...globalState, isAudioOn: false });
         }
       } else {
-        if (typeof globalData.mediaStream.startAudio === 'function') {
-          await globalData.mediaStream.startAudio();
+        if (typeof globalState.mediaStream.startAudio === "function") {
+          await globalState.mediaStream.startAudio();
           setAudioOn(true);
-          globalData.isAudioOn = true;
-          setGlobalSessionData(globalData);
+          setGlobalState({ ...globalState, isAudioOn: true });
         }
       }
     } catch (e: any) {
-      logError('Audio toggle error', e);
-      setError(`Eroare audio: ${e.message}`);
+      logError("Audio toggle error", e);
+      if (e.reason === 'INSUFFICIENT_PRIVILEGES') {
+        setError('Microphone access denied. Please allow microphone access and refresh.');
+      } else {
+        setError(`Audio error: ${e.message}`);
+      }
     }
-  }, [isAudioOn, isMediaReady, connectionStatus, getGlobalSessionData, setGlobalSessionData]);
+  }, [isAudioOn, isMediaReady, connectionStatus, getGlobalState, setGlobalState]);
 
   // Leave session
   const leave = useCallback(async () => {
-    log('User leaving session...');
-    setConnectionStatus('disconnecting');
-    await cleanup();
+    log("User leaving session...");
+    setConnectionStatus("disconnecting");
+    await cleanup(true);
     setTimeout(() => {
-      window.location.href = '/dashboard';
+      window.location.href = "/dashboard";
     }, 500);
   }, [cleanup]);
 
-  // Manual video retry with direct DOM
+  // Manual video retry
   const retryVideoAttachment = useCallback(async () => {
     if (!isVideoOn) return;
-    
-    log('🔄 Manual direct video attachment retry...');
-    setRetryCount(prev => prev + 1);
-    
-    const result = await attachLocalVideoDirectly();
+
+    log("🔄 Manual video attachment retry...");
+    retryCountRef.current = 0;
+
+    const result = await attachLocalVideo();
     if (!result) {
-      setError('Nu s-a putut reconecta video-ul. Încercați să reîncărcați pagina.');
+      scheduleVideoRetry();
     }
-  }, [isVideoOn, attachLocalVideoDirectly]);
+  }, [isVideoOn, attachLocalVideo, scheduleVideoRetry]);
 
   // Debug info
   const debugInfo = useCallback(() => {
-    const globalData = getGlobalSessionData();
-    console.log('🔍 HOT RELOAD FRIENDLY DEBUG INFO:', {
+    const globalState = getGlobalState();
+    console.log("🔍 DEBUG INFO:", {
       timestamp: new Date().toISOString(),
+      mounted: mountedRef.current,
+      initializing: initializationRef.current,
       connectionStatus,
       isVideoOn,
       isAudioOn,
       localVideoAttached,
       videoAttachmentMethod,
-      retryCount,
+      videoStreamReady,
+      retryCount: retryCountRef.current,
       isMediaReady,
       isInitialized,
       participants: participants.length,
       sessionKey,
-      globalData: globalData ? {
-        hasClient: !!globalData.client,
-        hasMediaStream: !!globalData.mediaStream,
-        isVideoOn: globalData.isVideoOn,
-        isAudioOn: globalData.isAudioOn,
-        connectionStatus: globalData.connectionStatus
-      } : null,
+      cameraPermission,
+      globalState: globalState
+        ? {
+            hasClient: !!globalState.client,
+            hasMediaStream: !!globalState.mediaStream,
+            isVideoOn: globalState.isVideoOn,
+            isAudioOn: globalState.isAudioOn,
+            connectionStatus: globalState.connectionStatus,
+            isJoined: globalState.isJoined,
+            participants: globalState.participants?.length || 0,
+            lastActivity: new Date(globalState.lastActivity).toISOString(),
+          }
+        : null,
       domElements: {
-        localVideo: !!document.querySelector('#local-video-element'),
-        remoteVideo: !!document.querySelector('#remote-video-element'),
-        localVideoReady: (() => {
-          const el = document.querySelector('#local-video-element') as HTMLVideoElement;
-          return el ? {
-            readyState: el.readyState,
-            videoWidth: el.videoWidth,
-            videoHeight: el.videoHeight,
-            paused: el.paused
-          } : null;
-        })()
-      }
+        localVideo: !!localVideoRef.current,
+        remoteVideo: !!remoteVideoRef.current,
+        localVideoReady: localVideoRef.current
+          ? {
+              readyState: localVideoRef.current.readyState,
+              videoWidth: localVideoRef.current.videoWidth,
+              videoHeight: localVideoRef.current.videoHeight,
+              paused: localVideoRef.current.paused,
+            }
+          : null,
+      },
     });
-  }, [connectionStatus, isVideoOn, isAudioOn, localVideoAttached, videoAttachmentMethod, retryCount, isMediaReady, isInitialized, participants.length, sessionKey, getGlobalSessionData]);
+  }, [
+    connectionStatus,
+    isVideoOn,
+    isAudioOn,
+    localVideoAttached,
+    videoAttachmentMethod,
+    videoStreamReady,
+    isMediaReady,
+    isInitialized,
+    participants.length,
+    sessionKey,
+    cameraPermission,
+    getGlobalState,
+  ]);
 
   // Render logic
   const isProvider = sessionInfo?.provider.id === auth?.user?.id;
   const other = isProvider ? sessionInfo?.client : sessionInfo?.provider;
-  
-  if (status === 'loading' || loading) {
+
+  if (status === "loading" || loading) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
@@ -713,25 +890,25 @@ export default function VideoSessionPage() {
       </div>
     );
   }
-  
+
   if (!auth?.user) {
     return <div className="text-red-500 p-4">Acces neautorizat</div>;
   }
-  
+
   if (error) {
     return (
       <div className="text-red-500 p-4 bg-red-50 rounded-lg max-w-2xl mx-auto">
         <p className="font-semibold">Eroare:</p>
         <p className="mt-2">{error}</p>
         <div className="mt-4 space-x-2">
-          <button 
-            onClick={() => window.location.reload()} 
+          <button
+            onClick={() => window.location.reload()}
             className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
           >
             Reîncarcă
           </button>
-          <button 
-            onClick={() => window.location.href = '/dashboard'} 
+          <button
+            onClick={() => (window.location.href = "/dashboard")}
             className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700"
           >
             Dashboard
@@ -740,7 +917,7 @@ export default function VideoSessionPage() {
       </div>
     );
   }
-  
+
   if (!sessionInfo) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -757,43 +934,44 @@ export default function VideoSessionPage() {
       {/* HEADER */}
       <div className="bg-white rounded-lg shadow p-4 flex justify-between">
         <div>
-          <h2 className="text-xl font-bold">Sesiune Video HMR-Friendly</h2>
-          <p><strong>Client:</strong> {sessionInfo.client.name}</p>
-          <p><strong>Furnizor:</strong> {sessionInfo.provider.name}</p>
+          <h2 className="text-xl font-bold">Sesiune Video</h2>
+          <p>
+            <strong>Client:</strong> {sessionInfo.client.name}
+          </p>
+          <p>
+            <strong>Furnizor:</strong> {sessionInfo.provider.name}
+          </p>
           <div className="mt-1">
             <span>Status:</span>
-            <span className={`ml-2 px-2 py-1 rounded-full text-xs font-medium ${
-              connectionStatus === 'connected'
-                ? 'bg-green-100 text-green-800'
-                : connectionStatus === 'connecting'
-                ? 'bg-yellow-100 text-yellow-800'
-                : connectionStatus === 'disconnecting'
-                ? 'bg-orange-100 text-orange-800'
-                : 'bg-red-100 text-red-800'
-            }`}>
-              {connectionStatus === 'connected'
-                ? 'Conectat'
-                : connectionStatus === 'connecting'
-                ? 'Se conectează...'
-                : connectionStatus === 'disconnecting'
-                ? 'Se deconectează...'
-                : connectionStatus === 'failed'
-                ? 'Conexiune eșuată'
-                : 'Deconectat'}
+            <span
+              className={`ml-2 px-2 py-1 rounded-full text-xs font-medium ${
+                connectionStatus === "connected"
+                  ? "bg-green-100 text-green-800"
+                  : connectionStatus === "connecting"
+                  ? "bg-yellow-100 text-yellow-800"
+                  : connectionStatus === "disconnecting"
+                  ? "bg-orange-100 text-orange-800"
+                  : "bg-red-100 text-red-800"
+              }`}
+            >
+              {connectionStatus === "connected"
+                ? "Conectat"
+                : connectionStatus === "connecting"
+                ? "Se conectează..."
+                : connectionStatus === "disconnecting"
+                ? "Se deconectează..."
+                : connectionStatus === "failed"
+                ? "Conexiune eșuată"
+                : "Deconectat"}
             </span>
             {isMediaReady && (
               <span className="ml-2 px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
                 Media Ready
               </span>
             )}
-            {localVideoAttached && (
-              <span className="ml-2 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                Video OK ({videoAttachmentMethod})
-              </span>
-            )}
-            {retryCount > 0 && (
-              <span className="ml-2 px-2 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
-                Retry: {retryCount}
+            {cameraPermission === 'denied' && (
+              <span className="ml-2 px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                Camera Denied
               </span>
             )}
           </div>
@@ -801,7 +979,8 @@ export default function VideoSessionPage() {
         <div className="text-right">
           <p className="text-2xl font-bold text-blue-600">⏰ {timeLeft}</p>
           <p className="text-sm text-gray-600">
-            {new Date(sessionInfo.startDate).toLocaleTimeString()} – {new Date(sessionInfo.endDate).toLocaleTimeString()}
+            {new Date(sessionInfo.startDate).toLocaleTimeString()} –{" "}
+            {new Date(sessionInfo.endDate).toLocaleTimeString()}
           </p>
           <p className="text-sm text-gray-500">
             Participanți: {participants.length}
@@ -809,25 +988,47 @@ export default function VideoSessionPage() {
         </div>
       </div>
 
+      {/* CAMERA PERMISSION WARNING */}
+      {cameraPermission === 'denied' && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <div className="flex items-center">
+            <div className="text-red-600">⚠️</div>
+            <div className="ml-3">
+              <p className="text-sm text-red-800">
+                Camera access is denied. Please allow camera access in your browser settings:
+              </p>
+              <ul className="text-xs text-red-600 mt-1 list-disc ml-5">
+                <li>Click the camera icon in the address bar</li>
+                <li>Select "Allow" for camera access</li>
+                <li>Refresh this page</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* VIDEO ATTACHMENT WARNING */}
-      {isVideoOn && !localVideoAttached && connectionStatus === 'connected' && (
+      {isVideoOn && !localVideoAttached && connectionStatus === "connected" && cameraPermission !== 'denied' && (
         <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center">
               <div className="text-orange-600">⚠️</div>
               <div className="ml-3">
                 <p className="text-sm text-orange-800">
-                  Video-ul este pornit dar nu se afișează corect (Direct DOM). 
-                  {retryCount > 3 && ' Încercați să reîncărcați pagina.'}
+                  Video-ul este pornit dar nu se afișează corect.
+                  {retryCountRef.current > 3 && " Încercați să reîncărcați pagina."}
+                </p>
+                <p className="text-xs text-orange-600 mt-1">
+                  Retry: {retryCountRef.current}/5
                 </p>
               </div>
             </div>
             <button
               onClick={retryVideoAttachment}
-              disabled={retryCount > 5}
+              disabled={retryCountRef.current > 5}
               className="px-3 py-1 bg-orange-600 text-white rounded text-sm hover:bg-orange-700 disabled:opacity-50"
             >
-              {retryCount > 5 ? 'Prea multe încercări' : 'Reconectează Video'}
+              {retryCountRef.current > 5 ? "Prea multe încercări" : "Reconectează Video"}
             </button>
           </div>
         </div>
@@ -835,39 +1036,38 @@ export default function VideoSessionPage() {
 
       {/* VIDEOS */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Local Video - Using direct DOM ID */}
+        {/* Local Video */}
         <div className="bg-white rounded-lg shadow p-4">
           <div className="flex justify-between items-center mb-3">
             <h3 className="font-semibold text-lg">
-              📹 Tu ({auth.user.name}) 
+              📹 Tu ({auth.user.name})
               <span className="text-sm text-gray-600 ml-1">
-                {isProvider ? '(Furnizor)' : '(Client)'}
+                {isProvider ? "(Furnizor)" : "(Client)"}
               </span>
             </h3>
             <div className="flex gap-2 items-center">
-              <span 
-                className={`w-3 h-3 rounded-full ${isVideoOn ? 'bg-green-500' : 'bg-red-500'}`}
-                title={isVideoOn ? 'Video pornit' : 'Video oprit'}
+              <span
+                className={`w-3 h-3 rounded-full ${
+                  isVideoOn ? "bg-green-500" : "bg-red-500"
+                }`}
+                title={isVideoOn ? "Video pornit" : "Video oprit"}
               />
-              <span 
-                className={`w-3 h-3 rounded-full ${isAudioOn ? 'bg-green-500' : 'bg-red-500'}`}
-                title={isAudioOn ? 'Audio pornit' : 'Audio oprit'}
-              />
-              <span 
-                className={`w-3 h-3 rounded-full ${localVideoAttached ? 'bg-blue-500' : 'bg-gray-400'}`}
-                title={localVideoAttached ? `Video attached (${videoAttachmentMethod})` : 'Video not attached'}
+              <span
+                className={`w-3 h-3 rounded-full ${
+                  isAudioOn ? "bg-green-500" : "bg-red-500"
+                }`}
+                title={isAudioOn ? "Audio pornit" : "Audio oprit"}
               />
             </div>
           </div>
           <div className="aspect-video bg-gray-900 rounded-lg overflow-hidden mb-3 relative">
             {isVideoOn && localVideoAttached ? (
-              <video 
-                id="local-video-element"
+              <video
                 ref={localVideoRef}
-                autoPlay 
-                playsInline 
-                muted 
-                className="w-full h-full object-cover" 
+                autoPlay
+                playsInline
+                muted
+                className="w-full h-full object-cover"
               />
             ) : (
               <div className="w-full h-full flex items-center justify-center text-gray-400">
@@ -875,58 +1075,62 @@ export default function VideoSessionPage() {
                   <div className="text-4xl mb-2">📹</div>
                   {!isVideoOn ? (
                     <p>Camera oprită</p>
+                  ) : cameraPermission === 'denied' ? (
+                    <p>Camera access denied</p>
+                  ) : !videoStreamReady ? (
+                    <div>
+                      <p>Se inițializează stream-ul...</p>
+                      <div className="animate-spin w-6 h-6 border-2 border-gray-400 border-t-blue-600 rounded-full mx-auto mt-2"></div>
+                    </div>
                   ) : !localVideoAttached ? (
                     <div>
-                      <p>Camera pornită dar nu se afișează</p>
-                      <p className="text-xs mt-1">Încercări: {retryCount}</p>
+                      <p>Se conectează video-ul...</p>
+                      <p className="text-xs mt-1">Încercări: {retryCountRef.current}/5</p>
                       <button
                         onClick={retryVideoAttachment}
-                        disabled={retryCount > 5}
+                        disabled={retryCountRef.current > 5}
                         className="mt-2 px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 disabled:opacity-50"
                       >
-                        {retryCount > 5 ? 'Prea multe încercări' : 'Reconectează (DOM)'}
+                        {retryCountRef.current > 5 ? "Prea multe încercări" : "Reconectează"}
                       </button>
                     </div>
                   ) : (
                     <p>Se încarcă...</p>
                   )}
-                  {/* Hidden video element for DOM attachment when not displaying */}
-                  {(!isVideoOn || !localVideoAttached) && (
-                    <video 
-                      id="local-video-element"
-                      ref={localVideoRef}
-                      autoPlay 
-                      playsInline 
-                      muted 
-                      style={{ display: 'none' }}
-                    />
-                  )}
+                  {/* Always render video element for attachment */}
+                  <video
+                    ref={localVideoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    style={{ display: "none" }}
+                  />
                 </div>
               </div>
             )}
           </div>
           <div className="flex gap-2">
-            <button 
-              onClick={toggleVideo} 
-              disabled={!isMediaReady || connectionStatus !== 'connected'} 
+            <button
+              onClick={toggleVideo}
+              disabled={!isMediaReady || connectionStatus !== "connected"}
               className={`flex-1 px-4 py-2 rounded-lg text-white transition-colors ${
-                isVideoOn 
-                  ? 'bg-red-600 hover:bg-red-700' 
-                  : 'bg-green-600 hover:bg-green-700'
+                isVideoOn
+                  ? "bg-red-600 hover:bg-red-700"
+                  : "bg-green-600 hover:bg-green-700"
               } disabled:opacity-50 disabled:cursor-not-allowed`}
             >
-              {isVideoOn ? '📹 Oprește Video' : '📹 Pornește Video'}
+              {isVideoOn ? "📹 Oprește Video" : "📹 Pornește Video"}
             </button>
-            <button 
-              onClick={toggleAudio} 
-              disabled={!isMediaReady || connectionStatus !== 'connected'} 
+            <button
+              onClick={toggleAudio}
+              disabled={!isMediaReady || connectionStatus !== "connected"}
               className={`flex-1 px-4 py-2 rounded-lg text-white transition-colors ${
-                isAudioOn 
-                  ? 'bg-red-600 hover:bg-red-700' 
-                  : 'bg-green-600 hover:bg-green-700'
+                isAudioOn
+                  ? "bg-red-600 hover:bg-red-700"
+                  : "bg-green-600 hover:bg-green-700"
               } disabled:opacity-50 disabled:cursor-not-allowed`}
             >
-              {isAudioOn ? '🔇 Mute' : '🔊 Unmute'}
+              {isAudioOn ? "🔇 Mute" : "🔊 Unmute"}
             </button>
           </div>
         </div>
@@ -935,20 +1139,19 @@ export default function VideoSessionPage() {
         <div className="bg-white rounded-lg shadow p-4">
           <div className="flex justify-between items-center mb-3">
             <h3 className="font-semibold text-lg">
-              👤 {other?.name || 'Participant'} 
+              👤 {other?.name || "Participant"}
               <span className="text-sm text-gray-600 ml-1">
-                {isProvider ? '(Client)' : '(Furnizor)'}
+                {isProvider ? "(Client)" : "(Furnizor)"}
               </span>
             </h3>
           </div>
           <div className="aspect-video bg-gray-900 rounded-lg flex items-center justify-center relative overflow-hidden">
-            <video 
-              id="remote-video-element"
+            <video
               ref={remoteVideoRef}
-              autoPlay 
-              playsInline 
-              className="w-full h-full object-cover" 
-              style={{ display: 'none' }}
+              autoPlay
+              playsInline
+              className="w-full h-full object-cover"
+              style={{ display: "none" }}
             />
             <div className="text-center text-gray-400">
               <div className="text-4xl mb-2">⏳</div>
@@ -965,28 +1168,22 @@ export default function VideoSessionPage() {
       {/* CONTROLS */}
       <div className="bg-white rounded-lg shadow p-4 flex justify-between items-center">
         <div className="flex gap-2 items-center">
-          <button 
-            onClick={debugInfo} 
+          <button
+            onClick={debugInfo}
             className="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700"
           >
-            🔍 Debug HMR-Friendly
+            🔍 Debug Info
           </button>
           <span className="text-sm text-gray-500">Sesiune: {sessionId}</span>
-          <span className="text-xs bg-green-100 px-2 py-1 rounded text-green-800">
-            HMR Compatible
-          </span>
         </div>
-        <button 
-          onClick={leave} 
-          disabled={connectionStatus === 'disconnecting'}
+        <button
+          onClick={leave}
+          disabled={connectionStatus === "disconnecting"}
           className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
         >
-          {connectionStatus === 'disconnecting' ? '🔃 Se deconectează...' : '🚪 Părăsește'}
+          {connectionStatus === "disconnecting" ? "🔃 Se deconectează..." : "🚪 Părăsește"}
         </button>
       </div>
-
-      {/* Hidden audio container */}
-      <div ref={remoteAudioRef} className="hidden" />
     </div>
   );
 }

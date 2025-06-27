@@ -22,3 +22,23 @@ export function formatForUrl(str: string): string {
       .replace(/^-+|-+$/g, "")
   );
 }
+
+
+export function generateConversationUrl(user: { name?: string | null; email?: string | null }): string {
+  // Preferă numele formatat, dacă nu există folosește email-ul
+  if (user.name) {
+    return formatForUrl(user.name);
+  }
+  
+  if (user.email) {
+    return user.email; // Email-ul îl lăsăm ca atare în URL
+  }
+  
+  throw new Error('User must have either name or email');
+}
+
+// Helper pentru a crea link-uri către conversații
+export function createConversationLink(user: { name?: string | null; email?: string | null }): string {
+  const urlIdentifier = generateConversationUrl(user);
+  return `/profil/${encodeURIComponent(urlIdentifier)}/conversatie`;
+}

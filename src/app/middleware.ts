@@ -18,5 +18,9 @@ export async function middleware(request: NextRequest) {
 
 // Specifică rutele pentru care se aplică middleware-ul
 export const config = {
-  matcher: ['/profil/:path*', '/dashboard/:path*'],
+  matcher: [
+    '/profil/:path*', 
+    '/dashboard/:path*',
+    '/api/chat/conversation/:path*' // Protejează și API-urile de conversație
+  ],
 };
