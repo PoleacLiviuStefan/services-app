@@ -3,17 +3,8 @@ import { createClient } from 'redis';
 
 // Pentru development local și production
 const getRedisUrl = () => {
-  // Prioritate pentru environment variable explicit
-  if (process.env.REDIS_URL) {
-    return process.env.REDIS_URL;
-  }
-  
-  // Pentru Railway production (hostname intern)
-  if (process.env.NODE_ENV === 'production' && process.env.RAILWAY_ENVIRONMENT) {
-    return 'redis://default:ZJBgmjlOLJZjkeGrvdihfTSdMtOhtmOq@redis.railway.internal:6379';
-  }
-  
-  // Nu este configurat Redis
+  if (process.env.REDIS_URL) return process.env.REDIS_URL;
+
   return null;
 };
 
