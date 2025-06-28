@@ -107,6 +107,34 @@ export default function VideoSessionPage() {
     }
   }, []);
 
+  // Request camera permission
+  const requestCameraPermission = useCallback(async () => {
+    try {
+      log("Requesting camera permission...");
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: { 
+          width: { ideal: 640 },
+          height: { ideal: 360 },
+          facingMode: "user"
+        } 
+      });
+      
+      // Permission granted, stop the temporary stream
+      stream.getTracks().forEach(track => track.stop());
+      setCameraPermission('granted');
+      log("✅ Camera permission granted");
+      
+      // Clear any permission-related errors
+      setError("");
+      return true;
+    } catch (error: any) {
+      logError("Camera permission denied", error);
+      setCameraPermission('denied');
+      setError("Camera access is required for video calls. Please allow camera access and try again.");
+      return false;
+    }
+  }, []);
+
   // Global state management with hot reload support
   const getGlobalState = useCallback(() => {
     if (!window.__ZOOM_SESSION_STATE__) {
@@ -160,13 +188,49 @@ export default function VideoSessionPage() {
     }
   };
 
-  // Improved video attachment with proper stream readiness check
+  // Helper function to wait for video track to be ready
+  const waitForVideoTrackReady = useCallback(async (track: MediaStreamTrack, timeout = 5000): Promise<boolean> => {
+    return new Promise((resolve) => {
+      if (track.readyState === 'live') {
+        resolve(true);
+        return;
+      }
+
+      let timeoutId: NodeJS.Timeout;
+      
+      const checkReady = () => {
+        if (track.readyState === 'live') {
+          clearTimeout(timeoutId);
+          resolve(true);
+        }
+      };
+
+      // Check every 100ms
+      const intervalId = setInterval(checkReady, 100);
+      
+      // Timeout after specified time
+      timeoutId = setTimeout(() => {
+        clearInterval(intervalId);
+        resolve(false);
+      }, timeout);
+
+      // Also listen for track events
+      track.addEventListener('unmute', checkReady);
+      track.addEventListener('started', checkReady);
+    });
+  }, []);
+
+  // Enhanced video attachment with browser-specific logic
   const attachLocalVideo = useCallback(async () => {
     if (!mediaStream || !isVideoOn || !localVideoRef.current) return false;
     const videoElement = localVideoRef.current;
+    const globalState = getGlobalState();
 
     try {
-      // 1) First check if we have a video track
+      // Check browser capabilities
+      const hasSharedArrayBuffer = typeof SharedArrayBuffer !== 'undefined';
+      
+      // 1) Check if video track is available and ready
       let videoTrack = null;
       if (typeof mediaStream.getVideoTrack === 'function') {
         videoTrack = mediaStream.getVideoTrack();
@@ -176,28 +240,61 @@ export default function VideoSessionPage() {
         hasMediaStream: !!mediaStream,
         hasVideoTrack: !!videoTrack,
         trackReadyState: videoTrack?.readyState,
+        hasSharedArrayBuffer,
         hasAttachVideo: typeof mediaStream.attachVideo === 'function',
-        elementReady: !!videoElement
+        elementReady: !!videoElement,
+        hasClient: !!globalState?.client
       });
 
-      // 2) Try the Zoom SDK attachVideo method
-      if (typeof mediaStream.attachVideo === 'function') {
+      // 2) For non-SharedArrayBuffer browsers, video should already be attached via videoElement
+      if (!hasSharedArrayBuffer) {
+        log('ℹ️ Non-SAB browser detected, video should be attached via videoElement');
+        // Just verify the element is working
+        if (videoElement.videoWidth > 0 && videoElement.videoHeight > 0) {
+          log('✅ Video element has dimensions, considering attached');
+          setLocalVideoAttached(true);
+          setVideoAttachmentMethod('videoElement');
+          setVideoStreamReady(true);
+          return true;
+        } else {
+          log('⚠️ Video element has no dimensions yet, waiting...');
+          return false;
+        }
+      }
+
+      // 3) For SharedArrayBuffer browsers, wait for video track to be ready
+      if (videoTrack && videoTrack.readyState !== 'live') {
+        log('⏳ Waiting for video track to be ready...');
+        const trackReady = await waitForVideoTrackReady(videoTrack, 5000);
+        if (!trackReady) {
+          log('❌ Video track did not become ready in time');
+          return false;
+        }
+      }
+
+      // 4) Try attachVideo method for SAB browsers
+      if (hasSharedArrayBuffer && typeof mediaStream.attachVideo === 'function') {
         await mediaStream.attachVideo(videoElement);
         log('✅ attachVideo succeeded');
         setLocalVideoAttached(true);
-        setVideoAttachmentMethod('zoom-sdk');
+        setVideoAttachmentMethod('attachVideo');
         setVideoStreamReady(true);
         return true;
       }
 
-      // 3) Fallback: try getting the raw MediaStream
-  if (mediaStream.getMediaStream) {
-  const native = mediaStream.getMediaStream();
-  console.log("Fallback native tracks:", native.getVideoTracks().length);
-  videoElement.srcObject = native;
-  await videoElement.play();
-  return true;
-}
+      // 5) Fallback: try getting the raw MediaStream
+      if (typeof mediaStream.getMediaStream === 'function') {
+        const nativeStream = mediaStream.getMediaStream();
+        if (nativeStream && nativeStream.getVideoTracks().length > 0) {
+          log("Using fallback MediaStream approach");
+          videoElement.srcObject = nativeStream;
+          await videoElement.play();
+          setLocalVideoAttached(true);
+          setVideoAttachmentMethod('mediastream');
+          setVideoStreamReady(true);
+          return true;
+        }
+      }
 
       log('❌ No working attachment method found');
       return false;
@@ -211,29 +308,39 @@ export default function VideoSessionPage() {
       }
       return false;
     }
-  }, [mediaStream, isVideoOn]);
+  }, [mediaStream, isVideoOn, getGlobalState, waitForVideoTrackReady]);
 
-  // Auto-retry video attachment with exponential backoff
+  // Enhanced retry mechanism with exponential backoff
   const scheduleVideoRetry = useCallback(() => {
-    if (!mountedRef.current || retryCountRef.current >= 5) {
+    if (!mountedRef.current || retryCountRef.current >= 5 || !isVideoOn) {
       if (retryCountRef.current >= 5) {
         logError("Maximum video attachment retries reached");
-        setError("Nu s-a putut conecta video-ul după mai multe încercări");
+        setError("Could not connect video after multiple attempts. Try refreshing the page.");
       }
       return;
     }
 
-    const delay = Math.min(1000 * Math.pow(2, retryCountRef.current), 10000);
+    // Exponential backoff: 1s, 2s, 4s, 8s, 16s (max)
+    const delay = Math.min(1000 * Math.pow(2, retryCountRef.current), 16000);
     retryCountRef.current++;
 
     log(`Scheduling video retry ${retryCountRef.current}/5 in ${delay}ms`);
 
-    attachmentTimeoutRef.current = setTimeout(async () => {
-      if (!mountedRef.current) return;
+    if (attachmentTimeoutRef.current) {
+      clearTimeout(attachmentTimeoutRef.current);
+    }
 
+    attachmentTimeoutRef.current = setTimeout(async () => {
+      if (!mountedRef.current || !isVideoOn) return;
+
+      log(`Executing retry attempt ${retryCountRef.current}/5`);
       const success = await attachLocalVideo();
+      
       if (!success && isVideoOn && mediaStream && mountedRef.current) {
         scheduleVideoRetry();
+      } else if (success) {
+        log("✅ Video retry successful!");
+        retryCountRef.current = 0; // Reset on success
       }
     }, delay);
   }, [attachLocalVideo, isVideoOn, mediaStream]);
@@ -470,23 +577,25 @@ export default function VideoSessionPage() {
 
         const zmClient = ZoomVideo.createClient();
 
-        // Initialize with settings optimized for camera issues
+        // Initialize with settings optimized for video reliability
         await zmClient.init("en-US", "Global", {
-           videoSourceTimeout: 30000,
+          videoSourceTimeout: 30000,
           patchJsMedia: true,
           stayAwake: true,
           enforceMultipleVideos: false,
-          // Remove disableVideoDecodeAcceleration as it might cause issues
           logLevel: "info",
           leaveOnPageUnload: false,
+          // Add these for better video handling
+          dependentFeatures: ['video'],
+          enableVideoElementAttachment: true,
         });
 
-        // Join session using the token from backend (not process.env)
+        // Join session
         await zmClient.join(
           sessionInfo.sessionName,
-          sessionInfo.token, // Use token from backend, not process.env
+          sessionInfo.token,
           auth.user.name || "Unknown User",
-          "" // No password
+          ""
         );
 
         if (!mountedRef.current) {
@@ -559,13 +668,6 @@ export default function VideoSessionPage() {
           }
         });
 
-        // Listen for video state changes
-        zmClient.on("peer-video-state-change", (payload: any) => {
-          if (!mountedRef.current) return;
-          log("📹 Peer video state change", payload);
-          // Handle remote video attachment here if needed
-        });
-
         setIsMediaReady(true);
 
         // Start with audio only initially for stability
@@ -633,135 +735,209 @@ export default function VideoSessionPage() {
     };
   }, []);
 
-  // Video attachment effect
+  // Video element readiness check
+  useEffect(() => {
+    if (localVideoRef.current) {
+      log("✅ Video element ref is ready", {
+        nodeName: localVideoRef.current.nodeName,
+        readyState: localVideoRef.current.readyState,
+        videoWidth: localVideoRef.current.videoWidth,
+        videoHeight: localVideoRef.current.videoHeight,
+      });
+    } else {
+      log("⚠️ Video element ref is not ready yet");
+    }
+  }, [localVideoRef.current]);
+
+  // Video attachment effect with improved logic
   useEffect(() => {
     if (isVideoOn && mediaStream && !localVideoAttached && mountedRef.current) {
       log("Attempting video attachment due to state change");
-      setTimeout(async () => {
-        if (!mountedRef.current) return;
-        const success = await attachLocalVideo();
-        if (!success) {
-          scheduleVideoRetry();
-        }
-      }, 1000);
+      
+      // For non-SharedArrayBuffer browsers, video might already be working via videoElement
+      const hasSharedArrayBuffer = typeof SharedArrayBuffer !== 'undefined';
+      
+      if (!hasSharedArrayBuffer) {
+        // Check if video element already has video content
+        setTimeout(() => {
+          if (!mountedRef.current || !localVideoRef.current) return;
+          
+          const videoEl = localVideoRef.current;
+          if (videoEl.videoWidth > 0 && videoEl.videoHeight > 0) {
+            log("✅ Non-SAB browser: Video element already has content");
+            setLocalVideoAttached(true);
+            setVideoAttachmentMethod('videoElement');
+            setVideoStreamReady(true);
+          } else {
+            // If still no content, try normal attachment
+            setTimeout(async () => {
+              if (!mountedRef.current) return;
+              const success = await attachLocalVideo();
+              if (!success) {
+                scheduleVideoRetry();
+              }
+            }, 1000);
+          }
+        }, 500);
+      } else {
+        // For SAB browsers, use normal attachment flow
+        setTimeout(async () => {
+          if (!mountedRef.current) return;
+          const success = await attachLocalVideo();
+          if (!success) {
+            scheduleVideoRetry();
+          }
+        }, 1000);
+      }
     }
   }, [isVideoOn, mediaStream, localVideoAttached, attachLocalVideo, scheduleVideoRetry]);
 
-async function waitForVideoReady(msTimeout = 20000, interval = 200): Promise<boolean> {
-  const start = Date.now();
-  while (Date.now() - start < msTimeout) {
-    const track = mediaStream?.getVideoTrack?.();
-    if (track?.readyState === "live") {
-      log("✅ Video track is live");
-      return true;
+  // Updated video toggle with proper SDK usage based on browser capabilities
+  const toggleVideo = useCallback(async () => {
+    const globalState = getGlobalState();
+    if (!globalState?.mediaStream || !isMediaReady || connectionStatus !== "connected") {
+      return;
     }
-    await new Promise(r => setTimeout(r, interval));
-  }
-  logError("⚠️ Video track did not become live in time");
-  return false;
-}
 
-  // Video toggle with global state sync
-const toggleVideo = useCallback(async () => {
-  const globalState = getGlobalState();
-  if (!globalState?.mediaStream || !isMediaReady || connectionStatus !== "connected") {
-    return;
-  }
-
-  try {
-    if (isVideoOn) {
-      // === STOP VIDEO ===
-      log("📹 Stopping local video");
-      if (typeof globalState.mediaStream.stopVideo === "function") {
-        await globalState.mediaStream.stopVideo();
-      }
-      if (localVideoRef.current) {
-        localVideoRef.current.srcObject = null;
-        localVideoRef.current.load();
-      }
-      setVideoOn(false);
-      setLocalVideoAttached(false);
-      setVideoAttachmentMethod("");
-      setVideoStreamReady(false);
-      retryCountRef.current = 0;
-
-      if (attachmentTimeoutRef.current) {
-        clearTimeout(attachmentTimeoutRef.current);
-        attachmentTimeoutRef.current = null;
-      }
-
-      setGlobalState({ ...globalState, isVideoOn: false });
-
-    } else {
-      // === START VIDEO ===
-      log("📹 Attempting to start local video");
-
-      // 1) Check camera permission
-      if (cameraPermission === "denied") {
-        setError("Camera access denied. Please allow camera access and refresh.");
-        return;
-      }
-
-      const videoEl = localVideoRef.current;
-      if (!videoEl) {
-        setError("Video element not ready yet");
-        return;
-      }
-
-      try {
-        // 2a) Non-SharedArrayBuffer browsers: pass the video element directly
-        if (typeof window.SharedArrayBuffer !== "function") {
-          await globalState.mediaStream.startVideo({
-            videoElement: videoEl,
-            videoQuality: "360p",
-            facingMode: "user",
-          });
+    try {
+      if (isVideoOn) {
+        // === STOP VIDEO ===
+        log("📹 Stopping local video");
+        if (typeof globalState.mediaStream.stopVideo === "function") {
+          await globalState.mediaStream.stopVideo();
         }
-        // 2b) SAB-enabled browsers: start then render
-        else {
-          await globalState.mediaStream.startVideo({
-            videoQuality: "360p",
-            facingMode: "user",
-          });
-          globalState.mediaStream.renderVideo(videoEl);
+        if (localVideoRef.current) {
+          localVideoRef.current.srcObject = null;
+          localVideoRef.current.load();
+        }
+        setVideoOn(false);
+        setLocalVideoAttached(false);
+        setVideoAttachmentMethod("");
+        setVideoStreamReady(false);
+        retryCountRef.current = 0;
+
+        if (attachmentTimeoutRef.current) {
+          clearTimeout(attachmentTimeoutRef.current);
+          attachmentTimeoutRef.current = null;
         }
 
-        log("✅ startVideo() succeeded");
-      } catch (e: any) {
-        logError("❌ startVideo() failed", e);
-        // handle SDK errors
-        if (e.reason === "INSUFFICIENT_PRIVILEGES") {
+        setGlobalState({ ...globalState, isVideoOn: false });
+
+      } else {
+        // === START VIDEO ===
+        log("📹 Attempting to start local video");
+
+        // 1) Check camera permission
+        if (cameraPermission === "denied") {
           setError("Camera access denied. Please allow camera access and refresh.");
-          setCameraPermission("denied");
-        } else if (e.reason === "DEVICE_NOT_FOUND") {
-          setError("No camera found. Please connect a camera and refresh.");
-        } else {
-          setError(`Cannot start camera: ${e.message || e.reason}`);
+          return;
         }
-        return;
+
+        // 2) Wait for video element to be ready with retry
+        let videoEl = localVideoRef.current;
+        if (!videoEl) {
+          log("⏳ Video element not ready, waiting...");
+          
+          // Wait up to 3 seconds for the video element to be ready
+          let attempts = 0;
+          while (!videoEl && attempts < 30) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+            videoEl = localVideoRef.current;
+            attempts++;
+          }
+          
+          if (!videoEl) {
+            logError("Video element still not ready after waiting");
+            setError("Video element initialization failed. Please refresh the page.");
+            return;
+          }
+        }
+
+        log("✅ Video element ready, starting video...");
+
+        try {
+          // Check if browser supports SharedArrayBuffer
+          const hasSharedArrayBuffer = typeof SharedArrayBuffer !== 'undefined';
+          log(`Browser capabilities: SharedArrayBuffer=${hasSharedArrayBuffer}`);
+
+          if (hasSharedArrayBuffer) {
+            // Modern approach for SAB-enabled browsers
+            await globalState.mediaStream.startVideo({
+              videoQuality: "360p",
+              facingMode: "user",
+            });
+          } else {
+            // Legacy approach for non-SAB browsers (like this one)
+            // Use deprecated videoElement option as SDK specifically requests it
+            await globalState.mediaStream.startVideo({
+              videoElement: videoEl,
+              videoQuality: "360p", 
+              facingMode: "user",
+            });
+          }
+
+          log("✅ startVideo() succeeded");
+          
+          // Update state first
+          setVideoOn(true);
+          setGlobalState({ ...globalState, isVideoOn: true });
+
+          // For non-SAB browsers, video should already be attached via videoElement
+          if (!hasSharedArrayBuffer) {
+            log("✅ Video attached via videoElement (legacy mode)");
+            setLocalVideoAttached(true);
+            setVideoAttachmentMethod('videoElement');
+            setVideoStreamReady(true);
+          } else {
+            // For SAB browsers, we need to attach manually after a delay
+            setTimeout(async () => {
+              if (!mountedRef.current || !isVideoOn) return;
+              
+              try {
+                // Only use attachVideo for SAB browsers
+                if (typeof globalState.mediaStream.attachVideo === 'function') {
+                  await globalState.mediaStream.attachVideo(videoEl);
+                  log("✅ attachVideo() succeeded");
+                  setLocalVideoAttached(true);
+                  setVideoAttachmentMethod('attachVideo');
+                  setVideoStreamReady(true);
+                }
+              } catch (attachError: any) {
+                logError("❌ Video attachment failed after startVideo", attachError);
+                if (mountedRef.current && isVideoOn) {
+                  scheduleVideoRetry();
+                }
+              }
+            }, 1000);
+          }
+
+        } catch (e: any) {
+          logError("❌ startVideo() failed", e);
+          // Handle SDK errors
+          if (e.reason === "INSUFFICIENT_PRIVILEGES") {
+            setError("Camera access denied. Please allow camera access and refresh.");
+            setCameraPermission("denied");
+          } else if (e.reason === "DEVICE_NOT_FOUND") {
+            setError("No camera found. Please connect a camera and refresh.");
+          } else {
+            setError(`Cannot start camera: ${e.message || e.reason}`);
+          }
+          return;
+        }
       }
-
-      // 3) Update state (SDK has attached for you)
-      setVideoOn(true);
-      setGlobalState({ ...globalState, isVideoOn: true });
-      setLocalVideoAttached(true);
-      setVideoAttachmentMethod("zoom-sdk");
-      setVideoStreamReady(true);
+    } catch (e: any) {
+      logError("Video toggle error", e);
+      setError(`Video error: ${e.message}`);
     }
-  } catch (e: any) {
-    logError("Video toggle error", e);
-    setError(`Video error: ${e.message}`);
-  }
-}, [
-  isVideoOn,
-  isMediaReady,
-  connectionStatus,
-  cameraPermission,
-  getGlobalState,
-  setGlobalState,
-]);
-
-
+  }, [
+    isVideoOn,
+    isMediaReady,
+    connectionStatus,
+    cameraPermission,
+    getGlobalState,
+    setGlobalState,
+    scheduleVideoRetry,
+  ]);
 
   // Audio toggle with global state sync
   const toggleAudio = useCallback(async () => {
@@ -817,48 +993,114 @@ const toggleVideo = useCallback(async () => {
     }
   }, [isVideoOn, attachLocalVideo, scheduleVideoRetry]);
 
-  // Debug info
+  // Force video element refresh
+  const refreshVideoElement = useCallback(() => {
+    log("🔄 Refreshing video element...");
+    if (localVideoRef.current) {
+      localVideoRef.current.load();
+      setTimeout(() => {
+        if (localVideoRef.current) {
+          log("✅ Video element refreshed", {
+            readyState: localVideoRef.current.readyState,
+            videoWidth: localVideoRef.current.videoWidth,
+            videoHeight: localVideoRef.current.videoHeight,
+          });
+        }
+      }, 500);
+    }
+  }, []);
+
+  // Enhanced debug info
   const debugInfo = useCallback(() => {
     const globalState = getGlobalState();
-    console.log("🔍 DEBUG INFO:", {
+    const mediaStreamInfo = globalState?.mediaStream ? {
+      hasStartVideo: typeof globalState.mediaStream.startVideo === 'function',
+      hasStopVideo: typeof globalState.mediaStream.stopVideo === 'function',
+      hasAttachVideo: typeof globalState.mediaStream.attachVideo === 'function',
+      hasRenderVideo: typeof globalState.mediaStream.renderVideo === 'function',
+      hasGetVideoTrack: typeof globalState.mediaStream.getVideoTrack === 'function',
+      hasGetMediaStream: typeof globalState.mediaStream.getMediaStream === 'function',
+      videoTrack: globalState.mediaStream.getVideoTrack ? {
+        exists: !!globalState.mediaStream.getVideoTrack(),
+        readyState: globalState.mediaStream.getVideoTrack()?.readyState,
+        enabled: globalState.mediaStream.getVideoTrack()?.enabled,
+        muted: globalState.mediaStream.getVideoTrack()?.muted,
+      } : null
+    } : null;
+
+    console.log("🔍 DETAILED DEBUG INFO:", {
       timestamp: new Date().toISOString(),
-      mounted: mountedRef.current,
-      initializing: initializationRef.current,
-      connectionStatus,
-      isVideoOn,
-      isAudioOn,
-      localVideoAttached,
-      videoAttachmentMethod,
-      videoStreamReady,
-      retryCount: retryCountRef.current,
-      isMediaReady,
-      isInitialized,
-      participants: participants.length,
-      sessionKey,
-      cameraPermission,
-      globalState: globalState
-        ? {
-            hasClient: !!globalState.client,
-            hasMediaStream: !!globalState.mediaStream,
-            isVideoOn: globalState.isVideoOn,
-            isAudioOn: globalState.isAudioOn,
-            connectionStatus: globalState.connectionStatus,
-            isJoined: globalState.isJoined,
-            participants: globalState.participants?.length || 0,
-            lastActivity: new Date(globalState.lastActivity).toISOString(),
+      component: {
+        mounted: mountedRef.current,
+        initializing: initializationRef.current,
+        connectionStatus,
+        isVideoOn,
+        isAudioOn,
+        localVideoAttached,
+        videoAttachmentMethod,
+        videoStreamReady,
+        retryCount: retryCountRef.current,
+        isMediaReady,
+        isInitialized,
+        participants: participants.length,
+        cameraPermission,
+      },
+      session: {
+        sessionKey,
+        sessionId,
+        hasSessionInfo: !!sessionInfo,
+      },
+      browser: {
+        userAgent: navigator.userAgent,
+        hasSharedArrayBuffer: typeof SharedArrayBuffer !== 'undefined',
+        hasGetUserMedia: !!navigator.mediaDevices?.getUserMedia,
+        isSecureContext: window.isSecureContext,
+        // Add WebGL detection since we saw WebGL errors
+        webGLSupport: (() => {
+          try {
+            const canvas = document.createElement('canvas');
+            return !!(canvas.getContext('webgl') || canvas.getContext('experimental-webgl'));
+          } catch (e) {
+            return false;
           }
-        : null,
+        })(),
+      },
+      zoomSDK: {
+        version: (window as any).ZoomVideo?.version || 'unknown',
+        capabilities: (window as any).ZoomVideo?.getCapabilities?.() || 'unknown',
+      },
+      mediaStream: mediaStreamInfo,
+      globalState: globalState ? {
+        hasClient: !!globalState.client,
+        hasMediaStream: !!globalState.mediaStream,
+        isVideoOn: globalState.isVideoOn,
+        isAudioOn: globalState.isAudioOn,
+        connectionStatus: globalState.connectionStatus,
+        isJoined: globalState.isJoined,
+        participants: globalState.participants?.length || 0,
+        lastActivity: new Date(globalState.lastActivity).toISOString(),
+      } : null,
       domElements: {
         localVideo: !!localVideoRef.current,
         remoteVideo: !!remoteVideoRef.current,
-        localVideoReady: localVideoRef.current
-          ? {
-              readyState: localVideoRef.current.readyState,
-              videoWidth: localVideoRef.current.videoWidth,
-              videoHeight: localVideoRef.current.videoHeight,
-              paused: localVideoRef.current.paused,
-            }
-          : null,
+        localVideoDetails: localVideoRef.current ? {
+          readyState: localVideoRef.current.readyState,
+          videoWidth: localVideoRef.current.videoWidth,
+          videoHeight: localVideoRef.current.videoHeight,
+          paused: localVideoRef.current.paused,
+          srcObject: !!localVideoRef.current.srcObject,
+          currentSrc: localVideoRef.current.currentSrc,
+          style: {
+            display: localVideoRef.current.style.display,
+            transform: localVideoRef.current.style.transform,
+          },
+          dataset: localVideoRef.current.dataset,
+          // Add element events state
+          hasVideoContent: localVideoRef.current.videoWidth > 0 && localVideoRef.current.videoHeight > 0,
+        } : {
+          error: "Video element ref is null",
+          timestamp: new Date().toISOString(),
+        },
       },
     });
   }, [
@@ -872,6 +1114,8 @@ const toggleVideo = useCallback(async () => {
     isInitialized,
     participants.length,
     sessionKey,
+    sessionId,
+    sessionInfo,
     cameraPermission,
     getGlobalState,
   ]);
@@ -991,17 +1235,24 @@ const toggleVideo = useCallback(async () => {
       {/* CAMERA PERMISSION WARNING */}
       {cameraPermission === 'denied' && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <div className="flex items-center">
-            <div className="text-red-600">⚠️</div>
-            <div className="ml-3">
-              <p className="text-sm text-red-800">
-                Camera access is denied. Please allow camera access in your browser settings:
+          <div className="flex items-start">
+            <div className="text-red-600 text-xl mr-3">🚫</div>
+            <div className="flex-1">
+              <h3 className="text-red-800 font-medium">Camera Access Required</h3>
+              <p className="text-sm text-red-700 mt-1">
+                This video session requires camera access. Please:
               </p>
-              <ul className="text-xs text-red-600 mt-1 list-disc ml-5">
-                <li>Click the camera icon in the address bar</li>
+              <ol className="text-xs text-red-600 mt-2 list-decimal ml-5 space-y-1">
+                <li>Click the camera icon (🎥) in your browser's address bar</li>
                 <li>Select "Allow" for camera access</li>
-                <li>Refresh this page</li>
-              </ul>
+                <li>Click "Request Permission" below or refresh this page</li>
+              </ol>
+              <button
+                onClick={requestCameraPermission}
+                className="mt-3 px-4 py-2 bg-red-600 text-white rounded text-sm hover:bg-red-700"
+              >
+                Request Camera Permission
+              </button>
             </div>
           </div>
         </div>
@@ -1019,7 +1270,7 @@ const toggleVideo = useCallback(async () => {
                   {retryCountRef.current > 3 && " Încercați să reîncărcați pagina."}
                 </p>
                 <p className="text-xs text-orange-600 mt-1">
-                  Retry: {retryCountRef.current}/5
+                  Retry: {retryCountRef.current}/5 | Method: {videoAttachmentMethod || 'detecting...'}
                 </p>
               </div>
             </div>
@@ -1061,53 +1312,47 @@ const toggleVideo = useCallback(async () => {
             </div>
           </div>
           <div className="aspect-video bg-gray-900 rounded-lg overflow-hidden mb-3 relative">
-            {isVideoOn && localVideoAttached ? (
-              <video
-                ref={localVideoRef}
-                autoPlay
-                playsInline
-                muted
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center text-gray-400">
+            {/* Video element is always present in DOM */}
+            <video
+              ref={localVideoRef}
+              autoPlay
+              playsInline
+              muted
+              className="w-full h-full object-cover"
+              style={{ 
+                display: (isVideoOn && localVideoAttached) ? 'block' : 'none',
+                transform: 'scaleX(-1)' // Mirror the video for better UX
+              }}
+              onLoadedMetadata={() => {
+                log("Video metadata loaded");
+                setVideoStreamReady(true);
+              }}
+              onError={(e) => {
+                logError("Video element error", e);
+              }}
+            />
+            
+            {/* Overlay content */}
+            {isVideoOn && !localVideoAttached ? (
+              <div className="absolute inset-0 flex items-center justify-center text-gray-400 bg-gray-900">
                 <div className="text-center">
-                  <div className="text-4xl mb-2">📹</div>
-                  {!isVideoOn ? (
-                    <p>Camera oprită</p>
-                  ) : cameraPermission === 'denied' ? (
-                    <p>Camera access denied</p>
-                  ) : !videoStreamReady ? (
-                    <div>
-                      <p>Se inițializează stream-ul...</p>
-                      <div className="animate-spin w-6 h-6 border-2 border-gray-400 border-t-blue-600 rounded-full mx-auto mt-2"></div>
-                    </div>
-                  ) : !localVideoAttached ? (
-                    <div>
-                      <p>Se conectează video-ul...</p>
-                      <p className="text-xs mt-1">Încercări: {retryCountRef.current}/5</p>
-                      <button
-                        onClick={retryVideoAttachment}
-                        disabled={retryCountRef.current > 5}
-                        className="mt-2 px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 disabled:opacity-50"
-                      >
-                        {retryCountRef.current > 5 ? "Prea multe încercări" : "Reconectează"}
-                      </button>
-                    </div>
-                  ) : (
-                    <p>Se încarcă...</p>
-                  )}
-                  {/* Always render video element for attachment */}
-                  <video
-                    ref={localVideoRef}
-                    autoPlay
-                    playsInline
-                    muted
-                    style={{ display: "none" }}
-                  />
+                  <div className="animate-spin w-8 h-8 border-2 border-gray-400 border-t-blue-600 rounded-full mx-auto mb-2"></div>
+                  <p>Connecting video...</p>
+                  <p className="text-xs mt-1">Method: {videoAttachmentMethod || 'detecting...'}</p>
+                  <p className="text-xs">Retry: {retryCountRef.current}/5</p>
                 </div>
               </div>
-            )}
+            ) : !isVideoOn ? (
+              <div className="absolute inset-0 flex items-center justify-center text-gray-400 bg-gray-900">
+                <div className="text-center">
+                  <div className="text-4xl mb-2">📹</div>
+                  <p>Camera is off</p>
+                  {cameraPermission === 'denied' && (
+                    <p className="text-red-400 text-sm mt-1">Camera access denied</p>
+                  )}
+                </div>
+              </div>
+            ) : null}
           </div>
           <div className="flex gap-2">
             <button
@@ -1173,6 +1418,12 @@ const toggleVideo = useCallback(async () => {
             className="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700"
           >
             🔍 Debug Info
+          </button>
+          <button
+            onClick={refreshVideoElement}
+            className="px-3 py-2 bg-gray-600 text-white rounded-lg text-sm hover:bg-gray-700"
+          >
+            🔄 Refresh Video
           </button>
           <span className="text-sm text-gray-500">Sesiune: {sessionId}</span>
         </div>
