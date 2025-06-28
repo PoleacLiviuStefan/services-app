@@ -908,30 +908,74 @@ export default function VideoSessionPage() {
                   await globalState.mediaStream.muteVideo(false);
                   log("✅ Video unmuted (started sharing)");
                 } else {
-                  // Try to get the raw video track and check its state
-                  const videoTrack = globalState.mediaStream.getVideoTrack?.();
-                  if (videoTrack) {
-                    log("✅ Video track found", {
-                      id: videoTrack.id,
-                      kind: videoTrack.kind,
-                      enabled: videoTrack.enabled,
-                      muted: videoTrack.muted,
-                      readyState: videoTrack.readyState
-                    });
+                  // For non-SAB browsers, we need to force create a video track
+                  log("⚡ Attempting to force create video track for sharing");
+                  
+                  // Try getting the native MediaStream from the video element
+                  if (videoEl.srcObject) {
+                    const nativeStream = videoEl.srcObject as MediaStream;
+                    const videoTracks = nativeStream.getVideoTracks();
                     
-                    // Ensure track is enabled for sharing
-                    if (!videoTrack.enabled) {
-                      videoTrack.enabled = true;
-                      log("✅ Video track enabled for sharing");
+                    if (videoTracks.length > 0) {
+                      const videoTrack = videoTracks[0];
+                      log("✅ Found native video track from element", {
+                        id: videoTrack.id,
+                        kind: videoTrack.kind,
+                        enabled: videoTrack.enabled,
+                        muted: videoTrack.muted,
+                        readyState: videoTrack.readyState,
+                        label: videoTrack.label
+                      });
+                      
+                      // Ensure track is enabled
+                      if (!videoTrack.enabled) {
+                        videoTrack.enabled = true;
+                        log("✅ Video track enabled for sharing");
+                      }
+                      
+                      // Try to manually add the track to the Zoom media stream
+                      if (typeof globalState.mediaStream.replaceTrack === 'function') {
+                        await globalState.mediaStream.replaceTrack(videoTrack);
+                        log("✅ Video track replaced in Zoom stream");
+                      }
+                      
+                    } else {
+                      logError("❌ No video tracks in native stream");
                     }
                   } else {
-                    logError("❌ No video track found after startVideo");
+                    // Fallback: Try to restart video with different approach
+                    log("🔄 Attempting video restart for track creation");
+                    try {
+                      await globalState.mediaStream.stopVideo();
+                      await new Promise(resolve => setTimeout(resolve, 1000));
+                      
+                      // Restart without videoElement to force track creation
+                      await globalState.mediaStream.startVideo({
+                        videoQuality: "360p",
+                        facingMode: "user",
+                      });
+                      
+                      // Then try to attach to element
+                      setTimeout(async () => {
+                        try {
+                          if (typeof globalState.mediaStream.attachVideo === 'function') {
+                            await globalState.mediaStream.attachVideo(videoEl);
+                            log("✅ Video restarted and attached successfully");
+                          }
+                        } catch (attachErr) {
+                          logError("❌ Failed to attach after restart", attachErr);
+                        }
+                      }, 1000);
+                      
+                    } catch (restartErr) {
+                      logError("❌ Failed to restart video", restartErr);
+                    }
                   }
                 }
                 
                 // Log current participants to see who should receive video
-                if (zmClient && typeof zmClient.getAllUser === "function") {
-                  const users = zmClient.getAllUser();
+                if (globalState.client && typeof globalState.client.getAllUser === "function") {
+                  const users = globalState.client.getAllUser();
                   log(`📺 Broadcasting video to ${users.length} participants:`, 
                     users.map(u => ({ userId: u.userId, name: u.displayName }))
                   );
