@@ -21,6 +21,15 @@ interface ZoomUser {
   isHost?: boolean;
 }
 
+// Fix: Make Participant interface match ZoomUser exactly
+interface Participant {
+  userId: number | string;
+  displayName: string;
+  bVideoOn: boolean;
+  bAudioOn: boolean; // Added missing property
+  isHost?: boolean;
+}
+
 // Global state to survive hot reloads
 declare global {
   interface Window {
@@ -194,7 +203,7 @@ export default function VideoSessionPage() {
         return;
       }
 
-      let timeoutId: NodeJS.Timeout;
+      let timeoutId: NodeJS.Timeout; // Fix: Keep as let since we reassign it
       
       const checkReady = () => {
         if (track.readyState === 'live') {
@@ -206,7 +215,7 @@ export default function VideoSessionPage() {
       // Check every 100ms
       const intervalId = setInterval(checkReady, 100);
       
-      // Timeout after specified time
+      // Timeout after specified time - Fix: Now properly reassigning timeoutId
       timeoutId = setTimeout(() => {
         clearInterval(intervalId);
         resolve(false);
@@ -435,6 +444,17 @@ export default function VideoSessionPage() {
     [getGlobalState, clearGlobalState]
   );
 
+  // Helper function to convert Participant to ZoomUser
+  const convertToZoomUsers = useCallback((participants: any[]): ZoomUser[] => {
+    return participants.map((p: any) => ({
+      userId: p.userId,
+      displayName: p.displayName,
+      bVideoOn: p.bVideoOn,
+      bAudioOn: p.bAudioOn ?? false, // Default to false if missing
+      isHost: p.isHost
+    }));
+  }, []);
+
   // Fetch session info
   useEffect(() => {
     if (!sessionId) return;
@@ -576,8 +596,8 @@ export default function VideoSessionPage() {
         const zmClient = ZoomVideo.createClient();
 
         // Initialize with settings optimized for video reliability
+        // Fix: Removed videoSourceTimeout as it doesn't exist in InitOptions
         await zmClient.init("en-US", "Global", {
-          videoSourceTimeout: 30000,
           patchJsMedia: true,
           stayAwake: true,
           enforceMultipleVideos: false,
@@ -627,10 +647,12 @@ export default function VideoSessionPage() {
           setTimeout(() => {
             if (zmClient && typeof zmClient.getAllUser === "function" && mountedRef.current) {
               const users = zmClient.getAllUser();
-              setParticipants(users);
+              // Fix: Convert to proper ZoomUser type
+              const zoomUsers = convertToZoomUsers(users);
+              setParticipants(zoomUsers);
               const currentGlobal = getGlobalState();
               if (currentGlobal) {
-                setGlobalState({ ...currentGlobal, participants: users });
+                setGlobalState({ ...currentGlobal, participants: zoomUsers });
               }
             }
           }, 1000);
@@ -642,10 +664,12 @@ export default function VideoSessionPage() {
           setTimeout(() => {
             if (zmClient && typeof zmClient.getAllUser === "function" && mountedRef.current) {
               const users = zmClient.getAllUser();
-              setParticipants(users);
+              // Fix: Convert to proper ZoomUser type
+              const zoomUsers = convertToZoomUsers(users);
+              setParticipants(zoomUsers);
               const currentGlobal = getGlobalState();
               if (currentGlobal) {
-                setGlobalState({ ...currentGlobal, participants: users });
+                setGlobalState({ ...currentGlobal, participants: zoomUsers });
               }
             }
           }, 500);
@@ -692,10 +716,12 @@ export default function VideoSessionPage() {
         setTimeout(() => {
           if (zmClient && typeof zmClient.getAllUser === "function" && mountedRef.current) {
             const users = zmClient.getAllUser();
-            setParticipants(users);
+            // Fix: Convert to proper ZoomUser type
+            const zoomUsers = convertToZoomUsers(users);
+            setParticipants(zoomUsers);
             const currentGlobal = getGlobalState();
             if (currentGlobal) {
-              setGlobalState({ ...currentGlobal, participants: users });
+              setGlobalState({ ...currentGlobal, participants: zoomUsers });
             }
           }
         }, 2000);
@@ -723,6 +749,7 @@ export default function VideoSessionPage() {
     getGlobalState,
     setGlobalState,
     cleanup,
+    convertToZoomUsers,
   ]);
 
   // Component mount/unmount tracking
@@ -970,8 +997,9 @@ export default function VideoSessionPage() {
                 // Log current participants to see who should receive video
                 if (globalState.client && typeof globalState.client.getAllUser === "function") {
                   const users = globalState.client.getAllUser();
+                  // Fix: Add proper typing for map function
                   log(`📺 Broadcasting video to ${users.length} participants:`, 
-                    users.map(u => ({ userId: u.userId, name: u.displayName }))
+                    users.map((u: ZoomUser) => ({ userId: u.userId, name: u.displayName }))
                   );
                 }
                 
@@ -1411,9 +1439,9 @@ export default function VideoSessionPage() {
                 This video session requires camera access. Please:
               </p>
               <ol className="text-xs text-red-600 mt-2 list-decimal ml-5 space-y-1">
-                <li>Click the camera icon (🎥) in your browser's address bar</li>
-                <li>Select "Allow" for camera access</li>
-                <li>Click "Request Permission" below or refresh this page</li>
+                <li>Click the camera icon (🎥) in your browser&apos;s address bar</li>
+                <li>Select &quot;Allow&quot; for camera access</li>
+                <li>Click &quot;Request Permission&quot; below or refresh this page</li>
               </ol>
               <button
                 onClick={requestCameraPermission}
@@ -1609,7 +1637,7 @@ export default function VideoSessionPage() {
                   </div>
                   {participants.some(p => p.bVideoOn) ? (
                     <p className="text-sm mt-2 text-yellow-400">
-                      Someone has video ON but it's not rendering...
+                      Someone has video ON but it&apos;s not rendering...
                     </p>
                   ) : (
                     <p className="text-sm mt-2 text-gray-500">
