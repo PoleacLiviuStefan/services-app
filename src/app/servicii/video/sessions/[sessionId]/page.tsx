@@ -888,6 +888,56 @@ export default function VideoSessionPage() {
             setLocalVideoAttached(true);
             setVideoAttachmentMethod('videoElement');
             setVideoStreamReady(true);
+            
+            // CRITICAL: Force video track publishing for remote participants
+            setTimeout(async () => {
+              try {
+                // Try to publish/share the video track
+                log("🚀 Attempting to publish video track for remote participants");
+                
+                // Check if there's a publishVideo or similar method
+                if (typeof globalState.mediaStream.publishVideo === 'function') {
+                  await globalState.mediaStream.publishVideo();
+                  log("✅ Video track published successfully");
+                } else if (typeof globalState.mediaStream.muteVideo === 'function') {
+                  // Some SDKs require unmuting to start sharing
+                  await globalState.mediaStream.muteVideo(false);
+                  log("✅ Video unmuted (started sharing)");
+                } else {
+                  // Try to get the raw video track and check its state
+                  const videoTrack = globalState.mediaStream.getVideoTrack?.();
+                  if (videoTrack) {
+                    log("✅ Video track found", {
+                      id: videoTrack.id,
+                      kind: videoTrack.kind,
+                      enabled: videoTrack.enabled,
+                      muted: videoTrack.muted,
+                      readyState: videoTrack.readyState
+                    });
+                    
+                    // Ensure track is enabled for sharing
+                    if (!videoTrack.enabled) {
+                      videoTrack.enabled = true;
+                      log("✅ Video track enabled for sharing");
+                    }
+                  } else {
+                    logError("❌ No video track found after startVideo");
+                  }
+                }
+                
+                // Log current participants to see who should receive video
+                if (zmClient && typeof zmClient.getAllUser === "function") {
+                  const users = zmClient.getAllUser();
+                  log(`📺 Broadcasting video to ${users.length} participants:`, 
+                    users.map(u => ({ userId: u.userId, name: u.displayName }))
+                  );
+                }
+                
+              } catch (publishError: any) {
+                logError("❌ Failed to publish video track", publishError);
+              }
+            }, 2000);
+            
           } else {
             // For SAB browsers, we need to attach manually after a delay
             setTimeout(async () => {
@@ -993,22 +1043,98 @@ export default function VideoSessionPage() {
     }
   }, [isVideoOn, attachLocalVideo, scheduleVideoRetry]);
 
-  // Force video element refresh
-  const refreshVideoElement = useCallback(() => {
-    log("🔄 Refreshing video element...");
-    if (localVideoRef.current) {
-      localVideoRef.current.load();
-      setTimeout(() => {
-        if (localVideoRef.current) {
-          log("✅ Video element refreshed", {
-            readyState: localVideoRef.current.readyState,
-            videoWidth: localVideoRef.current.videoWidth,
-            videoHeight: localVideoRef.current.videoHeight,
+  // Force video republishing for troubleshooting
+  const forceVideoRepublish = useCallback(async () => {
+    const globalState = getGlobalState();
+    if (!globalState?.mediaStream || !isVideoOn) {
+      log("❌ Cannot republish: no media stream or video not on");
+      return;
+    }
+
+    try {
+      log("🔄 Force republishing video...");
+      
+      // Try multiple methods to ensure video is being shared
+      const mediaStream = globalState.mediaStream;
+      
+      // Method 1: Try publishVideo if available
+      if (typeof mediaStream.publishVideo === 'function') {
+        await mediaStream.publishVideo();
+        log("✅ publishVideo() called");
+      }
+      
+      // Method 2: Try unmuting video
+      if (typeof mediaStream.muteVideo === 'function') {
+        await mediaStream.muteVideo(false);
+        log("✅ Video unmuted");
+      }
+      
+      // Method 3: Check and enable video track
+      const videoTrack = mediaStream.getVideoTrack?.();
+      if (videoTrack) {
+        if (!videoTrack.enabled) {
+          videoTrack.enabled = true;
+          log("✅ Video track enabled");
+        }
+        
+        log("📊 Video track status:", {
+          id: videoTrack.id,
+          kind: videoTrack.kind,
+          enabled: videoTrack.enabled,
+          muted: videoTrack.muted,
+          readyState: videoTrack.readyState,
+          label: videoTrack.label
+        });
+      } else {
+        logError("❌ No video track found");
+      }
+      
+      // Method 4: Check participants
+      if (globalState.client && typeof globalState.client.getAllUser === 'function') {
+        const users = globalState.client.getAllUser();
+        log(`📡 Should be broadcasting to ${users.length} participants:`, users);
+        
+        // Try to get current user info
+        const currentUser = globalState.client.getCurrentUserInfo?.();
+        if (currentUser) {
+          log("👤 Current user info:", {
+            userId: currentUser.userId,
+            displayName: currentUser.displayName,
+            bVideoOn: currentUser.bVideoOn,
+            bAudioOn: currentUser.bAudioOn
           });
         }
-      }, 500);
+      }
+      
+    } catch (error: any) {
+      logError("❌ Force republish failed", error);
     }
-  }, []);
+  }, [getGlobalState, isVideoOn]);
+
+  // Check video sharing status periodically
+  useEffect(() => {
+    if (!isVideoOn || !isMediaReady) return;
+    
+    const checkVideoSharing = () => {
+      const globalState = getGlobalState();
+      if (!globalState?.mediaStream) return;
+      
+      const videoTrack = globalState.mediaStream.getVideoTrack?.();
+      if (videoTrack) {
+        log("🔍 Periodic video track check:", {
+          enabled: videoTrack.enabled,
+          muted: videoTrack.muted,
+          readyState: videoTrack.readyState,
+          participants: participants.length
+        });
+      }
+    };
+    
+    // Check every 10 seconds
+    const interval = setInterval(checkVideoSharing, 10000);
+    
+    return () => clearInterval(interval);
+  }, [isVideoOn, isMediaReady, participants.length, getGlobalState]);
 
   // Enhanced debug info
   const debugInfo = useCallback(() => {
@@ -1389,6 +1515,22 @@ export default function VideoSessionPage() {
                 {isProvider ? "(Client)" : "(Furnizor)"}
               </span>
             </h3>
+            <div className="text-sm text-gray-500">
+              {participants.length > 0 && (
+                <>
+                  <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs mr-2">
+                    {participants.length} connected
+                  </span>
+                  {participants.map(p => (
+                    <div key={p.userId} className="text-xs">
+                      {p.displayName}: 
+                      <span className={p.bVideoOn ? "text-green-600" : "text-red-600"}> 📹{p.bVideoOn ? "ON" : "OFF"}</span>
+                      <span className={p.bAudioOn ? "text-green-600" : "text-red-600"}> 🔊{p.bAudioOn ? "ON" : "OFF"}</span>
+                    </div>
+                  ))}
+                </>
+              )}
+            </div>
           </div>
           <div className="aspect-video bg-gray-900 rounded-lg flex items-center justify-center relative overflow-hidden">
             <video
@@ -1399,11 +1541,40 @@ export default function VideoSessionPage() {
               style={{ display: "none" }}
             />
             <div className="text-center text-gray-400">
-              <div className="text-4xl mb-2">⏳</div>
-              <p>Așteptăm ca {other?.name} să se conecteze…</p>
-              <p className="text-sm mt-1">Status: {connectionStatus}</p>
-              {participants.length > 0 && (
-                <p className="text-xs mt-1">Participanți: {participants.length}</p>
+              {participants.length === 0 ? (
+                <>
+                  <div className="text-4xl mb-2">⏳</div>
+                  <p>Așteptăm ca {other?.name} să se conecteze…</p>
+                  <p className="text-sm mt-1">Status: {connectionStatus}</p>
+                </>
+              ) : (
+                <>
+                  <div className="text-4xl mb-2">👥</div>
+                  <p>{participants.length} participant(s) connected</p>
+                  <div className="text-sm mt-2 space-y-1">
+                    {participants.map(p => (
+                      <div key={p.userId} className="text-xs">
+                        <strong>{p.displayName}</strong>
+                        <br />
+                        Video: <span className={p.bVideoOn ? "text-green-400" : "text-red-400"}>
+                          {p.bVideoOn ? "ON" : "OFF"}
+                        </span> | 
+                        Audio: <span className={p.bAudioOn ? "text-green-400" : "text-red-400"}>
+                          {p.bAudioOn ? "ON" : "OFF"}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  {participants.some(p => p.bVideoOn) ? (
+                    <p className="text-sm mt-2 text-yellow-400">
+                      Someone has video ON but it's not rendering...
+                    </p>
+                  ) : (
+                    <p className="text-sm mt-2 text-gray-500">
+                      Waiting for someone to turn on video
+                    </p>
+                  )}
+                </>
               )}
             </div>
           </div>
@@ -1420,10 +1591,11 @@ export default function VideoSessionPage() {
             🔍 Debug Info
           </button>
           <button
-            onClick={refreshVideoElement}
-            className="px-3 py-2 bg-gray-600 text-white rounded-lg text-sm hover:bg-gray-700"
+            onClick={forceVideoRepublish}
+            disabled={!isVideoOn || !isMediaReady}
+            className="px-3 py-2 bg-orange-600 text-white rounded-lg text-sm hover:bg-orange-700 disabled:opacity-50"
           >
-            🔄 Refresh Video
+            📡 Force Video Share
           </button>
           <span className="text-sm text-gray-500">Sesiune: {sessionId}</span>
         </div>
