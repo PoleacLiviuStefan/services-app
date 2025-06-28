@@ -1,9 +1,3 @@
-// CRITICAL: Force video track publishing for remote participants
-            setTimeout(async () => {
-              try {
-                // Try to publish/share the video track
-                log("🚀 Attempting to publish video track"use client";
-
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { useSession } from "next-auth/react";
 import { useParams } from "next/navigation";
