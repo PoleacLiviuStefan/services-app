@@ -899,6 +899,25 @@ export default function VideoSessionPage() {
     };
   }, [sessionInfo, auth?.user, isInitialized, updateParticipants, cleanup]);
 
+  // Reconnect function
+  const reconnect = useCallback(async () => {
+    log("🔄 Manual reconnection attempt");
+    setConnectionStatus("connecting");
+    setError("");
+    setIsInitialized(false);
+    
+    // Force cleanup first
+    await cleanup();
+    
+    // Wait before reinitializing
+    setTimeout(() => {
+      if (mountedRef.current) {
+        // Trigger re-initialization by updating a dependency
+        setIsInitialized(false);
+      }
+    }, 2000);
+  }, [cleanup]);
+
   // Handle local video initialization when video is turned on
   useEffect(() => {
     if (isVideoOn && mediaStream && !localVideoReady) {
@@ -1041,25 +1060,6 @@ export default function VideoSessionPage() {
   const isProvider = sessionInfo?.provider.id === auth?.user?.id;
   const other = isProvider ? sessionInfo?.client : sessionInfo?.provider;
 
-  // Reconnect function (defined here to be available in error handling)
-  const reconnect = useCallback(async () => {
-    log("🔄 Manual reconnection attempt");
-    setConnectionStatus("connecting");
-    setError("");
-    setIsInitialized(false);
-    
-    // Force cleanup first
-    await cleanup();
-    
-    // Wait before reinitializing
-    setTimeout(() => {
-      if (mountedRef.current) {
-        // Trigger re-initialization by updating a dependency
-        setIsInitialized(false);
-      }
-    }, 2000);
-  }, [cleanup]);
-
   if (status === "loading" || loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -1108,7 +1108,7 @@ export default function VideoSessionPage() {
           >
             Reload Page
           </button>
-          {(isConnectionError || isEmptyError) && reconnect && (
+          {(isConnectionError || isEmptyError) && (
             <button
               onClick={reconnect}
               className="px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700"
