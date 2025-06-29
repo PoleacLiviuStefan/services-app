@@ -392,6 +392,9 @@ export default function VideoSessionPage() {
               globalState.client.off("peer-video-state-change");
               globalState.client.off("peer-audio-state-change");
               globalState.client.off("connection-change");
+              globalState.client.off("video-active-change");
+              globalState.client.off("media-sdk-change");
+              globalState.client.off("active-video-change");
             }
             if (typeof globalState.client.leave === "function") {
               await globalState.client.leave();
@@ -478,33 +481,138 @@ export default function VideoSessionPage() {
       });
 
       const client = globalState.client;
+      const mediaStream = globalState.mediaStream;
+      const videoElement = remoteVideoRef.current;
       
-      // Try different methods to render the participant's video
-      if (typeof client.renderVideo === 'function') {
-        await client.renderVideo(
-          remoteVideoRef.current,
-          participant.userId,
-          640,
-          360,
-          0,
-          0,
-          1 // Video quality
-        );
-        log(`✅ Successfully rendered video for ${participant.displayName}`);
-        setRemoteVideoAttached(true);
-        setRemoteParticipantWithVideo(participant);
-        return true;
-      } else if (typeof client.attachVideo === 'function') {
-        // Alternative approach for some SDK versions
-        await client.attachVideo(participant.userId, remoteVideoRef.current);
-        log(`✅ Successfully attached video for ${participant.displayName}`);
-        setRemoteVideoAttached(true);
-        setRemoteParticipantWithVideo(participant);
-        return true;
-      } else {
-        logError("No video rendering method available in client");
-        return false;
+      // Method 1: Try using mediaStream to render participant video
+      if (mediaStream && typeof mediaStream.renderVideo === 'function') {
+        try {
+          await mediaStream.renderVideo(
+            videoElement,
+            participant.userId,
+            640,
+            360,
+            0,
+            0,
+            1 // Video quality
+          );
+          log(`✅ Successfully rendered video via mediaStream for ${participant.displayName}`);
+          setRemoteVideoAttached(true);
+          setRemoteParticipantWithVideo(participant);
+          return true;
+        } catch (err: any) {
+          log(`⚠️ mediaStream.renderVideo failed: ${err.message}`);
+        }
       }
+
+      // Method 2: Try using client to start receiving video
+      if (typeof client.startReceiveVideo === 'function') {
+        try {
+          await client.startReceiveVideo(participant.userId);
+          log(`✅ Started receiving video for ${participant.displayName}`);
+          
+          // Then try to attach to video element
+          setTimeout(async () => {
+            try {
+              if (mediaStream && typeof mediaStream.attachVideo === 'function') {
+                await mediaStream.attachVideo(videoElement, participant.userId);
+                log(`✅ Attached remote video for ${participant.displayName}`);
+                setRemoteVideoAttached(true);
+                setRemoteParticipantWithVideo(participant);
+              }
+            } catch (attachErr: any) {
+              log(`⚠️ Failed to attach remote video: ${attachErr.message}`);
+            }
+          }, 1000);
+          
+          return true;
+        } catch (err: any) {
+          log(`⚠️ startReceiveVideo failed: ${err.message}`);
+        }
+      }
+
+      // Method 3: Try getting participant's video track directly
+      if (typeof client.getUser === 'function') {
+        try {
+          const userInfo = client.getUser(participant.userId);
+          if (userInfo && userInfo.bVideoOn) {
+            log(`📹 User ${participant.displayName} has video ON, attempting direct stream access`);
+            
+            // Try to get the participant's video stream
+            if (typeof mediaStream.getVideoTrack === 'function') {
+              const track = mediaStream.getVideoTrack(participant.userId);
+              if (track) {
+                const stream = new MediaStream([track]);
+                videoElement.srcObject = stream;
+                await videoElement.play();
+                log(`✅ Successfully attached direct video stream for ${participant.displayName}`);
+                setRemoteVideoAttached(true);
+                setRemoteParticipantWithVideo(participant);
+                return true;
+              }
+            }
+          }
+        } catch (err: any) {
+          log(`⚠️ Direct stream access failed: ${err.message}`);
+        }
+      }
+
+      // Method 4: Try canvas-based rendering (fallback)
+      if (typeof client.getCurrentUserInfo === 'function') {
+        const currentUser = client.getCurrentUserInfo();
+        if (currentUser && currentUser.userId !== participant.userId) {
+          log(`🎨 Attempting canvas-based rendering for ${participant.displayName}`);
+          
+          // Create a canvas and try to render there first
+          const canvas = document.createElement('canvas');
+          canvas.width = 640;
+          canvas.height = 360;
+          
+          try {
+            if (mediaStream && typeof mediaStream.renderVideo === 'function') {
+              await mediaStream.renderVideo(
+                canvas,
+                participant.userId,
+                640,
+                360,
+                0,
+                0,
+                1
+              );
+              
+              // Convert canvas to video stream
+              const stream = canvas.captureStream(30);
+              videoElement.srcObject = stream;
+              await videoElement.play();
+              
+              log(`✅ Canvas-based rendering successful for ${participant.displayName}`);
+              setRemoteVideoAttached(true);
+              setRemoteParticipantWithVideo(participant);
+              return true;
+            }
+          } catch (err: any) {
+            log(`⚠️ Canvas-based rendering failed: ${err.message}`);
+          }
+        }
+      }
+
+      // If all methods fail, log available methods for debugging
+      log("🔍 Available client methods:", {
+        hasRenderVideo: typeof client.renderVideo === 'function',
+        hasAttachVideo: typeof client.attachVideo === 'function',
+        hasStartReceiveVideo: typeof client.startReceiveVideo === 'function',
+        hasGetUser: typeof client.getUser === 'function',
+      });
+      
+      log("🔍 Available mediaStream methods:", {
+        hasRenderVideo: typeof mediaStream?.renderVideo === 'function',
+        hasAttachVideo: typeof mediaStream?.attachVideo === 'function',
+        hasGetVideoTrack: typeof mediaStream?.getVideoTrack === 'function',
+      });
+
+      logError("❌ All video rendering methods failed");
+      return false;
+
     } catch (error: any) {
       logError(`❌ Failed to render remote video for ${participant.displayName}`, error);
       return false;
@@ -518,12 +626,20 @@ export default function VideoSessionPage() {
 
     try {
       const client = globalState.client;
+      const mediaStream = globalState.mediaStream;
       
-      if (typeof client.stopRenderVideo === 'function' && remoteParticipantWithVideo) {
-        await client.stopRenderVideo(
-          remoteVideoRef.current,
-          remoteParticipantWithVideo.userId
-        );
+      if (remoteParticipantWithVideo) {
+        // Try different stop methods
+        if (typeof client.stopReceiveVideo === 'function') {
+          await client.stopReceiveVideo(remoteParticipantWithVideo.userId);
+        }
+        
+        if (mediaStream && typeof mediaStream.stopRenderVideo === 'function') {
+          await mediaStream.stopRenderVideo(
+            remoteVideoRef.current,
+            remoteParticipantWithVideo.userId
+          );
+        }
       }
       
       if (remoteVideoRef.current) {
@@ -538,6 +654,71 @@ export default function VideoSessionPage() {
       logError("❌ Error stopping remote video", error);
     }
   }, [getGlobalState, remoteParticipantWithVideo]);
+
+  // Debug function to inspect available APIs
+  const debugZoomAPIs = useCallback(() => {
+    const globalState = getGlobalState();
+    if (!globalState?.client || !globalState?.mediaStream) {
+      log("❌ No client or mediaStream available for debugging");
+      return;
+    }
+
+    const client = globalState.client;
+    const mediaStream = globalState.mediaStream;
+
+    // Get all available methods
+    const clientMethods = Object.getOwnPropertyNames(Object.getPrototypeOf(client))
+      .filter(prop => typeof client[prop] === 'function');
+    
+    const mediaStreamMethods = Object.getOwnPropertyNames(Object.getPrototypeOf(mediaStream))
+      .filter(prop => typeof mediaStream[prop] === 'function');
+
+    log("🔍 ZOOM CLIENT METHODS:", clientMethods.sort());
+    log("🔍 ZOOM MEDIASTREAM METHODS:", mediaStreamMethods.sort());
+
+    // Check specific video-related methods
+    const videoMethods = {
+      client: {
+        renderVideo: typeof client.renderVideo === 'function',
+        attachVideo: typeof client.attachVideo === 'function',
+        startReceiveVideo: typeof client.startReceiveVideo === 'function',
+        stopReceiveVideo: typeof client.stopReceiveVideo === 'function',
+        subscribe: typeof client.subscribe === 'function',
+        unsubscribe: typeof client.unsubscribe === 'function',
+        getUser: typeof client.getUser === 'function',
+        getAllUser: typeof client.getAllUser === 'function',
+        getCurrentUserInfo: typeof client.getCurrentUserInfo === 'function',
+      },
+      mediaStream: {
+        renderVideo: typeof mediaStream.renderVideo === 'function',
+        attachVideo: typeof mediaStream.attachVideo === 'function',
+        stopRenderVideo: typeof mediaStream.stopRenderVideo === 'function',
+        getVideoTrack: typeof mediaStream.getVideoTrack === 'function',
+        startVideo: typeof mediaStream.startVideo === 'function',
+        stopVideo: typeof mediaStream.stopVideo === 'function',
+      }
+    };
+
+    log("🔍 VIDEO-SPECIFIC METHODS:", videoMethods);
+
+    // Try to get current participants and their info
+    if (typeof client.getAllUser === 'function') {
+      const users = client.getAllUser();
+      log("👥 CURRENT PARTICIPANTS:", users);
+      
+      users.forEach((user: any) => {
+        log(`👤 USER ${user.displayName}:`, {
+          userId: user.userId,
+          bVideoOn: user.bVideoOn,
+          bAudioOn: user.bAudioOn,
+          isHost: user.isHost,
+          allProperties: Object.keys(user)
+        });
+      });
+    }
+
+    return { clientMethods, mediaStreamMethods, videoMethods };
+  }, [getGlobalState]);
 
   // Update participants and handle video rendering
   const updateParticipants = useCallback(async (force = false) => {
@@ -808,11 +989,40 @@ export default function VideoSessionPage() {
         zmClient.on("peer-video-state-change", (payload: any) => {
           if (!mountedRef.current) return;
           log("📹 Peer video state change", payload);
+          
+          // Try to immediately handle the video state change
+          if (payload.action === 'Start' && payload.userId) {
+            log(`🎬 User ${payload.userId} started video, attempting to render`);
+            setTimeout(async () => {
+              if (mountedRef.current) {
+                // Find the participant and try to render their video
+                const globalState = getGlobalState();
+                if (globalState?.client && typeof globalState.client.getAllUser === 'function') {
+                  const users = globalState.client.getAllUser();
+                  const participant = users.find((u: any) => u.userId === payload.userId);
+                  if (participant && participant.bVideoOn) {
+                    const success = await renderRemoteVideo(participant);
+                    if (!success) {
+                      log("⚠️ Immediate video render failed, will try via updateParticipants");
+                      updateParticipants(true);
+                    }
+                  }
+                }
+              }
+            }, 500);
+          } else if (payload.action === 'Stop' && payload.userId) {
+            log(`⏹️ User ${payload.userId} stopped video`);
+            if (remoteParticipantWithVideo && remoteParticipantWithVideo.userId === payload.userId) {
+              stopRemoteVideo();
+            }
+          }
+          
+          // Always update participants after a delay
           setTimeout(() => {
             if (mountedRef.current) {
               updateParticipants(true); // Force update
             }
-          }, 500);
+          }, 1000);
         });
 
         zmClient.on("peer-audio-state-change", (payload: any) => {
@@ -821,6 +1031,40 @@ export default function VideoSessionPage() {
           setTimeout(() => {
             if (mountedRef.current) {
               updateParticipants();
+            }
+          }, 500);
+        });
+
+        // Additional event listeners for video handling
+        zmClient.on("video-active-change", (payload: any) => {
+          if (!mountedRef.current) return;
+          log("🎥 Video active change", payload);
+          setTimeout(() => {
+            if (mountedRef.current) {
+              updateParticipants(true);
+            }
+          }, 500);
+        });
+
+        zmClient.on("media-sdk-change", (payload: any) => {
+          if (!mountedRef.current) return;
+          log("📱 Media SDK change", payload);
+          if (payload.type === 'video' && payload.result === 'success') {
+            setTimeout(() => {
+              if (mountedRef.current) {
+                updateParticipants(true);
+              }
+            }, 1000);
+          }
+        });
+
+        // Listen for any video-related events
+        zmClient.on("active-video-change", (payload: any) => {
+          if (!mountedRef.current) return;
+          log("🎯 Active video change", payload);
+          setTimeout(() => {
+            if (mountedRef.current) {
+              updateParticipants(true);
             }
           }, 500);
         });
@@ -894,6 +1138,9 @@ export default function VideoSessionPage() {
     cleanup,
     convertToZoomUsers,
     updateParticipants,
+    renderRemoteVideo,
+    stopRemoteVideo,
+    remoteParticipantWithVideo,
   ]);
 
   // Component mount/unmount tracking
@@ -1837,6 +2084,12 @@ export default function VideoSessionPage() {
             className="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700"
           >
             🔍 Debug Info
+          </button>
+          <button
+            onClick={debugZoomAPIs}
+            className="px-3 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700"
+          >
+            🔬 Debug Zoom APIs
           </button>
           <button
             onClick={forceVideoRepublish}
