@@ -899,25 +899,6 @@ export default function VideoSessionPage() {
     };
   }, [sessionInfo, auth?.user, isInitialized, updateParticipants, cleanup]);
 
-  // Reconnect function
-  const reconnect = useCallback(async () => {
-    log("🔄 Manual reconnection attempt");
-    setConnectionStatus("connecting");
-    setError("");
-    setIsInitialized(false);
-    
-    // Force cleanup first
-    await cleanup();
-    
-    // Wait before reinitializing
-    setTimeout(() => {
-      if (mountedRef.current) {
-        // Trigger re-initialization by updating a dependency
-        setIsInitialized(false);
-      }
-    }, 2000);
-  }, [cleanup]);
-
   // Handle local video initialization when video is turned on
   useEffect(() => {
     if (isVideoOn && mediaStream && !localVideoReady) {
@@ -1055,6 +1036,25 @@ export default function VideoSessionPage() {
       mountedRef.current = false;
     };
   }, []);
+
+  // Reconnect function
+  const reconnect = useCallback(async () => {
+    log("🔄 Manual reconnection attempt");
+    setConnectionStatus("connecting");
+    setError("");
+    setIsInitialized(false);
+    
+    // Force cleanup first
+    await cleanup();
+    
+    // Wait before reinitializing
+    setTimeout(() => {
+      if (mountedRef.current) {
+        // Trigger re-initialization by updating a dependency
+        setIsInitialized(false);
+      }
+    }, 2000);
+  }, [cleanup]);
 
   // Render component
   const isProvider = sessionInfo?.provider.id === auth?.user?.id;
