@@ -171,6 +171,25 @@ export default function VideoSessionPage() {
     clientRef.current = null;
   }, [mediaStream, isVideoOn, isAudioOn]);
 
+  // Reconnect function (SINGLE DECLARATION)
+  const reconnect = useCallback(async () => {
+    log("🔄 Manual reconnection attempt");
+    setConnectionStatus("connecting");
+    setError("");
+    setIsInitialized(false);
+    
+    // Force cleanup first
+    await cleanup();
+    
+    // Wait before reinitializing
+    setTimeout(() => {
+      if (mountedRef.current) {
+        // Trigger re-initialization
+        setIsInitialized(false);
+      }
+    }, 2000);
+  }, [cleanup]);
+
   // Initialize local video with proper SDK detection
   const initializeLocalVideo = useCallback(async () => {
     if (!mediaStream || !localVideoRef.current || !isVideoOn) return false;
@@ -1004,24 +1023,7 @@ export default function VideoSessionPage() {
     }
   }, [mediaStream, isAudioOn, connectionStatus]);
 
-  // Reconnect function
-  const reconnect = useCallback(async () => {
-    log("🔄 Manual reconnection attempt");
-    setConnectionStatus("connecting");
-    setError("");
-    setIsInitialized(false);
-    
-    // Force cleanup first
-    await cleanup();
-    
-    // Wait before reinitializing
-    setTimeout(() => {
-      if (mountedRef.current) {
-        // Trigger re-initialization by updating a dependency
-        setIsInitialized(false);
-      }
-    }, 2000);
-  }, [cleanup]);
+  // Leave session
   const leave = useCallback(async () => {
     log("👋 Leaving session...");
     setConnectionStatus("disconnecting");
@@ -1036,25 +1038,6 @@ export default function VideoSessionPage() {
       mountedRef.current = false;
     };
   }, []);
-
-  // Reconnect function
-  const reconnect = useCallback(async () => {
-    log("🔄 Manual reconnection attempt");
-    setConnectionStatus("connecting");
-    setError("");
-    setIsInitialized(false);
-    
-    // Force cleanup first
-    await cleanup();
-    
-    // Wait before reinitializing
-    setTimeout(() => {
-      if (mountedRef.current) {
-        // Trigger re-initialization by updating a dependency
-        setIsInitialized(false);
-      }
-    }, 2000);
-  }, [cleanup]);
 
   // Render component
   const isProvider = sessionInfo?.provider.id === auth?.user?.id;
