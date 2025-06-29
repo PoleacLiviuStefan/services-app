@@ -75,6 +75,10 @@ export default function VideoSessionPage() {
     useState<string>("");
   const [videoStreamReady, setVideoStreamReady] = useState(false);
   const [cameraPermission, setCameraPermission] = useState<string>("prompt");
+  
+  // Remote video tracking
+  const [remoteVideoAttached, setRemoteVideoAttached] = useState(false);
+  const [remoteParticipantWithVideo, setRemoteParticipantWithVideo] = useState<ZoomUser | null>(null);
 
   // Refs
   const localVideoRef = useRef<HTMLVideoElement>(null);
@@ -431,6 +435,8 @@ export default function VideoSessionPage() {
           setLocalVideoAttached(false);
           setVideoAttachmentMethod("");
           setVideoStreamReady(false);
+          setRemoteVideoAttached(false);
+          setRemoteParticipantWithVideo(null);
           retryCountRef.current = 0;
           setParticipants([]);
           setConnectionStatus("disconnected");
@@ -456,6 +462,142 @@ export default function VideoSessionPage() {
       isHost: p.isHost
     }));
   }, []);
+
+  // Render remote video for a participant
+  const renderRemoteVideo = useCallback(async (participant: ZoomUser) => {
+    const globalState = getGlobalState();
+    if (!globalState?.client || !remoteVideoRef.current) {
+      logError("Cannot render remote video: missing client or video element");
+      return false;
+    }
+
+    try {
+      log(`🎥 Attempting to render remote video for ${participant.displayName}`, {
+        userId: participant.userId,
+        bVideoOn: participant.bVideoOn,
+      });
+
+      const client = globalState.client;
+      
+      // Try different methods to render the participant's video
+      if (typeof client.renderVideo === 'function') {
+        await client.renderVideo(
+          remoteVideoRef.current,
+          participant.userId,
+          640,
+          360,
+          0,
+          0,
+          1 // Video quality
+        );
+        log(`✅ Successfully rendered video for ${participant.displayName}`);
+        setRemoteVideoAttached(true);
+        setRemoteParticipantWithVideo(participant);
+        return true;
+      } else if (typeof client.attachVideo === 'function') {
+        // Alternative approach for some SDK versions
+        await client.attachVideo(participant.userId, remoteVideoRef.current);
+        log(`✅ Successfully attached video for ${participant.displayName}`);
+        setRemoteVideoAttached(true);
+        setRemoteParticipantWithVideo(participant);
+        return true;
+      } else {
+        logError("No video rendering method available in client");
+        return false;
+      }
+    } catch (error: any) {
+      logError(`❌ Failed to render remote video for ${participant.displayName}`, error);
+      return false;
+    }
+  }, [getGlobalState]);
+
+  // Stop remote video rendering
+  const stopRemoteVideo = useCallback(async () => {
+    const globalState = getGlobalState();
+    if (!globalState?.client || !remoteVideoRef.current) return;
+
+    try {
+      const client = globalState.client;
+      
+      if (typeof client.stopRenderVideo === 'function' && remoteParticipantWithVideo) {
+        await client.stopRenderVideo(
+          remoteVideoRef.current,
+          remoteParticipantWithVideo.userId
+        );
+      }
+      
+      if (remoteVideoRef.current) {
+        remoteVideoRef.current.srcObject = null;
+        remoteVideoRef.current.load();
+      }
+      
+      setRemoteVideoAttached(false);
+      setRemoteParticipantWithVideo(null);
+      log("✅ Remote video stopped");
+    } catch (error: any) {
+      logError("❌ Error stopping remote video", error);
+    }
+  }, [getGlobalState, remoteParticipantWithVideo]);
+
+  // Update participants and handle video rendering
+  const updateParticipants = useCallback(async (force = false) => {
+    const globalState = getGlobalState();
+    if (!globalState?.client || !mountedRef.current) return;
+
+    try {
+      if (typeof globalState.client.getAllUser === "function") {
+        const users = globalState.client.getAllUser();
+        const zoomUsers = convertToZoomUsers(users);
+        
+        log("👥 Updating participants", {
+          count: zoomUsers.length,
+          participants: zoomUsers.map(u => ({
+            name: u.displayName,
+            video: u.bVideoOn,
+            audio: u.bAudioOn
+          }))
+        });
+
+        setParticipants(zoomUsers);
+        
+        // Update global state
+        const currentGlobal = getGlobalState();
+        if (currentGlobal) {
+          setGlobalState({ ...currentGlobal, participants: zoomUsers });
+        }
+
+        // Handle remote video rendering
+        const currentUserId = globalState.client.getCurrentUserInfo?.()?.userId;
+        const remoteParticipants = zoomUsers.filter(u => u.userId !== currentUserId);
+        
+        // Find participant with video on
+        const participantWithVideo = remoteParticipants.find(p => p.bVideoOn);
+        
+        if (participantWithVideo && (!remoteParticipantWithVideo || 
+            remoteParticipantWithVideo.userId !== participantWithVideo.userId || force)) {
+          // Stop current remote video if different participant
+          if (remoteParticipantWithVideo && remoteParticipantWithVideo.userId !== participantWithVideo.userId) {
+            await stopRemoteVideo();
+          }
+          
+          // Start new remote video
+          setTimeout(async () => {
+            if (mountedRef.current) {
+              const success = await renderRemoteVideo(participantWithVideo);
+              if (!success) {
+                log("⚠️ Failed to render remote video, will retry");
+              }
+            }
+          }, 1000);
+        } else if (!participantWithVideo && remoteParticipantWithVideo) {
+          // No one has video on anymore, stop remote video
+          await stopRemoteVideo();
+        }
+      }
+    } catch (error: any) {
+      logError("❌ Error updating participants", error);
+    }
+  }, [getGlobalState, setGlobalState, convertToZoomUsers, remoteParticipantWithVideo, renderRemoteVideo, stopRemoteVideo]);
 
   // Fetch session info
   useEffect(() => {
@@ -647,15 +789,8 @@ export default function VideoSessionPage() {
           if (!mountedRef.current) return;
           log("👤 User added", payload);
           setTimeout(() => {
-            if (zmClient && typeof zmClient.getAllUser === "function" && mountedRef.current) {
-              const users = zmClient.getAllUser();
-              // Fix: Convert to proper ZoomUser type
-              const zoomUsers = convertToZoomUsers(users);
-              setParticipants(zoomUsers);
-              const currentGlobal = getGlobalState();
-              if (currentGlobal) {
-                setGlobalState({ ...currentGlobal, participants: zoomUsers });
-              }
+            if (mountedRef.current) {
+              updateParticipants();
             }
           }, 1000);
         });
@@ -664,15 +799,28 @@ export default function VideoSessionPage() {
           if (!mountedRef.current) return;
           log("👤 User removed", payload);
           setTimeout(() => {
-            if (zmClient && typeof zmClient.getAllUser === "function" && mountedRef.current) {
-              const users = zmClient.getAllUser();
-              // Fix: Convert to proper ZoomUser type
-              const zoomUsers = convertToZoomUsers(users);
-              setParticipants(zoomUsers);
-              const currentGlobal = getGlobalState();
-              if (currentGlobal) {
-                setGlobalState({ ...currentGlobal, participants: zoomUsers });
-              }
+            if (mountedRef.current) {
+              updateParticipants();
+            }
+          }, 500);
+        });
+
+        zmClient.on("peer-video-state-change", (payload: any) => {
+          if (!mountedRef.current) return;
+          log("📹 Peer video state change", payload);
+          setTimeout(() => {
+            if (mountedRef.current) {
+              updateParticipants(true); // Force update
+            }
+          }, 500);
+        });
+
+        zmClient.on("peer-audio-state-change", (payload: any) => {
+          if (!mountedRef.current) return;
+          log("🔊 Peer audio state change", payload);
+          setTimeout(() => {
+            if (mountedRef.current) {
+              updateParticipants();
             }
           }, 500);
         });
@@ -716,15 +864,8 @@ export default function VideoSessionPage() {
         }
 
         setTimeout(() => {
-          if (zmClient && typeof zmClient.getAllUser === "function" && mountedRef.current) {
-            const users = zmClient.getAllUser();
-            // Fix: Convert to proper ZoomUser type
-            const zoomUsers = convertToZoomUsers(users);
-            setParticipants(zoomUsers);
-            const currentGlobal = getGlobalState();
-            if (currentGlobal) {
-              setGlobalState({ ...currentGlobal, participants: zoomUsers });
-            }
+          if (mountedRef.current) {
+            updateParticipants();
           }
         }, 2000);
 
@@ -752,6 +893,7 @@ export default function VideoSessionPage() {
     setGlobalState,
     cleanup,
     convertToZoomUsers,
+    updateParticipants,
   ]);
 
   // Component mount/unmount tracking
@@ -1208,6 +1350,19 @@ export default function VideoSessionPage() {
     return () => clearInterval(interval);
   }, [isVideoOn, isMediaReady, participants.length, getGlobalState]);
 
+  // Periodic participants update to ensure real-time status
+  useEffect(() => {
+    if (!isMediaReady || connectionStatus !== "connected") return;
+    
+    const interval = setInterval(() => {
+      if (mountedRef.current) {
+        updateParticipants();
+      }
+    }, 3000); // Update every 3 seconds
+    
+    return () => clearInterval(interval);
+  }, [isMediaReady, connectionStatus, updateParticipants]);
+
   // Enhanced debug info
   const debugInfo = useCallback(() => {
     const globalState = getGlobalState();
@@ -1610,15 +1765,28 @@ export default function VideoSessionPage() {
               autoPlay
               playsInline
               className="w-full h-full object-cover"
-              style={{ display: "none" }}
+              style={{ display: remoteVideoAttached ? "block" : "none" }}
+              onLoadedMetadata={() => {
+                log("Remote video metadata loaded");
+              }}
+              onError={(e) => {
+                logError("Remote video element error", e);
+              }}
             />
-            <div className="text-center text-gray-400">
+            
+            {/* Overlay content */}
+            <div className={`absolute inset-0 flex items-center justify-center text-gray-400 ${remoteVideoAttached ? 'bg-transparent' : 'bg-gray-900'}`}>
               {participants.length === 0 ? (
                 <>
                   <div className="text-4xl mb-2">⏳</div>
                   <p>Așteptăm ca {other?.name} să se conecteze…</p>
                   <p className="text-sm mt-1">Status: {connectionStatus}</p>
                 </>
+              ) : remoteVideoAttached ? (
+                // Show minimal overlay when video is playing
+                <div className="absolute top-2 left-2 bg-black bg-opacity-50 text-white text-xs px-2 py-1 rounded">
+                  {remoteParticipantWithVideo?.displayName}
+                </div>
               ) : (
                 <>
                   <div className="text-4xl mb-2">👥</div>
@@ -1638,9 +1806,17 @@ export default function VideoSessionPage() {
                     ))}
                   </div>
                   {participants.some(p => p.bVideoOn) ? (
-                    <p className="text-sm mt-2 text-yellow-400">
-                      Someone has video ON but it&apos;s not rendering...
-                    </p>
+                    <div className="text-center mt-3">
+                      <p className="text-sm text-yellow-400">
+                        Someone has video ON but it&apos;s not rendering...
+                      </p>
+                      <button
+                        onClick={() => updateParticipants(true)}
+                        className="mt-2 px-3 py-1 bg-yellow-600 text-white rounded text-xs hover:bg-yellow-700"
+                      >
+                        🔄 Retry Video Connection
+                      </button>
+                    </div>
                   ) : (
                     <p className="text-sm mt-2 text-gray-500">
                       Waiting for someone to turn on video
@@ -1668,6 +1844,13 @@ export default function VideoSessionPage() {
             className="px-3 py-2 bg-orange-600 text-white rounded-lg text-sm hover:bg-orange-700 disabled:opacity-50"
           >
             📡 Force Video Share
+          </button>
+          <button
+            onClick={() => updateParticipants(true)}
+            disabled={!isMediaReady || connectionStatus !== "connected"}
+            className="px-3 py-2 bg-purple-600 text-white rounded-lg text-sm hover:bg-purple-700 disabled:opacity-50"
+          >
+            🔄 Refresh Participants
           </button>
           <span className="text-sm text-gray-500">Sesiune: {sessionId}</span>
         </div>
