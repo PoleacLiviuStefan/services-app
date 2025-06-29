@@ -171,24 +171,32 @@ export default function VideoSessionPage() {
     clientRef.current = null;
   }, [mediaStream, isVideoOn, isAudioOn]);
 
-  // Reconnect function (SINGLE DECLARATION)
+  // Reconnect function (SINGLE DECLARATION) - Improved to reset initialization
   const reconnect = useCallback(async () => {
+    // Prevent multiple reconnection attempts
+    if (connectionStatus === "connecting") {
+      log("🚫 Reconnection already in progress");
+      return;
+    }
+    
     log("🔄 Manual reconnection attempt");
     setConnectionStatus("connecting");
     setError("");
-    setIsInitialized(false);
     
     // Force cleanup first
     await cleanup();
     
-    // Wait before reinitializing
-    setTimeout(() => {
-      if (mountedRef.current) {
-        // Trigger re-initialization
-        setIsInitialized(false);
-      }
-    }, 2000);
-  }, [cleanup]);
+    // Clear client ref
+    clientRef.current = null;
+    
+    // Reset initialization flag to allow new connection (only if not already false)
+    if (isInitialized) {
+      setIsInitialized(false);
+      log("✅ Reconnection setup complete - waiting for automatic reinitialization");
+    } else {
+      log("⚠️ Already not initialized - useEffect should trigger automatically");
+    }
+  }, [cleanup, connectionStatus, isInitialized]);
 
   // Initialize local video with proper SDK detection
   const initializeLocalVideo = useCallback(async () => {
@@ -749,9 +757,14 @@ export default function VideoSessionPage() {
     return () => clearInterval(interval);
   }, [sessionInfo?.endDate]);
 
-  // Main Zoom initialization
+  // Main Zoom initialization - FIXED to prevent infinite loop
   useEffect(() => {
-    if (!sessionInfo || !auth?.user || isInitialized) return;
+    // Only run once when we have session info and user, but not yet initialized
+    // Also prevent running if already connecting/connected
+    if (!sessionInfo || !auth?.user || isInitialized || 
+        connectionStatus === "connecting" || connectionStatus === "connected") {
+      return;
+    }
 
     log("🚀 Initializing Zoom Video SDK");
     
@@ -823,37 +836,71 @@ export default function VideoSessionPage() {
           if (payload.state && mountedRef.current) {
             setConnectionStatus(payload.state);
             
-            // Handle unexpected disconnections
-            if (payload.state === 'Closed' || payload.state === 'Reconnecting') {
-              log("⚠️ Unexpected disconnection detected");
-              setError("Connection lost. Please refresh the page.");
+            // Only show error for truly unexpected disconnections
+            // Don't auto-reconnect to prevent infinite loop
+            if (payload.state === 'Closed' && isInitialized) {
+              log("⚠️ Connection lost - manual reconnect required");
+              setError("Connection lost. Click 'Reconnect' below or refresh the page.");
+            } else if (payload.state === 'Reconnecting') {
+              log("🔄 SDK is attempting to reconnect...");
+              setConnectionStatus("connecting");
             }
           }
         });
 
-        zmClient.on("user-added", () => {
+        // Create stable references to participant functions
+        const handleUserAdded = () => {
           if (!mountedRef.current) return;
           log("👤 User added");
-          setTimeout(() => mountedRef.current && updateParticipants(), 1000);
-        });
+          setTimeout(() => {
+            if (mountedRef.current && clientRef.current && typeof clientRef.current.getAllUser === "function") {
+              try {
+                const users = clientRef.current.getAllUser();
+                setParticipants(users);
+                log("👥 Participants updated", { count: users.length });
+              } catch (e) {
+                logError("Error updating participants", e);
+              }
+            }
+          }, 1000);
+        };
 
-        zmClient.on("user-removed", () => {
+        const handleUserRemoved = () => {
           if (!mountedRef.current) return;
           log("👤 User removed");
-          setTimeout(() => mountedRef.current && updateParticipants(), 500);
-        });
+          setTimeout(() => {
+            if (mountedRef.current && clientRef.current && typeof clientRef.current.getAllUser === "function") {
+              try {
+                const users = clientRef.current.getAllUser();
+                setParticipants(users);
+                log("👥 Participants updated", { count: users.length });
+              } catch (e) {
+                logError("Error updating participants", e);
+              }
+            }
+          }, 500);
+        };
 
-        zmClient.on("peer-video-state-change", (payload: any) => {
+        const handleVideoStateChange = (payload: any) => {
           if (!mountedRef.current) return;
           log("📹 Peer video state change", payload);
-          setTimeout(() => mountedRef.current && updateParticipants(), 500);
-        });
+          setTimeout(() => {
+            if (mountedRef.current && clientRef.current && typeof clientRef.current.getAllUser === "function") {
+              try {
+                const users = clientRef.current.getAllUser();
+                setParticipants(users);
+                log("👥 Participants updated", { count: users.length });
+              } catch (e) {
+                logError("Error updating participants", e);
+              }
+            }
+          }, 500);
+        };
 
-        zmClient.on("video-active-change", (payload: any) => {
-          if (!mountedRef.current) return;
-          log("🎥 Video active change", payload);
-          setTimeout(() => mountedRef.current && updateParticipants(), 500);
-        });
+        zmClient.on("user-added", handleUserAdded);
+        zmClient.on("user-removed", handleUserRemoved);
+        zmClient.on("peer-video-state-change", handleVideoStateChange);
+        zmClient.on("video-active-change", handleVideoStateChange);
 
         // Add error event handler to catch SDK errors
         zmClient.on("error", (error: any) => {
@@ -891,8 +938,14 @@ export default function VideoSessionPage() {
 
         // Initial participants update with longer delay
         setTimeout(() => {
-          if (mountedRef.current && zmClient) {
-            updateParticipants();
+          if (mountedRef.current && zmClient && typeof zmClient.getAllUser === "function") {
+            try {
+              const users = zmClient.getAllUser();
+              setParticipants(users);
+              log("👥 Initial participants loaded", { count: users.length });
+            } catch (e) {
+              logError("Error loading initial participants", e);
+            }
           }
         }, 4000);
 
@@ -913,10 +966,18 @@ export default function VideoSessionPage() {
     })();
 
     return () => {
+      log("🔄 Effect cleanup triggered - checking if cleanup needed");
       initializationAborted = true;
-      cleanup();
+      
+      // Only cleanup if component is actually unmounting or we're doing manual reconnect
+      if (!mountedRef.current || connectionStatus === "disconnecting") {
+        log("🧹 Executing cleanup due to unmount or manual disconnect");
+        cleanup();
+      } else {
+        log("🚫 Skipping cleanup - component still mounted and connected");
+      }
     };
-  }, [sessionInfo, auth?.user, isInitialized, updateParticipants, cleanup]);
+  }, [sessionInfo?.sessionName, sessionInfo?.token, auth?.user?.id]);
 
   // Handle local video initialization when video is turned on
   useEffect(() => {
