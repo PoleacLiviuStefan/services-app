@@ -63,9 +63,10 @@ function generateZoomToken(sessionName: string, userId: string, roleType: number
   });
 
   try {
+    // Remove expiresIn since we're setting exp manually in payload
     const token = jwt.sign(payload, process.env.ZOOM_SDK_SECRET!, { 
-      algorithm: 'HS256',
-      expiresIn: '2h'
+      algorithm: 'HS256'
+      // Don't use expiresIn when exp is already in payload
     });
     
     console.log('[Debug] Token generated successfully');
@@ -281,6 +282,22 @@ export async function GET(
       // Update the tokens map
       tokensMap[tokenKey] = token;
       needsUpdate = true;
+
+      // If SDK key changed, clear all old tokens to force regeneration
+      if (existingToken) {
+        try {
+          const oldPayload = JSON.parse(atob(existingToken.split('.')[1]));
+          const oldSDKKey = oldPayload.iss || oldPayload.app_key || oldPayload.appKey;
+          
+          if (oldSDKKey && oldSDKKey !== process.env.ZOOM_SDK_KEY) {
+            console.log('[Debug] SDK key changed, clearing all old tokens');
+            tokensMap = { [tokenKey]: token }; // Keep only the new token
+          }
+        } catch (e) {
+          console.log('[Debug] Could not parse old token, clearing all tokens');
+          tokensMap = { [tokenKey]: token };
+        }
+      }
     } catch (error) {
       console.error('[Debug] Failed to generate token:', error);
       return NextResponse.json({ 
