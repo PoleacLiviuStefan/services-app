@@ -735,31 +735,47 @@ export default function VideoSessionPage() {
     if (!sessionInfo || !auth?.user || isInitialized) return;
 
     log("🚀 Initializing Zoom Video SDK");
+    
+    // Prevent multiple initializations
+    let initializationAborted = false;
 
     (async () => {
       try {
         setConnectionStatus("connecting");
         setError("");
 
-        // Clean up any existing client
+        // Clean up any existing client with longer delay
         try {
           if (typeof ZoomVideo.destroyClient === "function") {
             ZoomVideo.destroyClient();
           }
+          // Longer delay to ensure cleanup
+          await new Promise(resolve => setTimeout(resolve, 2000));
         } catch (e) {
-          // Ignore
+          log("Cleanup warning:", e);
         }
+
+        if (initializationAborted || !mountedRef.current) return;
 
         // Create and initialize client
         const zmClient = ZoomVideo.createClient();
         clientRef.current = zmClient;
 
+        // Initialize with safer settings for problematic browsers
         await zmClient.init("en-US", "Global", {
           patchJsMedia: true,
           stayAwake: true,
-          enforceMultipleVideos: true, // Enable multiple videos
-          logLevel: "warn",
+          enforceMultipleVideos: false, // Disable for stability
+          logLevel: "error", // Reduce log noise
+          // Add browser-specific stability options
+          enableLogUpload: false,
+          enableDebugLogs: false,
         });
+
+        if (initializationAborted || !mountedRef.current) {
+          await zmClient.leave();
+          return;
+        }
 
         // Join session
         await zmClient.join(
@@ -769,7 +785,7 @@ export default function VideoSessionPage() {
           ""
         );
 
-        if (!mountedRef.current) {
+        if (initializationAborted || !mountedRef.current) {
           await zmClient.leave();
           return;
         }
@@ -782,74 +798,103 @@ export default function VideoSessionPage() {
         const ms = zmClient.getMediaStream();
         setMediaStream(ms);
 
-        // Check SDK capabilities after initialization
-        setTimeout(() => {
-          const capabilities = {
-            useVideoElement: typeof ms.isRenderSelfViewWithVideoElement === 'function' 
-              ? ms.isRenderSelfViewWithVideoElement() 
-              : false,
-            supportsMultiple: typeof ms.isSupportMultipleVideos === 'function' 
-              ? ms.isSupportMultipleVideos() 
-              : false
-          };
-          
-          setUseVideoElement(capabilities.useVideoElement);
-          log("📊 SDK initialized with capabilities:", capabilities);
-        }, 1000);
+        // Set up event listeners BEFORE any other operations
+        zmClient.on("connection-change", (payload: any) => {
+          log("🔗 Connection change", payload);
+          if (payload.state && mountedRef.current) {
+            setConnectionStatus(payload.state);
+            
+            // Handle unexpected disconnections
+            if (payload.state === 'Closed' || payload.state === 'Reconnecting') {
+              log("⚠️ Unexpected disconnection detected");
+              setError("Connection lost. Please refresh the page.");
+            }
+          }
+        });
 
-        // Set up event listeners
         zmClient.on("user-added", () => {
+          if (!mountedRef.current) return;
           log("👤 User added");
           setTimeout(() => mountedRef.current && updateParticipants(), 1000);
         });
 
         zmClient.on("user-removed", () => {
+          if (!mountedRef.current) return;
           log("👤 User removed");
           setTimeout(() => mountedRef.current && updateParticipants(), 500);
         });
 
         zmClient.on("peer-video-state-change", (payload: any) => {
+          if (!mountedRef.current) return;
           log("📹 Peer video state change", payload);
           setTimeout(() => mountedRef.current && updateParticipants(), 500);
         });
 
         zmClient.on("video-active-change", (payload: any) => {
+          if (!mountedRef.current) return;
           log("🎥 Video active change", payload);
           setTimeout(() => mountedRef.current && updateParticipants(), 500);
         });
 
-        zmClient.on("connection-change", (payload: any) => {
-          log("🔗 Connection change", payload);
-          if (payload.state && mountedRef.current) {
-            setConnectionStatus(payload.state);
+        // Add error event handler to catch SDK errors
+        zmClient.on("error", (error: any) => {
+          logError("❌ Zoom SDK Error:", error);
+          if (error.message && error.message.includes("EmptyError")) {
+            log("🔧 Detected EmptyError - implementing workaround");
+            setError("SDK compatibility issue detected. Some features may be limited.");
           }
         });
 
-        // Start audio by default
-        try {
-          if (typeof ms.startAudio === "function") {
-            await ms.startAudio();
-            setAudioOn(true);
-            log("✅ Audio started");
-          }
-        } catch (audioError) {
-          logError("Audio start failed", audioError);
-        }
-
-        // Initial participants update
+        // Wait longer before checking capabilities
         setTimeout(() => {
-          if (mountedRef.current) updateParticipants();
-        }, 2000);
+          if (!mountedRef.current || !ms) return;
+          
+          try {
+            const capabilities = {
+              useVideoElement: typeof ms.isRenderSelfViewWithVideoElement === 'function' 
+                ? ms.isRenderSelfViewWithVideoElement() 
+                : false,
+              supportsMultiple: typeof ms.isSupportMultipleVideos === 'function' 
+                ? ms.isSupportMultipleVideos() 
+                : false
+            };
+            
+            setUseVideoElement(capabilities.useVideoElement);
+            log("📊 SDK initialized with capabilities:", capabilities);
+          } catch (capError) {
+            logError("Error checking capabilities:", capError);
+          }
+        }, 3000);
+
+        // DON'T start audio automatically - this seems to cause the EmptyError
+        // Let user start audio manually to avoid the sequence error
+        log("⏸️ Audio will be started manually to avoid SDK errors");
+
+        // Initial participants update with longer delay
+        setTimeout(() => {
+          if (mountedRef.current && zmClient) {
+            updateParticipants();
+          }
+        }, 4000);
 
       } catch (e: any) {
-        if (!mountedRef.current) return;
+        if (!mountedRef.current || initializationAborted) return;
         logError("❌ Zoom initialization failed", e);
-        setError(`Connection failed: ${e.message}`);
+        
+        // More specific error handling
+        if (e.message && e.message.includes("EmptyError")) {
+          setError("Browser compatibility issue. Please try refreshing or use a different browser.");
+        } else if (e.message && e.message.includes("WebGL")) {
+          setError("Graphics acceleration issue. Video calls may be limited.");
+        } else {
+          setError(`Connection failed: ${e.message}`);
+        }
         setConnectionStatus("failed");
       }
     })();
 
     return () => {
+      initializationAborted = true;
       cleanup();
     };
   }, [sessionInfo, auth?.user, isInitialized, updateParticipants, cleanup]);
@@ -912,7 +957,7 @@ export default function VideoSessionPage() {
     }
   }, [mediaStream, isVideoOn, connectionStatus, browserCapabilities, checkBrowserCapabilities]);
 
-  // Toggle audio
+  // Toggle audio with enhanced error handling
   const toggleAudio = useCallback(async () => {
     if (!mediaStream || connectionStatus !== "connected") return;
 
@@ -922,9 +967,36 @@ export default function VideoSessionPage() {
         setAudioOn(false);
         log("🔇 Audio stopped");
       } else {
-        await mediaStream.startAudio();
-        setAudioOn(true);
-        log("🔊 Audio started");
+        log("🎤 Starting audio...");
+        
+        // Add delay to prevent EmptyError
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        // Try starting audio with error handling
+        try {
+          await mediaStream.startAudio();
+          setAudioOn(true);
+          log("🔊 Audio started");
+        } catch (audioError: any) {
+          logError("Audio start failed", audioError);
+          
+          // Handle specific audio errors
+          if (audioError.message && audioError.message.includes("EmptyError")) {
+            log("🔧 EmptyError detected in audio - retrying with delay");
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            
+            try {
+              await mediaStream.startAudio();
+              setAudioOn(true);
+              log("🔊 Audio started on retry");
+            } catch (retryError) {
+              logError("Audio retry also failed", retryError);
+              setError("Audio initialization failed. Microphone may not be available.");
+            }
+          } else {
+            setError(`Audio error: ${audioError.message}`);
+          }
+        }
       }
     } catch (e: any) {
       logError("Audio toggle error", e);
@@ -932,7 +1004,24 @@ export default function VideoSessionPage() {
     }
   }, [mediaStream, isAudioOn, connectionStatus]);
 
-  // Leave session
+  // Reconnect function
+  const reconnect = useCallback(async () => {
+    log("🔄 Manual reconnection attempt");
+    setConnectionStatus("connecting");
+    setError("");
+    setIsInitialized(false);
+    
+    // Force cleanup first
+    await cleanup();
+    
+    // Wait before reinitializing
+    setTimeout(() => {
+      if (mountedRef.current) {
+        // Trigger re-initialization by updating a dependency
+        setIsInitialized(false);
+      }
+    }, 2000);
+  }, [cleanup]);
   const leave = useCallback(async () => {
     log("👋 Leaving session...");
     setConnectionStatus("disconnecting");
@@ -952,6 +1041,25 @@ export default function VideoSessionPage() {
   const isProvider = sessionInfo?.provider.id === auth?.user?.id;
   const other = isProvider ? sessionInfo?.client : sessionInfo?.provider;
 
+  // Reconnect function (defined here to be available in error handling)
+  const reconnect = useCallback(async () => {
+    log("🔄 Manual reconnection attempt");
+    setConnectionStatus("connecting");
+    setError("");
+    setIsInitialized(false);
+    
+    // Force cleanup first
+    await cleanup();
+    
+    // Wait before reinitializing
+    setTimeout(() => {
+      if (mountedRef.current) {
+        // Trigger re-initialization by updating a dependency
+        setIsInitialized(false);
+      }
+    }, 2000);
+  }, [cleanup]);
+
   if (status === "loading" || loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -968,17 +1076,46 @@ export default function VideoSessionPage() {
   }
 
   if (error) {
+    const isEmptyError = error.includes("EmptyError") || error.includes("compatibility issue");
+    const isConnectionError = error.includes("Connection lost") || error.includes("Connection failed");
+    
     return (
       <div className="text-red-500 p-4 bg-red-50 rounded-lg max-w-2xl mx-auto">
-        <p className="font-semibold">Error:</p>
+        <p className="font-semibold">
+          {isEmptyError ? "Browser Compatibility Issue" : 
+           isConnectionError ? "Connection Problem" : "Error"}:
+        </p>
         <p className="mt-2">{error}</p>
+        
+        {isEmptyError && (
+          <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded">
+            <p className="text-sm text-yellow-800">
+              <strong>Possible solutions:</strong>
+            </p>
+            <ul className="text-xs text-yellow-700 mt-2 list-disc ml-5">
+              <li>Try refreshing the page</li>
+              <li>Use Chrome or Firefox if possible</li>
+              <li>Enable hardware acceleration in browser settings</li>
+              <li>Close other video applications</li>
+            </ul>
+          </div>
+        )}
+        
         <div className="mt-4 space-x-2">
           <button
             onClick={() => window.location.reload()}
             className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
           >
-            Reload
+            Reload Page
           </button>
+          {(isConnectionError || isEmptyError) && reconnect && (
+            <button
+              onClick={reconnect}
+              className="px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700"
+            >
+              Try Reconnect
+            </button>
+          )}
           <button
             onClick={() => (window.location.href = "/dashboard")}
             className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700"
@@ -1049,6 +1186,21 @@ export default function VideoSessionPage() {
           </div>
         </div>
       </div>
+
+      {/* Audio Start Notice */}
+      {connectionStatus === "connected" && !isAudioOn && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <div className="flex items-center">
+            <div className="text-blue-600 text-xl mr-3">🎤</div>
+            <div className="flex-1">
+              <h3 className="text-blue-800 font-medium">Audio Ready</h3>
+              <p className="text-sm text-blue-700 mt-1">
+                Click "🔊 Unmute" below to start your microphone. Audio is disabled by default to prevent connection issues.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Video Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -1218,6 +1370,15 @@ export default function VideoSessionPage() {
             >
               🔍 Check Capabilities
             </button>
+            
+            {(connectionStatus === "failed" || connectionStatus === "disconnected") && (
+              <button
+                onClick={reconnect}
+                className="px-3 py-2 bg-orange-600 text-white rounded text-sm hover:bg-orange-700"
+              >
+                🔄 Reconnect
+              </button>
+            )}
             
             <span className="text-sm text-gray-500">
               Session: {sessionId}
