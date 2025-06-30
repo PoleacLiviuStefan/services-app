@@ -1,6 +1,7 @@
 // components/ViewVideoModal.tsx
 'use client';
 
+import { extractYouTubeId } from '@/utils/util';
 import React, { FC } from 'react';
 
 export interface ViewVideoModalProps {
@@ -17,15 +18,16 @@ const ViewVideoModal: FC<ViewVideoModalProps> = ({ videoUrl, isOpen, onClose }) 
 
   // Extragem ID-ul videoului din URL-ul normal YouTube
   let videoId = '';
-  try {
-    const url = new URL(videoUrl);
-    videoId = url.searchParams.get('v') || '';
-  } catch {
-    // dacă e deja embed URL
-    const match = videoUrl.match(/\/embed\/([^?&]+)/);
-    videoId = match ? match[1] : '';
-  }
-  const embedUrl = `https://www.youtube.com/embed/${videoId}`;
+try {
+  videoId = extractYouTubeId(videoUrl);
+  console.log('videoId extras:', videoId);
+} catch (err) {
+  console.error('extractYouTubeId a aruncat eroare:', err);
+}
+if (!videoId) {
+  console.error('URL invalid de YouTube:', videoUrl);
+  return <p className="text-white">URL invalid de YouTube.</p>;
+}
 
   return (
     <div

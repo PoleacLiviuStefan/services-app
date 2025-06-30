@@ -42,3 +42,39 @@ export function createConversationLink(user: { name?: string | null; email?: str
   const urlIdentifier = generateConversationUrl(user);
   return `/profil/${encodeURIComponent(urlIdentifier)}/conversatie`;
 }
+
+export function extractYouTubeId(videoUrl: string): string {
+  try {
+    const url = new URL(videoUrl);
+    const host = url.hostname.replace(/^www\./, '');
+
+    // 1. Short link: youtu.be/abc123
+    if (host === 'youtu.be') {
+      return url.pathname.slice(1);
+    }
+
+    // 2. Shorts: youtube.com/shorts/abc123
+    const shortsMatch = url.pathname.match(/\/shorts\/([^?&]+)/);
+    if (shortsMatch) {
+      return shortsMatch[1];
+    }
+
+    // 3. Standard watch: youtube.com/watch?v=abc123
+    const v = url.searchParams.get('v');
+    if (v) {
+      return v;
+    }
+
+    // 4. Embed: youtube.com/embed/abc123
+    const embedMatch = url.pathname.match(/\/embed\/([^?&]+)/);
+    if (embedMatch) {
+      return embedMatch[1];
+    }
+
+    return '';
+  } catch {
+    // direct ID (11 caractere)
+    const idMatch = videoUrl.match(/^[\w-]{11}$/);
+    return idMatch ? idMatch[0] : '';
+  }
+}

@@ -107,7 +107,7 @@ const ProfileMainInfo: React.FC<ProfileMainInfoProps> = ({ provider }) => {
           <div className="flex flex-wrap justify-center gap-4">
             {/* Buton Chat/Conversație - folosește URL-ul corect */}
             <Link href={createConversationUrl(provider.name)}>
-              <Button className="flex items-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-md hover:bg-blue-700 transition-colors">
+              <Button className="flex items-center gap-2 bg-primaryColor text-white px-6 py-5 rounded-md hover:bg-secondaryColor transition-colors">
                 <FaComments size={20} />
                 <span>Conversație</span>
               </Button>

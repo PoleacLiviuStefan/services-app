@@ -7,9 +7,9 @@ import mysticLogo from "../../public/mysticnoblack.svg";
 const Footer = () => {
   return (
     <div className="w-full h-full py-4  lg:h-[200px] bg-gradient-to-t from-secondaryColor to-primaryColor/80 via-primaryColor px-20">
-      <div className="flex flex-col lg:flex-row h-full flex justify-between items-center">
+      <div className="flex flex-col text-white lg:flex-row h-full flex justify-between items-center">
         {/* Coloana 1: Logo */}
-        <div className="flex items-center">
+        <div className="flex flex-col items-center">
           <Link href="/">
             <Image
               src={mysticLogo}
@@ -18,11 +18,13 @@ const Footer = () => {
               priority
             />
           </Link>
+          <p>CUI: 51765903 | J2025033218000</p>
         </div>
 
         {/* Coloana 2: Elemente din Navbar */}
-        <div>
-          <ul className="flex flex-col items-center lg:items-start space-y-4 font-semibold text-white">
+        <div className="flex flex-col space-y-5">
+          <h4 className="text-xl font-semibold">Navigare</h4>
+          <ul className="flex flex-col items-center lg:items-start space-y-3  text-white">
             {["ACASA", "ASTROLOGI", "DESPRE NOI"].map((item, index) => (
               <li key={index} className="cursor-pointer">
                 <Link href={item === "ACASA" ? "/" : `/${item.toLowerCase()}`}>
@@ -33,7 +35,33 @@ const Footer = () => {
           </ul>
         </div>
 
-        {/* Coloana 3: Două imagini (înlocuieşte path-urile cu ale tale) */}
+                {/* Coloana 3: Elemente din Navbar */}
+        <div className="flex flex-col space-y-5">
+          <h4 className="text-xl font-semibold">Juridic</h4>
+          <ul className="flex flex-col items-center lg:items-start space-y-3  text-white">
+          
+              <li className="cursor-pointer">
+                <Link href="/juridic/termeni-si-conditii">
+                  <span className="hover:underline">Termeni si Conditii</span>
+                </Link>
+              </li>
+                        
+              <li className="cursor-pointer">
+                <Link href="/juridic/politica-de-utilizare">
+                  <span className="hover:underline">Politica de Utilizare</span>
+                </Link>
+              </li>
+                        
+              <li className="cursor-pointer">
+                <Link href="/juridic/politica-de-plata">
+                  <span className="hover:underline">Politica de Plata</span>
+                </Link>
+              </li>
+          
+          </ul>
+        </div>
+
+        {/* Coloana 4: Două imagini (înlocuieşte path-urile cu ale tale) */}
         <div className="flex flex-col space-y-4">
           <Image
             src="/SAL.svg"

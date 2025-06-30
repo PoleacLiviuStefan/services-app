@@ -24,8 +24,8 @@ export async function POST(req: Request) {
   // 1. Generează un nume unic de sesiune
   const sessionName = uuidv4();
   // 2. Creează un JWT Zoom SDK (valabil 1h)
-  const sdkKey    = process.env.ZOOM_SDK_KEY!;
-  const sdkSecret = process.env.ZOOM_SDK_SECRET!;
+  const sdkKey    = process.env.ZOOM_VIDEO_SDK_KEY!;
+  const sdkSecret = process.env.ZOOM_VIDEO_SDK_SECRET!;
   const iat = Math.floor(Date.now() / 1000);
   const exp = iat + 60 * 60;
 
