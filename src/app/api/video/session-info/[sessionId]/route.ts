@@ -1,72 +1,121 @@
 // File: app/api/video/session-info/[sessionId]/route.ts
-// ✅ FIXED VERSION
+// Corrected version based on official Zoom Video SDK requirements
 
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import jwt from 'jsonwebtoken';
+import KJUR from 'jsrsasign';
 
 interface SessionInfo {
   sessionName: string;
-  token:       string;
-  userId:      string;
-  startDate:   string;
-  endDate:     string;
-  provider:    { id: string; name: string };
-  client:      { id: string; name: string };
+  token: string;
+  userId: string;
+  startDate: string;
+  endDate: string;
+  provider: { id: string; name: string };
+  client: { id: string; name: string };
   sessionKey?: string;
 }
 
-// ✅ FIXED: Simple and correct JWT generation for Zoom Video SDK
-function generateZoomToken(sessionName: string, userId: string, roleType: number = 0): string {
-  const now = Math.floor(Date.now() / 1000);
+// ✅ CORRECTED: Generate JWT using official Zoom Video SDK format
+function generateVideoSDKToken(
+  sessionName: string, 
+  userId: string, 
+  roleType: number = 0,
+  sessionKey: string = '',
+  expirationSeconds: number = 7200 // 2 hours
+): string {
   
-  // ✅ Payload complet pentru Video SDK
+  console.log('[Debug] ========== CORRECTED Video SDK Token Generation ==========');
+  
+  // Validate environment variables
+  if (!process.env.ZOOM_API_PUBLIC || !process.env.ZOOM_API_SECRET) {
+    throw new Error('Missing ZOOM_API_PUBLIC or ZOOM_API_SECRET environment variables');
+  }
+
+  const iat = Math.round(new Date().getTime() / 1000) - 30; // 30 seconds ago to account for clock skew
+  const exp = iat + expirationSeconds;
+  
+  // ✅ CRITICAL: Use exact field names from official Zoom Video SDK documentation
   const payload = {
-    iss: process.env.ZOOM_VIDEO_SDK_KEY!,        // SDK Key (issuer)
-    exp: now + (60 * 60 * 2),                   // 2 hours from now
-    iat: now,                                    // Issued at (current time)
-    aud: 'zoom',                                 // Audience
-    app_key: process.env.ZOOM_VIDEO_SDK_KEY!,    // App key (același ca iss)
-    tpc: sessionName,                            // Topic/Session name
-    user_identity: userId,                       // User identifier  
+    // Required fields (exact naming from Zoom docs)
+    app_key: process.env.ZOOM_API_PUBLIC,        // Video SDK Key (NOT API key)
+    tpc: sessionName,                            // Session name/topic
     role_type: roleType,                         // 0 = participant, 1 = host
-    session_key: '',                             // Session password (opțional)
-    geo_regions: 'US',                           // Geographic regions
-    ttl: 7200,                                   // Time to live în secunde (2 ore)
+    iat: iat,                                    // Issued at
+    exp: exp,                                    // Expires at
+    
+    // Optional fields
+    user_identity: userId,                       // User identifier
+    session_key: sessionKey,                     // Session password (optional)
+    
+    // Additional recommended fields
+    alg: 'HS256'                                // Algorithm
   };
 
-  console.log('[Debug] Enhanced JWT payload:', {
-    sessionName,
-    userId, 
-    roleType,
-    sdkKey: process.env.ZOOM_VIDEO_SDK_KEY?.substring(0, 10) + '...',
-    issuedAt: new Date(now * 1000).toISOString(),
-    expiresAt: new Date(payload.exp * 1000).toISOString(),
-    payload
+  console.log('[Debug] Video SDK Token Payload:', {
+    app_key: payload.app_key?.substring(0, 10) + '...',
+    tpc: payload.tpc,
+    role_type: payload.role_type,
+    user_identity: payload.user_identity,
+    session_key: payload.session_key,
+    iat: new Date(payload.iat * 1000).toISOString(),
+    exp: new Date(payload.exp * 1000).toISOString(),
+    duration_hours: (payload.exp - payload.iat) / 3600
   });
 
   try {
-    const token = jwt.sign(payload, process.env.ZOOM_VIDEO_SDK_SECRET!, { 
-      algorithm: 'HS256'
-    });
+    // Header for JWT
+    const header = {
+      alg: 'HS256',
+      typ: 'JWT'
+    };
+
+    const sHeader = JSON.stringify(header);
+    const sPayload = JSON.stringify(payload);
     
-    console.log('[Debug] Enhanced token generated successfully');
+    // Generate token using jsrsasign
+    const token = KJUR.jws.JWS.sign('HS256', sHeader, sPayload, process.env.ZOOM_API_SECRET);
+    
+    console.log('[Debug] Video SDK Token generated successfully');
+    
+    // Verify token structure
+    try {
+      const parts = token.split('.');
+      if (parts.length !== 3) {
+        throw new Error(`Token has ${parts.length} parts, expected 3`);
+      }
+      
+      const decodedPayload = JSON.parse(atob(parts[1]));
+      console.log('[Debug] Token verification:', {
+        hasAppKey: !!decodedPayload.app_key,
+        hasTpc: !!decodedPayload.tpc,
+        hasRoleType: decodedPayload.role_type !== undefined,
+        hasIat: !!decodedPayload.iat,
+        hasExp: !!decodedPayload.exp,
+        tokenParts: parts.length,
+        isValidStructure: true
+      });
+    } catch (verifyError) {
+      console.error('[Debug] Token verification failed:', verifyError);
+      throw new Error('Generated token has invalid structure');
+    }
+    
     return token;
   } catch (error) {
-    console.error('[Debug] Enhanced token generation failed:', error);
-    throw new Error('Failed to generate enhanced Zoom token');
+    console.error('[Debug] Video SDK Token generation failed:', error);
+    throw new Error('Failed to generate Video SDK token: ' + error.message);
   }
 }
 
-// ✅ FIXED: Updated token validation
+// Validate token structure and expiration
 function isTokenValid(token: string): boolean {
   try {
     const parts = token.split('.');
     if (parts.length !== 3) {
-      console.log('[Debug] Invalid JWT format - wrong number of parts:', parts.length);
+      console.log('[Debug] Token invalid: wrong number of parts');
       return false;
     }
 
@@ -74,122 +123,118 @@ function isTokenValid(token: string): boolean {
     const now = Math.floor(Date.now() / 1000);
     const timeUntilExpiry = payload.exp - now;
     
-    // Check if the Video SDK key matches current environment
-    const hasValidKey = payload.iss === process.env.ZOOM_VIDEO_SDK_KEY;
+    // Check required fields for Video SDK
+    const hasRequiredFields = !!(
+      payload.app_key && 
+      payload.tpc && 
+      payload.role_type !== undefined &&
+      payload.iat && 
+      payload.exp
+    );
+    
+    const isValid = timeUntilExpiry > 300 && hasRequiredFields; // 5 minutes buffer
     
     console.log('[Debug] Token validation:', {
       expiresAt: new Date(payload.exp * 1000).toISOString(),
-      currentTime: new Date().toISOString(),
       minutesUntilExpiry: Math.round(timeUntilExpiry / 60),
-      hasValidKey,
-      tokenIssuer: payload.iss,
-      currentVideoSDKKey: process.env.ZOOM_VIDEO_SDK_KEY?.substring(0, 10) + '...',
-      isValid: timeUntilExpiry > 300 && hasValidKey
+      hasRequiredFields,
+      missingFields: [
+        !payload.app_key && 'app_key',
+        !payload.tpc && 'tpc',
+        payload.role_type === undefined && 'role_type',
+        !payload.iat && 'iat',
+        !payload.exp && 'exp'
+      ].filter(Boolean),
+      isValid
     });
     
-    // Token is valid if it has more than 5 minutes left AND uses the correct Video SDK key
-    return timeUntilExpiry > 300 && hasValidKey;
+    return isValid;
   } catch (e) {
     console.error('[Debug] Token parsing failed:', e);
     return false;
   }
 }
 
-// ✅ FIXED: Updated Zoom SDK configuration validation
-function validateZoomConfig(): { isValid: boolean; errors: string[] } {
-  const errors: string[] = [];
-  
-  if (!process.env.ZOOM_VIDEO_SDK_KEY) {
-    errors.push('ZOOM_VIDEO_SDK_KEY environment variable is missing');
-  } else if (process.env.ZOOM_VIDEO_SDK_KEY.length < 10) {
-    errors.push('ZOOM_VIDEO_SDK_KEY appears to be invalid (too short)');
-  }
-  
-  if (!process.env.ZOOM_VIDEO_SDK_SECRET) {
-    errors.push('ZOOM_VIDEO_SDK_SECRET environment variable is missing');
-  } else if (process.env.ZOOM_VIDEO_SDK_SECRET.length < 10) {
-    errors.push('ZOOM_VIDEO_SDK_SECRET appears to be invalid (too short)');
-  }
-  
-  console.log('[Debug] Zoom configuration validation:', {
-    hasVideoSDKKey: !!process.env.ZOOM_VIDEO_SDK_KEY,
-    hasVideoSDKSecret: !!process.env.ZOOM_VIDEO_SDK_SECRET,
-    videoSDKKeyLength: process.env.ZOOM_VIDEO_SDK_KEY?.length || 0,
-    videoSDKKeyPreview: process.env.ZOOM_VIDEO_SDK_KEY?.substring(0, 10) + '...',
-    videoSDKSecretLength: process.env.ZOOM_VIDEO_SDK_SECRET?.length || 0,
-    errors
-  });
-  
-  return {
-    isValid: errors.length === 0,
-    errors
-  };
-}
-
 export async function GET(
   _req: NextRequest,
   context: { params: { sessionId: string } }
 ) {
-  console.log('[Debug] ========== Starting Zoom Video SDK session-info request ==========');
+  console.log('[Debug] ========== CORRECTED Video SDK Session Info Request ==========');
 
   const { sessionId } = await context.params;
-  console.log('[Debug] sessionId:', sessionId);
+  console.log('[Debug] Processing session ID:', sessionId);
 
-  // Validate Zoom configuration first
-  const configValidation = validateZoomConfig();
-  if (!configValidation.isValid) {
-    console.error('[Debug] Zoom SDK configuration invalid:', configValidation.errors);
+  // Validate Zoom Video SDK credentials
+  if (!process.env.ZOOM_API_PUBLIC || !process.env.ZOOM_API_SECRET) {
+    console.error('[Debug] Missing Zoom Video SDK credentials');
     return NextResponse.json({ 
-      error: 'Zoom SDK configuration error',
-      details: process.env.NODE_ENV === 'development' ? configValidation.errors : undefined
+      error: 'Zoom Video SDK configuration missing',
+      details: 'Ensure ZOOM_API_PUBLIC and ZOOM_API_SECRET are set with Video SDK credentials (not Meeting SDK)'
     }, { status: 500 });
   }
 
-  // Authenticate
-  const sess = await getServerSession(authOptions);
-  if (!sess?.user?.id) {
+  console.log('[Debug] Using Zoom Video SDK credentials:', {
+    hasApiKey: !!process.env.ZOOM_API_PUBLIC,
+    hasApiSecret: !!process.env.ZOOM_API_SECRET,
+    apiKeyPrefix: process.env.ZOOM_API_PUBLIC?.substring(0, 10) + '...',
+    credentialType: 'Video SDK (app_key/app_secret)'
+  });
+
+  // Authenticate user
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.id) {
     console.log('[Debug] Unauthenticated request');
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
-  const currentUserId = sess.user.id;
+  const currentUserId = session.user.id;
   console.log('[Debug] Authenticated user:', currentUserId);
 
-  // Find active session record
-  const now = new Date();
-  console.log('[Debug] Current time:', now.toISOString());
-  
+  // Find consulting session
   const record = await prisma.consultingSession.findFirst({
-    where: {
-      id: sessionId,
-    },
+    where: { id: sessionId },
     select: {
-      providerId:      true,
-      clientId:        true,
+      providerId: true,
+      clientId: true,
       zoomSessionName: true,
-      zoomTokens:      true,
-      startDate:       true,
-      endDate:         true,
+      zoomSessionId: true,
+      zoomTokens: true,
+      startDate: true,
+      endDate: true,
     },
   });
   
-  console.log('[Debug] Session record found:', !!record);
   if (!record) {
-    console.log('[Debug] No session found with ID:', sessionId);
+    console.log('[Debug] Consulting session not found:', sessionId);
     return NextResponse.json({ error: 'Session not found' }, { status: 404 });
   }
 
-  // Get provider's user ID
+  if (!record.zoomSessionName) {
+    console.error('[Debug] Session exists but no Zoom session name');
+    return NextResponse.json({ 
+      error: 'Zoom session not initialized',
+      details: 'Please create the Video SDK session first'
+    }, { status: 400 });
+  }
+
+  console.log('[Debug] Found session:', {
+    sessionId,
+    zoomSessionName: record.zoomSessionName,
+    zoomSessionId: record.zoomSessionId,
+    hasTokens: !!record.zoomTokens
+  });
+
+  // Get provider user ID
   const providerRelation = await prisma.provider.findUnique({
     where: { id: record.providerId },
     select: { userId: true }
   });
   
   if (!providerRelation) {
-    console.error('[Debug] Provider relation not found for providerId:', record.providerId);
+    console.error('[Debug] Provider relation not found');
     return NextResponse.json({ error: 'Provider data missing' }, { status: 500 });
   }
 
-  // Authorization - check if current user is either the provider or the client
+  // Check authorization
   const isProvider = providerRelation.userId === currentUserId;
   const isClient = record.clientId === currentUserId;
   
@@ -206,14 +251,7 @@ export async function GET(
     return NextResponse.json({ error: 'Access denied to this session' }, { status: 403 });
   }
 
-  // Extract existing tokens from DB
-  console.log('[Debug] Raw zoomTokens from DB:', record.zoomTokens);
-  let tokensMap: Record<string, string> = {};
-  if (record.zoomTokens && typeof record.zoomTokens === 'object') {
-    tokensMap = record.zoomTokens as Record<string, string>;
-  }
-
-  // Determine the correct token key and role for the current user
+  // Determine role and token key
   let tokenKey: string;
   let roleType: number;
   
@@ -225,74 +263,61 @@ export async function GET(
     roleType = 0; // Participant role for client
   }
 
-  console.log('[Debug] Token generation parameters:', {
+  console.log('[Debug] Video SDK Token parameters:', {
     tokenKey,
-    roleType,
-    sessionName: record.zoomSessionName
+    roleType: roleType === 1 ? 'host' : 'participant',
+    sessionName: record.zoomSessionName,
+    userType: isProvider ? 'provider' : 'client'
   });
 
-  // Check if we have a valid existing token
+  // Check existing token
+  let tokensMap: Record<string, string> = {};
+  if (record.zoomTokens && typeof record.zoomTokens === 'object') {
+    tokensMap = record.zoomTokens as Record<string, string>;
+  }
+
   const existingToken = tokensMap[tokenKey];
   let token: string;
   let needsUpdate = false;
 
   if (existingToken && isTokenValid(existingToken)) {
-    console.log('[Debug] Using existing valid token for user:', tokenKey);
+    console.log('[Debug] Using existing valid Video SDK token for user:', tokenKey);
     token = existingToken;
   } else {
-    console.log('[Debug] Generating new token for user:', tokenKey, {
+    console.log('[Debug] Generating new Video SDK token for user:', tokenKey, {
       hasExistingToken: !!existingToken,
       existingTokenValid: existingToken ? isTokenValid(existingToken) : false,
       reason: existingToken ? 'Token expired or invalid' : 'No existing token'
     });
     
-    try {
-      // Generate new token with current Video SDK credentials
-      token = generateZoomToken(record.zoomSessionName!, tokenKey, roleType);
-      
-      // Update the tokens map
-      tokensMap[tokenKey] = token;
-      needsUpdate = true;
-
-      // If Video SDK key changed, clear all old tokens to force regeneration
-      if (existingToken) {
-        try {
-          const oldPayload = JSON.parse(atob(existingToken.split('.')[1]));
-          const oldVideoSDKKey = oldPayload.iss;
-          
-          if (oldVideoSDKKey && oldVideoSDKKey !== process.env.ZOOM_VIDEO_SDK_KEY) {
-            console.log('[Debug] Video SDK key changed, clearing all old tokens');
-            tokensMap = { [tokenKey]: token }; // Keep only the new token
-          }
-        } catch (e) {
-          console.log('[Debug] Could not parse old token, clearing all tokens');
-          tokensMap = { [tokenKey]: token };
-        }
-      }
-    } catch (error) {
-      console.error('[Debug] Failed to generate token:', error);
-      return NextResponse.json({ 
-        error: 'Failed to generate session token',
-        details: process.env.NODE_ENV === 'development' ? error : undefined
-      }, { status: 500 });
-    }
+    // Generate new Video SDK token
+    token = generateVideoSDKToken(
+      record.zoomSessionName, 
+      tokenKey, 
+      roleType,
+      '', // session key (optional)
+      7200 // 2 hours expiration
+    );
+    
+    // Update tokens map
+    tokensMap[tokenKey] = token;
+    needsUpdate = true;
   }
 
-  // Update database with new token if needed
+  // Update database if needed
   if (needsUpdate) {
     try {
       await prisma.consultingSession.update({
         where: { id: sessionId },
         data: { zoomTokens: tokensMap }
       });
-      console.log('[Debug] Successfully updated tokens in database');
+      console.log('[Debug] Updated Video SDK tokens in database');
     } catch (updateError) {
       console.error('[Debug] Failed to update tokens in database:', updateError);
-      // Continue anyway - the token is still valid for this request
     }
   }
 
-  // Fetch both user records
+  // Get user data
   const [providerUser, clientUser] = await Promise.all([
     prisma.user.findUnique({ 
       where: { id: providerRelation.userId }, 
@@ -305,41 +330,38 @@ export async function GET(
   ]);
   
   if (!providerUser || !clientUser) {
-    console.error('[Debug] Missing user data:', { 
-      hasProvider: !!providerUser, 
-      hasClient: !!clientUser 
-    });
+    console.error('[Debug] Missing user data');
     return NextResponse.json({ error: 'User data missing' }, { status: 500 });
   }
 
   // Build response
   const response: SessionInfo = {
-    sessionName: record.zoomSessionName!,
-    token,
+    sessionName: record.zoomSessionName,  // Video SDK session name
+    token,                                // Video SDK JWT token
     userId: currentUserId,
     startDate: record.startDate!.toISOString(),
     endDate: record.endDate!.toISOString(),
     provider: { id: providerUser.id, name: providerUser.name! },
     client: { id: clientUser.id, name: clientUser.name! },
-    sessionKey: '' // Can be used for session passwords
+    sessionKey: ''
   };
 
-  // Log final token info for debugging (without exposing sensitive data)
+  // Final token verification log
   try {
     const tokenPayload = JSON.parse(atob(token.split('.')[1]));
-    console.log('[Debug] Final token details:', {
-      issuedAt: new Date(tokenPayload.iat * 1000).toISOString(),
+    console.log('[Debug] Final Video SDK token details:', {
+      app_key: tokenPayload.app_key?.substring(0, 10) + '...',
+      tpc: tokenPayload.tpc,
+      role_type: tokenPayload.role_type,
+      user_identity: tokenPayload.user_identity,
       expiresAt: new Date(tokenPayload.exp * 1000).toISOString(),
-      minutesUntilExpiry: Math.round((tokenPayload.exp - Math.floor(Date.now() / 1000)) / 60),
-      sessionName: tokenPayload.tpc,
-      userIdentity: tokenPayload.user_identity,
-      roleType: tokenPayload.role_type,
-      issuer: tokenPayload.iss
+      tokenType: 'Video SDK JWT',
+      structure: 'CORRECTED'
     });
   } catch (e) {
-    console.warn('[Debug] Could not parse token for logging');
+    console.warn('[Debug] Could not parse final token for logging');
   }
 
-  console.log('[Debug] ========== Session-info request completed successfully ==========');
+  console.log('[Debug] ========== Video SDK Session Info Request Completed ==========');
   return NextResponse.json(response);
 }

@@ -248,7 +248,7 @@ model ConsultingSession {
   zoomSessionName  String?                 @unique
   zoomTokens       Json?
   zoomCreatedAt    DateTime                @default(now())
-
+  zoomSessionId    String?
   scheduledAt      DateTime?
   calendlyEventUri String?
   accountId        Int?
