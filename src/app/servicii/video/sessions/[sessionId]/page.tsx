@@ -69,6 +69,9 @@ export default function ZoomVideoSession() {
   const hasJoinedOnceRef = useRef(false);
   const intentionalLeaveRef = useRef(false);
   const currentUserIdRef = useRef<string>("");
+  const selfVideoElRef = useRef<HTMLVideoElement>(null);
+const remoteVideoElRef = useRef<HTMLVideoElement>(null);
+
 
   useEffect(() => {
     currentUserIdRef.current = currentUserId;
@@ -241,85 +244,91 @@ export default function ZoomVideoSession() {
   }, [sessionId, addLog]);
 
   // ✅ SIMPLIFIED: Setup video canvases without complex DOM waiting
-  const setupVideoCanvases = useCallback((): boolean => {
-    addLog("🎥 Setting up video canvases...");
+    // ✅ simplified, safe canvas setup
+ const setupVideoCanvases = useCallback((): boolean => {
+  addLog("🎥 Setting up video canvases…");
 
-    // Simple check - if ref is not available, return false
-    if (!videoContainerRef.current) {
-      addLog("❌ Video container ref not available");
-      return false;
-    }
+  const container = videoContainerRef.current;
+  if (!container) {
+    addLog("❌ Video container ref not available");
+    return false;
+  }
 
-    try {
-      const container = videoContainerRef.current;
-      
-      // Clear existing canvases
-      container.innerHTML = '';
-      selfVideoCanvasRef.current = null;
-      remoteVideoCanvasRef.current = null;
-      setCanvasesReady(false);
+  // ——— Clean up any old canvases we added previously ———
+  if (
+    selfVideoCanvasRef.current &&
+    selfVideoCanvasRef.current.parentNode === container
+  ) {
+    container.removeChild(selfVideoCanvasRef.current);
+    addLog("🧹 Removed previous self-video-canvas");
+  }
+  if (
+    remoteVideoCanvasRef.current &&
+    remoteVideoCanvasRef.current.parentNode === container
+  ) {
+    container.removeChild(remoteVideoCanvasRef.current);
+    addLog("🧹 Removed previous remote-video-canvas");
+  }
+  selfVideoCanvasRef.current = null;
+  remoteVideoCanvasRef.current = null;
+  setCanvasesReady(false);
 
-      addLog("🧹 Cleared existing canvases, creating new ones...");
+  // ——— Create new remote canvas ———
+  const remoteCanvas = document.createElement("canvas");
+  remoteCanvas.id = "remote-video-canvas";
+  remoteCanvas.width = 640;
+  remoteCanvas.height = 480;
+  remoteCanvas.style.cssText = `
+    width: 100%;
+    height: 100%;
+    border-radius: 8px;
+    background: #1f2937;
+  `;
+  remoteVideoCanvasRef.current = remoteCanvas;
 
-      // Self video canvas
-      const selfCanvas = document.createElement('canvas');
-      selfCanvas.width = 320;
-      selfCanvas.height = 240;
-      selfCanvas.style.cssText = `
-        width: 320px;
-        height: 240px;
-        border-radius: 8px;
-        border: 2px solid #3b82f6;
-        position: absolute;
-        top: 10px;
-        right: 10px;
-        z-index: 10;
-        background: #1f2937;
-      `;
-      selfCanvas.id = 'self-video-canvas';
-      selfVideoCanvasRef.current = selfCanvas;
+  // ——— Create new self‐view canvas ———
+  const selfCanvas = document.createElement("canvas");
+  selfCanvas.id = "self-video-canvas";
+  selfCanvas.width = 320;
+  selfCanvas.height = 240;
+  selfCanvas.style.cssText = `
+    width: 320px;
+    height: 240px;
+    border-radius: 8px;
+    border: 2px solid #3b82f6;
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 10;
+    background: #1f2937;
+  `;
+  selfVideoCanvasRef.current = selfCanvas;
 
-      // Remote video canvas
-      const remoteCanvas = document.createElement('canvas');
-      remoteCanvas.width = 640;
-      remoteCanvas.height = 480;
-      remoteCanvas.style.cssText = `
-        width: 100%;
-        height: 100%;
-        border-radius: 8px;
-        background: #1f2937;
-      `;
-      remoteCanvas.id = 'remote-video-canvas';
-      remoteVideoCanvasRef.current = remoteCanvas;
+  // ——— Append them in the correct order ———
+  container.appendChild(remoteCanvas);
+  container.appendChild(selfCanvas);
+  addLog("✅ Appended new canvases");
 
-      // Add canvases to container
-      container.appendChild(remoteCanvas);
-      container.appendChild(selfCanvas);
+  // ——— Verify only that *our* canvases are present ———
+  const remotePresent = !!container.querySelector("#remote-video-canvas");
+  const selfPresent = !!container.querySelector("#self-video-canvas");
+  addLog("🔍 Canvas verification:", {
+    remotePresent,
+    selfPresent,
+    totalChildren: container.children.length,
+  });
 
-      // Simple verification
-      const hasChildren = container.children.length === 2;
-      
-      addLog("🔍 Canvas verification:", {
-        containerExists: !!container,
-        hasChildren,
-        childCount: container.children.length
-      });
+  if (remotePresent && selfPresent) {
+    setCanvasesReady(true);
+    addLog("✅ Video canvases setup complete");
+    return true;
+  } else {
+    addLog("❌ Canvas setup verification failed");
+    return false;
+  }
+}, [addLog]);
 
-      if (hasChildren) {
-        setCanvasesReady(true);
-        addLog("✅ Video canvases setup complete");
-        return true;
-      } else {
-        addLog("❌ Canvas setup verification failed");
-        return false;
-      }
-    } catch (error) {
-      addLog("❌ Failed to setup video canvases", error);
-      console.error('Canvas setup error:', error);
-      setCanvasesReady(false);
-      return false;
-    }
-  }, [addLog]);
+
 
   // Initialize Zoom SDK
   const initializeZoomSDK = useCallback(async (sessionData: SessionInfo) => {
@@ -410,7 +419,7 @@ export default function ZoomVideoSession() {
       // Wait a bit and then try to render video with validation
       setTimeout(() => {
         if (isInSession && !sessionClosed && canvasesReady && streamReady) {
-          renderVideo(client, payload.userId);
+          renderVideo(payload.userId);
         } else {
           addLog(`⚠️ Delaying video render for ${payload.userId} - not ready yet`);
         }
@@ -543,64 +552,114 @@ export default function ZoomVideoSession() {
     }
   }, [addLog]);
 
+  const setupVideoElements = useCallback((): boolean => {
+  addLog("🎥 Setting up video <video> elements…");
+
+  const container = videoContainerRef.current;
+  if (!container) {
+    addLog("❌ Video container ref not available");
+    return false;
+  }
+
+  // — remove any old elements we added —
+  [ selfVideoElRef.current, remoteVideoElRef.current ].forEach(el => {
+    if (el && el.parentNode === container) {
+      container.removeChild(el);
+      addLog(`🧹 Removed previous <video id="${el.id}">`);
+    }
+  });
+  selfVideoElRef.current = null;
+  remoteVideoElRef.current = null;
+  setCanvasesReady(false);
+
+  // — create the remote-video element —
+  const remoteVideo = document.createElement("video");
+  remoteVideo.id = "remote-video";
+  remoteVideo.autoplay = true;
+  remoteVideo.playsInline = true;
+  remoteVideo.style.cssText = `
+    width: 100%;
+    height: 100%;
+    border-radius: 8px;
+    background: #1f2937;
+  `;
+  container.appendChild(remoteVideo);
+  remoteVideoElRef.current = remoteVideo;
+
+  // — create the self-view element —
+  const selfVideo = document.createElement("video");
+  selfVideo.id = "self-video";
+  selfVideo.muted = true;       // avoid echo
+  selfVideo.autoplay = true;
+  selfVideo.playsInline = true;
+  selfVideo.style.cssText = `
+    width: 320px;
+    height: 240px;
+    border-radius: 8px;
+    border: 2px solid #3b82f6;
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 10;
+    background: #1f2937;
+  `;
+  container.appendChild(selfVideo);
+  selfVideoElRef.current = selfVideo;
+
+  addLog("✅ Appended new <video> elements");
+
+  // — verify they exist —
+  const remoteOK = !!container.querySelector("#remote-video");
+  const selfOK   = !!container.querySelector("#self-video");
+  addLog("🔍 Element verification:", { remoteOK, selfOK });
+
+  if (remoteOK && selfOK) {
+    setCanvasesReady(true);
+    addLog("✅ Video elements setup complete");
+    return true;
+  } else {
+    addLog("❌ Video elements setup failed");
+    return false;
+  }
+}, [addLog]);
+
   // Render video with comprehensive validation
-  const renderVideo = useCallback(async (client: any, userId: string) => {
-    // Comprehensive validation before attempting render
-    if (sessionClosed || !isInSession) {
-      addLog(`⚠️ Skipping video render - session not active`);
-      return;
-    }
+// ------------------------------------------------------
+// 1) NEW renderVideo: no 'client' parameter
+// ------------------------------------------------------
+const renderVideo = useCallback(async (userId: string) => {
+  if (!zoomClient) {
+    addLog("❌ No Zoom client available to render video");
+    return;
+  }
+  if (!mediaStream) {
+    addLog("❌ No mediaStream available");
+    return;
+  }
+  if (!canvasesReady || !streamReady) {
+    addLog(`⚠️ Skipping video render for ${userId} — setup incomplete`);
+    return;
+  }
 
-    if (!canvasesReady) {
-      addLog(`⚠️ Skipping video render - canvases not ready for ${userId}`);
-      return;
-    }
+  // pick the right <video> element
+  const el = userId === currentUserIdRef.current
+    ? selfVideoElRef.current
+    : remoteVideoElRef.current;
 
-    if (!streamReady || !mediaStream) {
-      addLog(`⚠️ Skipping video render - stream not ready for ${userId}`);
-      return;
-    }
+  if (!el) {
+    addLog(`❌ No <video> element found for user ${userId}`);
+    return;
+  }
 
-    try {
-      // Double-check canvas availability
-      const canvas = userId === currentUserIdRef.current
-        ? selfVideoCanvasRef.current
-        : remoteVideoCanvasRef.current;
+  addLog(`🎥 Attaching video for ${userId} to <video id="${el.id}">`);
+  try {
+    mediaStream.attachVideo(el, userId);
+    addLog(`✅ attachVideo called for ${userId}`);
+  } catch (err: any) {
+    addLog(`❌ attachVideo failed for ${userId}:`, err);
+  }
+}, [zoomClient, mediaStream, canvasesReady, streamReady, addLog]);
 
-      if (!canvas) {
-        addLog(`❌ Canvas missing for ${userId}`);
-        return;
-      }
-
-      // Verify canvas is attached to DOM
-      if (!document.body.contains(canvas)) {
-        addLog(`❌ Canvas not attached to DOM for ${userId}`);
-        return;
-      }
-
-      // Verify media stream has renderVideo method
-      if (!mediaStream || typeof mediaStream.renderVideo !== "function") {
-        addLog(`❌ MediaStream or renderVideo method not available for ${userId}`);
-        return;
-      }
-
-      // Attempt to render
-      addLog(`🎥 Attempting to render video for ${userId}...`);
-      const [w, h] = userId === currentUserIdRef.current ? [320, 240] : [640, 480];
-      
-      await mediaStream.renderVideo(canvas, userId, w, h, 0, 0, 3);
-      addLog(`✅ Video rendered successfully for user: ${userId}`);
-      
-    } catch (error: any) {
-      addLog(`❌ Video render failed for ${userId}:`, error.message);
-      console.warn("Video render error (non-critical):", error);
-      
-      // If it's a "user not found" error, log it but don't treat as critical
-      if (error.message && error.message.includes('not found')) {
-        addLog(`ℹ️ User ${userId} video not available yet - this is normal`);
-      }
-    }
-  }, [addLog, sessionClosed, isInSession, canvasesReady, streamReady, mediaStream]);
 
   // ✅ SIMPLIFIED: Join session without complex DOM waiting
   const joinSession = useCallback(async (client: any, sessionData: SessionInfo) => {
@@ -794,7 +853,7 @@ export default function ZoomVideoSession() {
         // Render self video after starting with proper validation
         setTimeout(() => {
           if (zoomClient && currentUserId && !sessionClosed && canvasesReady && streamReady) {
-            renderVideo(zoomClient, currentUserId);
+            renderVideo(currentUserId);
           }
         }, 1000);
       }
