@@ -67,6 +67,7 @@ export async function POST(req: NextRequest) {
     phone:    billing.phone,
     address:  billing.address,
     vatPayer: vatPayer,
+    save:     1, 
   };
 
   const invoicePayload = {

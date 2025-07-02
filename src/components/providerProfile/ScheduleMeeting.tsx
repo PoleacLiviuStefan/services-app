@@ -1,5 +1,6 @@
 // components/ScheduleMeeting.tsx
 'use client'
+
 import React, { useEffect, useState, useCallback } from "react";
 import Script from "next/script";
 import Head from "next/head";
@@ -32,11 +33,11 @@ export default function ScheduleMeeting({
   const [loadingBought, setLoadingBought] = useState(false);
   const [errorBought, setErrorBought] = useState<string | null>(null);
 
-  const pageSize = 5;
-  const [currentPage, setCurrentPage] = useState(1);
-
   const [showBuyModal, setShowBuyModal] = useState(false);
   const [selectedService, setSelectedService] = useState<string | null>(null);
+
+  const pageSize = 5;
+  const [currentPage, setCurrentPage] = useState(1);
 
   // 1) Fetch Calendly URL
   useEffect(() => {
@@ -84,33 +85,49 @@ export default function ScheduleMeeting({
         return;
       }
       if (msg.event === "calendly.event_scheduled" && msg.payload?.event?.uri) {
-        const scheduledEventUri: string = msg.payload.event.uri;
         fetch("/api/calendly/event-scheduled", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ providerId, scheduledEventUri }),
+          body: JSON.stringify({ providerId, scheduledEventUri: msg.payload.event.uri }),
         });
       }
     },
     [providerId]
   );
-
   useEffect(() => {
     window.addEventListener("message", onCalendlyMessage);
     return () => window.removeEventListener("message", onCalendlyMessage);
   }, [onCalendlyMessage]);
 
-  // 4) Filtrăm pachete cu sesiuni rămase
+  // 4) Filter packages with remaining sessions
   const validPackages = boughtPackages.filter(
     (pkg) => pkg.totalSessions - pkg.usedSessions > 0
   );
+  const totalPages = Math.ceil(validPackages.length / pageSize);
 
-  // 5) Init widget only if we have script + URL + at least one valid package
+  // 5) Initialize Calendly widget
   useEffect(() => {
-    if (!scriptReady || validPackages.length === 0 || !schedulingUrl) return;
+    // only once script has loaded, Calendly URL is present, and there are valid packages
+    if (
+      !scriptReady ||
+      validPackages.length === 0 ||
+      !schedulingUrl ||
+      !(window as any).Calendly ||
+      typeof (window as any).Calendly.initInlineWidget !== "function"
+    ) {
+      return;
+    }
+
+    const container = document.getElementById("calendly-inline");
+    if (!container) return;
+
+    // clear out any previous widget
+    container.innerHTML = "";
+
+    // init widget
     (window as any).Calendly.initInlineWidget({
       url: `${schedulingUrl}?locale=${locale}`,
-      parentElement: document.getElementById("calendly-inline")!,
+      parentElement: container,
     });
   }, [scriptReady, schedulingUrl, validPackages.length, locale]);
 
@@ -118,8 +135,6 @@ export default function ScheduleMeeting({
     setSelectedService(svc);
     setShowBuyModal(true);
   };
-
-  const totalPages = Math.ceil(validPackages.length / pageSize);
 
   return (
     <>
@@ -133,12 +148,20 @@ export default function ScheduleMeeting({
       <div className="max-w-2xl mx-auto mb-6">
         {loadingBought && <p>Se încarcă pachetele cumpărate…</p>}
         {errorBought && (
-          <p>{errorBought === "Nu am găsit pachetele cumpărate" ? (
-            <>
-              <p>Autentifică-te mai întâi pentru a putea programa o ședință</p>
-              <Link href="/autentificare"><Button>Autentificare</Button></Link>
-            </>
-          ) : `Eroare: ${errorBought}`}</p>
+          <p>
+            {errorBought === "Nu am găsit pachetele cumpărate" ? (
+              <>
+                <p>
+                  Autentifică-te mai întâi pentru a putea programa o ședință
+                </p>
+                <Link href="/autentificare">
+                  <Button>Autentificare</Button>
+                </Link>
+              </>
+            ) : (
+              `Eroare: ${errorBought}`
+            )}
+          </p>
         )}
 
         {/* No valid packages */}
@@ -152,7 +175,9 @@ export default function ScheduleMeeting({
                 <p>Momentan nu există servicii disponibile.</p>
               ) : (
                 <Button onClick={() => openBuyModal(services[0])}>
-                  <Icon><FaVideo size={20} /></Icon>
+                  <Icon>
+                    <FaVideo size={20} />
+                  </Icon>
                   Cumpără Ședințe
                 </Button>
               )}
@@ -177,21 +202,38 @@ export default function ScheduleMeeting({
                 onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                 disabled={currentPage === 1}
                 className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50"
-              >Anterior</button>
-              <span>Pagina {currentPage} din {totalPages}</span>
+              >
+                Anterior
+              </button>
+              <span>
+                Pagina {currentPage} din {totalPages}
+              </span>
               <button
-                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                onClick={() =>
+                  setCurrentPage((p) => Math.min(totalPages, p + 1))
+                }
                 disabled={currentPage === totalPages}
                 className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50"
-              >Următor</button>
+              >
+                Următor
+              </button>
             </div>
 
             <h3 className="text-xl font-semibold mb-2">
               Programează-ți o ședință
             </h3>
-            <div id="calendly-inline" className="w-full h-[600px] border-dashed border-2 border-gray-300">
-              {!scriptReady && <p className="p-4 text-gray-600">Se încarcă scriptul Calendly…</p>}
-              {scriptReady && !schedulingUrl && <p className="p-4 text-gray-600">Se încarcă calendarul…</p>}
+            <div
+              id="calendly-inline"
+              className="w-full h-[600px] border-dashed border-2 border-gray-300"
+            >
+              {!scriptReady && (
+                <p className="p-4 text-gray-600">
+                  Se încarcă scriptul Calendly…
+                </p>
+              )}
+              {scriptReady && !schedulingUrl && (
+                <p className="p-4 text-gray-600">Se încarcă calendarul…</p>
+              )}
             </div>
           </>
         )}
@@ -210,7 +252,10 @@ export default function ScheduleMeeting({
       <Script
         src="https://assets.calendly.com/assets/external/widget.js"
         strategy="afterInteractive"
-        onLoad={() => setScriptReady(true)}
+        onLoad={() => {
+          console.log("Calendly widget script loaded");
+          setScriptReady(true);
+        }}
       />
     </>
   );

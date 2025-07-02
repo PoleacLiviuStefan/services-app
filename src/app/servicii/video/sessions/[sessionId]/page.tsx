@@ -1,3 +1,6 @@
+// components/ZoomVideoSession.tsx
+// ✅ FIXED: Removed infinite DOM checking loop, simplified initialization
+
 "use client";
 
 import React, { useEffect, useState, useRef, useCallback } from "react";
@@ -44,6 +47,17 @@ export default function ZoomVideoSession() {
   const [currentUserId, setCurrentUserId] = useState<string>("");
   const [debugInfo, setDebugInfo] = useState<any>({});
   
+  // Connection state tracking
+  const [connectionState, setConnectionState] = useState<string>("idle");
+  const [reconnectAttempts, setReconnectAttempts] = useState<number>(0);
+  const [sessionClosed, setSessionClosed] = useState<boolean>(false);
+  const [hasJoinedOnce, setHasJoinedOnce] = useState<boolean>(false);
+  const [intentionalLeave, setIntentionalLeave] = useState<boolean>(false);
+  
+  // Canvas and stream state tracking
+  const [canvasesReady, setCanvasesReady] = useState<boolean>(false);
+  const [streamReady, setStreamReady] = useState<boolean>(false);
+  
   // Refs
   const mountedRef = useRef(true);
   const zoomSdkRef = useRef<any>(null);
@@ -51,6 +65,14 @@ export default function ZoomVideoSession() {
   const videoContainerRef = useRef<HTMLDivElement>(null);
   const selfVideoCanvasRef = useRef<HTMLCanvasElement>(null);
   const remoteVideoCanvasRef = useRef<HTMLCanvasElement>(null);
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const hasJoinedOnceRef = useRef(false);
+  const intentionalLeaveRef = useRef(false);
+  const currentUserIdRef = useRef<string>("");
+
+  useEffect(() => {
+    currentUserIdRef.current = currentUserId;
+  }, [currentUserId]);
 
   // Add log function
   const addLog = useCallback((message: string, data?: any) => {
@@ -59,6 +81,35 @@ export default function ZoomVideoSession() {
     console.log(logEntry, data || "");
     setLogs(prev => [...prev.slice(-30), logEntry]);
   }, []);
+
+  // Helper for creating new consulting session
+  const createNewConsultingSession = useCallback(async () => {
+    if (!sessionInfo) {
+      throw new Error("Nu e încărcat sessionInfo-ul curent");
+    }
+
+    addLog("🆕 Creating a brand-new Zoom session…");
+    const res = await fetch("/api/video/create-session", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        users: [ sessionInfo.provider.id, sessionInfo.client.id ],
+        providerId: sessionInfo.provider.id,
+        clientId:    sessionInfo.client.id,
+        specialityId: "4fb4527a-b5c2-4089-a39a-232dd601a520",
+        packageId:    "b587aa8a-f317-4422-846e-fa391983041b"
+      }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${res.status}`);
+    }
+
+    const { sessionId: newSessionId } = await res.json();
+    addLog("✅ New consulting session created:", newSessionId);
+    return newSessionId as string;
+  }, [sessionInfo, addLog]);
 
   // Enhanced system check
   const checkSystem = useCallback(() => {
@@ -78,8 +129,12 @@ export default function ZoomVideoSession() {
       hasWebGL: (() => {
         try {
           const canvas = document.createElement('canvas');
-          return !!(canvas.getContext('webgl') || canvas.getContext('experimental-webgl'));
-        } catch (e) { return false; }
+          const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+          return !!gl;
+        } catch (e) { 
+          console.warn('WebGL check failed:', e);
+          return false; 
+        }
       })(),
       
       // Browser detection
@@ -185,46 +240,85 @@ export default function ZoomVideoSession() {
     }
   }, [sessionId, addLog]);
 
-  // Setup video canvases
-  const setupVideoCanvases = useCallback(() => {
-    if (!videoContainerRef.current) return;
+  // ✅ SIMPLIFIED: Setup video canvases without complex DOM waiting
+  const setupVideoCanvases = useCallback((): boolean => {
+    addLog("🎥 Setting up video canvases...");
 
-    const container = videoContainerRef.current;
-    container.innerHTML = '';
+    // Simple check - if ref is not available, return false
+    if (!videoContainerRef.current) {
+      addLog("❌ Video container ref not available");
+      return false;
+    }
 
-    // Self video canvas
-    const selfCanvas = document.createElement('canvas');
-    selfCanvas.width = 320;
-    selfCanvas.height = 240;
-    selfCanvas.style.cssText = `
-      width: 320px;
-      height: 240px;
-      border-radius: 8px;
-      border: 2px solid #3b82f6;
-      position: absolute;
-      top: 10px;
-      right: 10px;
-      z-index: 10;
-      background: #1f2937;
-    `;
-    selfVideoCanvasRef.current = selfCanvas;
+    try {
+      const container = videoContainerRef.current;
+      
+      // Clear existing canvases
+      container.innerHTML = '';
+      selfVideoCanvasRef.current = null;
+      remoteVideoCanvasRef.current = null;
+      setCanvasesReady(false);
 
-    // Remote video canvas
-    const remoteCanvas = document.createElement('canvas');
-    remoteCanvas.width = 640;
-    remoteCanvas.height = 480;
-    remoteCanvas.style.cssText = `
-      width: 100%;
-      height: 100%;
-      border-radius: 8px;
-      background: #1f2937;
-    `;
-    remoteVideoCanvasRef.current = remoteCanvas;
+      addLog("🧹 Cleared existing canvases, creating new ones...");
 
-    container.appendChild(remoteCanvas);
-    container.appendChild(selfCanvas);
+      // Self video canvas
+      const selfCanvas = document.createElement('canvas');
+      selfCanvas.width = 320;
+      selfCanvas.height = 240;
+      selfCanvas.style.cssText = `
+        width: 320px;
+        height: 240px;
+        border-radius: 8px;
+        border: 2px solid #3b82f6;
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        z-index: 10;
+        background: #1f2937;
+      `;
+      selfCanvas.id = 'self-video-canvas';
+      selfVideoCanvasRef.current = selfCanvas;
 
-    addLog("🎥 Video canvases setup complete");
+      // Remote video canvas
+      const remoteCanvas = document.createElement('canvas');
+      remoteCanvas.width = 640;
+      remoteCanvas.height = 480;
+      remoteCanvas.style.cssText = `
+        width: 100%;
+        height: 100%;
+        border-radius: 8px;
+        background: #1f2937;
+      `;
+      remoteCanvas.id = 'remote-video-canvas';
+      remoteVideoCanvasRef.current = remoteCanvas;
+
+      // Add canvases to container
+      container.appendChild(remoteCanvas);
+      container.appendChild(selfCanvas);
+
+      // Simple verification
+      const hasChildren = container.children.length === 2;
+      
+      addLog("🔍 Canvas verification:", {
+        containerExists: !!container,
+        hasChildren,
+        childCount: container.children.length
+      });
+
+      if (hasChildren) {
+        setCanvasesReady(true);
+        addLog("✅ Video canvases setup complete");
+        return true;
+      } else {
+        addLog("❌ Canvas setup verification failed");
+        return false;
+      }
+    } catch (error) {
+      addLog("❌ Failed to setup video canvases", error);
+      console.error('Canvas setup error:', error);
+      setCanvasesReady(false);
+      return false;
+    }
   }, [addLog]);
 
   // Initialize Zoom SDK
@@ -268,7 +362,9 @@ export default function ZoomVideoSession() {
         logLevel: "info",
         webEndpoint: "zoom.us",
         dependentAssets: "https://source.zoom.us/2.18.0/lib",
-        enforceMultipleVideos: window.crossOriginIsolated
+        enforceMultipleVideos: window.crossOriginIsolated,
+        disableWebGL: !systemInfo.hasWebGL,
+        fallbackRenderer: true
       };
 
       await client.init("en-US", "Global", initConfig);
@@ -282,9 +378,9 @@ export default function ZoomVideoSession() {
       addLog("❌ SDK initialization failed", error);
       throw error;
     }
-  }, [addLog]);
+  }, [addLog, systemInfo]);
 
-  // Setup event listeners
+  // Event listeners with better video handling
   const setupEventListeners = useCallback((client: any) => {
     addLog("🎧 Setting up event listeners...");
 
@@ -304,13 +400,21 @@ export default function ZoomVideoSession() {
       updateParticipants(client);
     });
 
-    // Media events
+    // Media events with better validation
     client.on('video-on', (payload: any) => {
       addLog("🎥 Video started", payload);
-      if (payload.userId === currentUserId) {
+      if (payload.userId === currentUserIdRef.current) {
         setVideoEnabled(true);
       }
-      renderVideo(client, payload.userId);
+      
+      // Wait a bit and then try to render video with validation
+      setTimeout(() => {
+        if (isInSession && !sessionClosed && canvasesReady && streamReady) {
+          renderVideo(client, payload.userId);
+        } else {
+          addLog(`⚠️ Delaying video render for ${payload.userId} - not ready yet`);
+        }
+      }, 500);
     });
 
     client.on('video-off', (payload: any) => {
@@ -334,19 +438,90 @@ export default function ZoomVideoSession() {
       }
     });
 
-    // Connection events
+    // Connection event handling
     client.on('connection-change', (payload: any) => {
       addLog("🔗 Connection changed", payload);
+      setConnectionState(payload.state);
+      
       if (payload.state === 'Connected') {
         setIsInSession(true);
+        setSessionClosed(false);
+        setReconnectAttempts(0);
+        setHasJoinedOnce(true);
         updateParticipants(client);
+        addLog("✅ Session connected successfully");
+        
+        // Get and verify media stream after connection
+        try {
+          const stream = client.getMediaStream();
+          if (stream) {
+            setMediaStream(stream);
+            setStreamReady(true);
+            addLog("✅ Media stream obtained and ready");
+          }
+        } catch (e) {
+          addLog("⚠️ Could not get media stream immediately after connection");
+        }
+        
       } else if (payload.state === 'Disconnected') {
         setIsInSession(false);
+        setStreamReady(false);
+        addLog("📡 Session disconnected");
+        
+        if (hasJoinedOnce && !intentionalLeave && reconnectAttempts < 3) {
+          attemptReconnect(client);
+        }
+        
+      } else if (payload.state === 'Closed') {
+        if (hasJoinedOnceRef.current || intentionalLeaveRef.current) {
+          setSessionClosed(true);
+          setIsInSession(false);
+          setStreamReady(false);
+          addLog("⚠️ Session closed");
+        } else {
+          addLog("⚠️ Session closed during initialization - this is normal");
+        }
       }
     });
 
     addLog("✅ Event listeners setup complete");
-  }, [addLog, currentUserId]);
+  }, [addLog, currentUserId, isInSession, sessionClosed, reconnectAttempts, hasJoinedOnce, intentionalLeave, canvasesReady, streamReady]);
+
+  // Reconnect logic
+  const attemptReconnect = useCallback((client: any) => {
+    if (!sessionInfo || sessionClosed || reconnectAttempts >= 3 || intentionalLeave) {
+      return;
+    }
+
+    setReconnectAttempts(prev => prev + 1);
+    addLog(`🔄 Attempting reconnect ${reconnectAttempts + 1}/3...`);
+
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+    }
+
+    reconnectTimeoutRef.current = setTimeout(async () => {
+      try {
+        const joinResult = await client.join(
+          sessionInfo.sessionName,
+          sessionInfo.token,
+          auth?.user?.name || "User",
+          sessionInfo.sessionKey || ""
+        );
+        addLog("✅ Reconnect successful", joinResult);
+      } catch (error) {
+        addLog("❌ Reconnect failed", error);
+        
+        if (reconnectAttempts < 2) {
+          attemptReconnect(client);
+        } else {
+          addLog("💥 Maximum reconnect attempts reached");
+          setError("Connection lost and unable to reconnect");
+          setSessionClosed(true);
+        }
+      }
+    }, 3000);
+  }, [sessionInfo, sessionClosed, reconnectAttempts, intentionalLeave, auth?.user?.name, addLog]);
 
   // Update participants list
   const updateParticipants = useCallback((client: any) => {
@@ -368,29 +543,66 @@ export default function ZoomVideoSession() {
     }
   }, [addLog]);
 
-  // Render video for a specific user
+  // Render video with comprehensive validation
   const renderVideo = useCallback(async (client: any, userId: string) => {
+    // Comprehensive validation before attempting render
+    if (sessionClosed || !isInSession) {
+      addLog(`⚠️ Skipping video render - session not active`);
+      return;
+    }
+
+    if (!canvasesReady) {
+      addLog(`⚠️ Skipping video render - canvases not ready for ${userId}`);
+      return;
+    }
+
+    if (!streamReady || !mediaStream) {
+      addLog(`⚠️ Skipping video render - stream not ready for ${userId}`);
+      return;
+    }
+
     try {
-      const mediaStream = client.getMediaStream();
-      const canvas = userId === currentUserId ? selfVideoCanvasRef.current : remoteVideoCanvasRef.current;
-      
-      if (!canvas || !mediaStream) {
-        addLog(`❌ Cannot render video - canvas or stream missing for ${userId}`);
+      // Double-check canvas availability
+      const canvas = userId === currentUserIdRef.current
+        ? selfVideoCanvasRef.current
+        : remoteVideoCanvasRef.current;
+
+      if (!canvas) {
+        addLog(`❌ Canvas missing for ${userId}`);
         return;
       }
 
-      if (typeof mediaStream.renderVideo === 'function') {
-        await mediaStream.renderVideo(canvas, userId, 640, 480, 0, 0, 3);
-        addLog(`✅ Video rendered for user: ${userId}`);
-      } else {
-        addLog(`❌ renderVideo method not available for ${userId}`);
+      // Verify canvas is attached to DOM
+      if (!document.body.contains(canvas)) {
+        addLog(`❌ Canvas not attached to DOM for ${userId}`);
+        return;
       }
-    } catch (error) {
-      addLog(`❌ Failed to render video for ${userId}`, error);
-    }
-  }, [addLog, currentUserId]);
 
-  // ✅ ENHANCED JOIN SESSION WITH COMPLETE DEBUG
+      // Verify media stream has renderVideo method
+      if (!mediaStream || typeof mediaStream.renderVideo !== "function") {
+        addLog(`❌ MediaStream or renderVideo method not available for ${userId}`);
+        return;
+      }
+
+      // Attempt to render
+      addLog(`🎥 Attempting to render video for ${userId}...`);
+      const [w, h] = userId === currentUserIdRef.current ? [320, 240] : [640, 480];
+      
+      await mediaStream.renderVideo(canvas, userId, w, h, 0, 0, 3);
+      addLog(`✅ Video rendered successfully for user: ${userId}`);
+      
+    } catch (error: any) {
+      addLog(`❌ Video render failed for ${userId}:`, error.message);
+      console.warn("Video render error (non-critical):", error);
+      
+      // If it's a "user not found" error, log it but don't treat as critical
+      if (error.message && error.message.includes('not found')) {
+        addLog(`ℹ️ User ${userId} video not available yet - this is normal`);
+      }
+    }
+  }, [addLog, sessionClosed, isInSession, canvasesReady, streamReady, mediaStream]);
+
+  // ✅ SIMPLIFIED: Join session without complex DOM waiting
   const joinSession = useCallback(async (client: any, sessionData: SessionInfo) => {
     setStep("joining");
     addLog("🔗 Joining session...");
@@ -399,10 +611,15 @@ export default function ZoomVideoSession() {
       // Set current user ID
       setCurrentUserId(sessionData.userId);
 
-      // Setup video canvases before joining
-      setupVideoCanvases();
+      // ✅ Try to setup canvases - if it fails, continue anyway
+      addLog("🎨 Setting up video canvases...");
+      const canvasSuccess = setupVideoCanvases();
+      if (!canvasSuccess) {
+        addLog("⚠️ Canvas setup failed, but continuing with join...");
+        // Don't throw error, just continue
+      }
 
-      // ✅ COMPREHENSIVE TOKEN DEBUG
+      // Token debug (keeping existing debugging)
       console.log("🔍 ============ COMPLETE ZOOM DEBUG ============");
       console.log("📋 SESSION PARAMETERS:");
       console.log("- Session Name:", sessionData.sessionName);
@@ -411,7 +628,7 @@ export default function ZoomVideoSession() {
       console.log("- Token Length:", sessionData.token.length);
       console.log("- User ID:", sessionData.userId);
       
-      // Parse și analizează token-ul în detaliu
+      // Parse token
       try {
         const tokenParts = sessionData.token.split('.');
         console.log("🔍 TOKEN STRUCTURE:");
@@ -434,7 +651,6 @@ export default function ZoomVideoSession() {
           console.log("- iat (issued):", tokenPayload.iat ? new Date(tokenPayload.iat * 1000).toISOString() : "❌ MISSING");
           console.log("- exp (expires):", tokenPayload.exp ? new Date(tokenPayload.exp * 1000).toISOString() : "❌ MISSING");
           
-          // Verifică expirarea în timp real
           const now = Math.floor(Date.now() / 1000);
           const timeLeft = tokenPayload.exp - now;
           console.log("🔍 TOKEN EXPIRATION:");
@@ -442,13 +658,12 @@ export default function ZoomVideoSession() {
           console.log("- Time until expiry:", Math.round(timeLeft / 60), "minutes");
           console.log("- Is expired?", timeLeft <= 0 ? "❌ YES - TOKEN EXPIRED!" : "✅ NO");
           
-          // Verifică compatibilitatea cu Video SDK
-          console.log("🔍 VIDEO SDK COMPATIBILITY CHECK:");
           const hasAppKey = !!tokenPayload.app_key;
           const hasTpc = !!tokenPayload.tpc;
           const hasRoleType = tokenPayload.role_type !== undefined;
           const hasValidTiming = tokenPayload.iat && tokenPayload.exp && timeLeft > 0;
           
+          console.log("🔍 VIDEO SDK COMPATIBILITY CHECK:");
           console.log("- Has app_key:", hasAppKey ? "✅" : "❌");
           console.log("- Has tpc:", hasTpc ? "✅" : "❌");
           console.log("- Has role_type:", hasRoleType ? "✅" : "❌");
@@ -457,12 +672,6 @@ export default function ZoomVideoSession() {
           const isVideoSDKFormat = hasAppKey && hasTpc && hasRoleType;
           console.log("- Overall Video SDK format:", isVideoSDKFormat ? "✅ CORRECT" : "❌ INCORRECT");
           
-          // Verifică dacă folosește Meeting SDK format (greșit)
-          if (tokenPayload.iss || tokenPayload.aud !== undefined) {
-            console.log("⚠️ WARNING: Token contains Meeting SDK fields (iss/aud) - this is WRONG for Video SDK!");
-          }
-          
-          // Salvează info pentru UI
           setDebugInfo({
             tokenValid: isVideoSDKFormat && hasValidTiming,
             payload: tokenPayload,
@@ -476,26 +685,10 @@ export default function ZoomVideoSession() {
         throw new Error("Invalid token format");
       }
 
-      addLog("🔑 Using session details", {
-        sessionName: sessionData.sessionName,
-        userName: auth?.user?.name,
-        hasToken: !!sessionData.token,
-        tokenLength: sessionData.token?.length
-      });
-
-      // ✅ JOIN WITH DETAILED ERROR CAPTURE
+      // Join session
       console.log("🚀 ATTEMPTING ZOOM JOIN:");
-      console.log("- Method: client.join()");
-      console.log("- Param 1 (sessionName):", sessionData.sessionName);
-      console.log("- Param 2 (token):", sessionData.token.substring(0, 50) + "... [TRUNCATED]");
-      console.log("- Param 3 (userName):", auth?.user?.name || "User");
-      console.log("- Param 4 (sessionKey):", sessionData.sessionKey || "");
-
-      // Record join attempt time
       const joinStartTime = Date.now();
-      console.log("- Join attempt started at:", new Date(joinStartTime).toISOString());
-
-      // Join session with error handling
+      
       const joinResult = await client.join(
         sessionData.sessionName,
         sessionData.token,
@@ -505,48 +698,55 @@ export default function ZoomVideoSession() {
 
       const joinEndTime = Date.now();
       console.log("✅ JOIN SUCCESSFUL:");
-      console.log("- Join completed at:", new Date(joinEndTime).toISOString());
       console.log("- Join duration:", joinEndTime - joinStartTime, "ms");
       console.log("- Join result:", joinResult);
       
       addLog("✅ Successfully joined session");
       
-      // Get media stream
-      const stream = client.getMediaStream();
-      setMediaStream(stream);
+      // Get media stream and verify it's ready
+      try {
+        const stream = client.getMediaStream();
+        if (stream) {
+          setMediaStream(stream);
+          setStreamReady(true);
+          addLog("✅ Media stream obtained after join");
+        } else {
+          addLog("⚠️ Media stream not immediately available - will retry");
+          // Set a timeout to check again
+          setTimeout(() => {
+            const retryStream = client.getMediaStream();
+            if (retryStream) {
+              setMediaStream(retryStream);
+              setStreamReady(true);
+              addLog("✅ Media stream obtained on retry");
+            }
+          }, 1000);
+        }
+      } catch (streamError) {
+        addLog("⚠️ Error getting media stream after join:", streamError);
+      }
       
       setStep("connected");
-      setIsInSession(true);
       
       // Update participants
       updateParticipants(client);
       
+      // ✅ Try to setup canvases again after successful join if they weren't ready before
+      if (!canvasSuccess) {
+        addLog("🔄 Retrying canvas setup after successful join...");
+        setTimeout(() => {
+          const retryCanvas = setupVideoCanvases();
+          if (retryCanvas) {
+            addLog("✅ Canvas setup successful on retry");
+          }
+        }, 1000);
+      }
+      
       return true;
       
     } catch (error: any) {
-      console.error("❌ ============ JOIN FAILED - DETAILED ERROR ============");
-      console.error("- Error occurred at:", new Date().toISOString());
-      console.error("- Error type:", error?.type || "Unknown");
-      console.error("- Error reason:", error?.reason || "Unknown");
-      console.error("- Error code:", error?.errorCode || "Unknown");
-      console.error("- Error message:", error?.message || "Unknown");
-      console.error("- Full error object:", error);
-      
-      // Additional context
-      console.error("🔍 ERROR CONTEXT:");
-      console.error("- Session Name used:", sessionData.sessionName);
-      console.error("- Token length used:", sessionData.token.length);
-      console.error("- User name used:", auth?.user?.name || "User");
-      console.error("- Session key used:", sessionData.sessionKey || "(empty)");
-      
-      // Error code specific guidance
-      if (error?.errorCode === 200) {
-        console.error("💡 ERROR 200 TROUBLESHOOTING:");
-        console.error("- This usually means authentication/account issues");
-        console.error("- Check: Are you using Video SDK credentials (not Meeting SDK)?");
-        console.error("- Check: Is your Zoom app status 'Development' (not 'Draft')?");
-        console.error("- Check: Are app_key credentials correct?");
-      }
+      console.error("❌ ============ JOIN FAILED ============");
+      console.error("- Error:", error);
       
       addLog("❌ Failed to join session", error);
       throw error;
@@ -555,8 +755,8 @@ export default function ZoomVideoSession() {
 
   // Media control functions
   const toggleAudio = useCallback(async () => {
-    if (!mediaStream || !isInSession) {
-      addLog("❌ Cannot toggle audio - not in session or no media stream");
+    if (!mediaStream || !isInSession || sessionClosed) {
+      addLog("❌ Cannot toggle audio - session not active");
       return;
     }
 
@@ -573,11 +773,11 @@ export default function ZoomVideoSession() {
     } catch (error: any) {
       addLog("❌ Failed to toggle audio", error);
     }
-  }, [mediaStream, isInSession, audioEnabled, addLog]);
+  }, [mediaStream, isInSession, sessionClosed, audioEnabled, addLog]);
 
   const toggleVideo = useCallback(async () => {
-    if (!mediaStream || !isInSession) {
-      addLog("❌ Cannot toggle video - not in session or no media stream");
+    if (!mediaStream || !isInSession || sessionClosed) {
+      addLog("❌ Cannot toggle video - session not active");
       return;
     }
 
@@ -591,9 +791,9 @@ export default function ZoomVideoSession() {
         setVideoEnabled(true);
         addLog("🎥 Video enabled");
         
-        // Render self video after starting
+        // Render self video after starting with proper validation
         setTimeout(() => {
-          if (zoomClient && currentUserId) {
+          if (zoomClient && currentUserId && !sessionClosed && canvasesReady && streamReady) {
             renderVideo(zoomClient, currentUserId);
           }
         }, 1000);
@@ -601,15 +801,21 @@ export default function ZoomVideoSession() {
     } catch (error: any) {
       addLog("❌ Failed to toggle video", error);
     }
-  }, [mediaStream, isInSession, videoEnabled, addLog, zoomClient, currentUserId, renderVideo]);
+  }, [mediaStream, isInSession, sessionClosed, videoEnabled, addLog, zoomClient, currentUserId, renderVideo, canvasesReady, streamReady]);
 
-  // Leave session
+  // Leave session with proper state management
   const leaveSession = useCallback(async () => {
-    if (!zoomClient || !isInSession) return;
+    if (!zoomClient) return;
 
     try {
       setStep("leaving");
+      setIntentionalLeave(true);
       addLog("👋 Leaving session...");
+      
+      // Clear reconnect timeout
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+      }
       
       // Stop media streams
       if (mediaStream) {
@@ -624,10 +830,14 @@ export default function ZoomVideoSession() {
       await zoomClient.leave();
       
       setIsInSession(false);
+      setSessionClosed(true);
       setAudioEnabled(false);
       setVideoEnabled(false);
       setParticipants([]);
+      setConnectionState("disconnected");
       setStep("disconnected");
+      setStreamReady(false);
+      setCanvasesReady(false);
       
       addLog("✅ Left session successfully");
       
@@ -638,10 +848,12 @@ export default function ZoomVideoSession() {
       
     } catch (error: any) {
       addLog("❌ Failed to leave session", error);
+    } finally {
+      initializingRef.current = false;
     }
-  }, [zoomClient, isInSession, mediaStream, audioEnabled, videoEnabled, addLog, router]);
+  }, [zoomClient, mediaStream, audioEnabled, videoEnabled, addLog, router]);
 
-  // Main initialization flow
+  // ✅ SIMPLIFIED: Main initialization flow without DOM checks
   const initialize = useCallback(async () => {
     if (initializingRef.current) {
       addLog("⚠️ Initialization already in progress");
@@ -653,6 +865,12 @@ export default function ZoomVideoSession() {
     try {
       setError("");
       setStep("starting");
+      setSessionClosed(false);
+      setIntentionalLeave(false);
+      setHasJoinedOnce(false);
+      setReconnectAttempts(0);
+      setCanvasesReady(false);
+      setStreamReady(false);
       
       // System check
       const sysInfo = checkSystem();
@@ -684,25 +902,33 @@ export default function ZoomVideoSession() {
     }
   }, [checkSystem, loadZoomSDK, fetchSessionInfo, initializeZoomSDK, joinSession, addLog]);
 
-  // Component lifecycle
+  useEffect(() => { hasJoinedOnceRef.current = hasJoinedOnce; }, [hasJoinedOnce]);
+  useEffect(() => { intentionalLeaveRef.current = intentionalLeave; }, [intentionalLeave]);
+
+  // ✅ SIMPLIFIED: Component lifecycle without DOM ready dependency
   useEffect(() => {
     mountedRef.current = true;
     
     // Initialize when ready
     if (auth?.user && sessionId && step === "idle") {
+      addLog("🚀 Starting initialization...");
       initialize();
     }
 
     return () => {
       mountedRef.current = false;
-      initializingRef.current = false;
+      setIntentionalLeave(true);
       
       // Cleanup
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+      }
+      
       if (zoomClient && isInSession) {
         zoomClient.leave().catch(console.error);
       }
     };
-  }, [auth?.user, sessionId, step, initialize, zoomClient, isInSession]);
+  }, [auth?.user, sessionId, step, initialize]);
 
   // Render loading state
   if (status === "loading") {
@@ -744,6 +970,10 @@ export default function ZoomVideoSession() {
       warnings.push("⚠️ HTTPS required for production use");
     }
     
+    if (!systemInfo.hasWebGL) {
+      warnings.push("⚠️ WebGL not available - video rendering may not work properly");
+    }
+    
     return warnings;
   };
 
@@ -761,16 +991,41 @@ export default function ZoomVideoSession() {
               <p className="text-gray-600 mt-1">
                 {sessionInfo ? `Session with ${sessionInfo.provider.name}` : 'Loading session...'}
               </p>
+              {/* Connection status display */}
+              {connectionState && connectionState !== 'idle' && (
+                <div className="mt-2">
+                  <span className={`text-sm px-2 py-1 rounded ${
+                    connectionState === 'Connected' ? 'bg-green-100 text-green-700' :
+                    connectionState === 'Closed' && hasJoinedOnce ? 'bg-red-100 text-red-700' :
+                    connectionState === 'Closed' && !hasJoinedOnce ? 'bg-yellow-100 text-yellow-700' :
+                    'bg-yellow-100 text-yellow-700'
+                  }`}>
+                    Connection: {connectionState}
+                    {connectionState === 'Closed' && !hasJoinedOnce && ' (Initializing)'}
+                  </span>
+                  {reconnectAttempts > 0 && (
+                    <span className="ml-2 text-sm text-gray-600">
+                      (Reconnect attempts: {reconnectAttempts}/3)
+                    </span>
+                  )}
+                  {/* Canvas and stream readiness indicators */}
+                  <div className="mt-1 text-xs text-gray-500">
+                    Canvas: {canvasesReady ? '✅' : '⏳'} | Stream: {streamReady ? '✅' : '⏳'}
+                  </div>
+                </div>
+              )}
             </div>
             <div className="flex items-center space-x-2">
               <span className={`px-3 py-1 rounded-full text-sm font-medium ${
                 step === "connected" ? "bg-green-100 text-green-800" :
                 step === "failed" ? "bg-red-100 text-red-800" :
+                sessionClosed && hasJoinedOnce ? "bg-gray-100 text-gray-800" :
                 "bg-yellow-100 text-yellow-800"
               }`}>
                 {step === "connected" ? "✅ Connected" :
                  step === "failed" ? "❌ Failed" :
                  step === "idle" ? "⏳ Ready" :
+                 sessionClosed && hasJoinedOnce ? "🔒 Session Closed" :
                  `🔄 ${step.replace('-', ' ')}`}
               </span>
               {participants.length > 0 && (
@@ -832,18 +1087,48 @@ export default function ZoomVideoSession() {
           </div>
         )}
 
+        {/* Session closed warning */}
+        {sessionClosed && hasJoinedOnce && step !== "leaving" && !intentionalLeave && (
+          <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-6">
+            <h3 className="font-semibold text-orange-800 mb-2">Session Ended</h3>
+            <p className="text-orange-700 text-sm">
+              The video session has ended. This could be due to:
+            </p>
+            <ul className="text-orange-700 text-sm mt-2 ml-4 list-disc">
+              <li>Session timeout</li>
+              <li>Network connectivity issues</li>
+              <li>All participants leaving</li>
+              <li>Server maintenance</li>
+            </ul>
+            {reconnectAttempts < 3 && (
+              <button
+                onClick={() => {
+                  setSessionClosed(false);
+                  setReconnectAttempts(0);
+                  setIntentionalLeave(false);
+                  setHasJoinedOnce(false);
+                  initialize();
+                }}
+                className="mt-3 px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700 text-sm"
+              >
+                🔄 Try Reconnect
+              </button>
+            )}
+          </div>
+        )}
+
         {/* Error Display */}
         {error && (
           <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
             <h3 className="font-semibold text-red-800">Connection Error:</h3>
             <p className="text-red-700 mt-1">{error}</p>
             <div className="mt-3 text-sm text-red-600">
-              <p><strong>Common fixes for error 200:</strong></p>
+              <p><strong>Common fixes:</strong></p>
               <ul className="list-disc ml-5 mt-1">
-                <li>Check Zoom Marketplace: App must be "Video SDK" type</li>
-                <li>App status must be "Development" (not "Draft")</li>
-                <li>Use correct Video SDK credentials (not Meeting SDK)</li>
-                <li>Check token format in browser console</li>
+                <li>Check internet connection</li>
+                <li>Ensure browser supports WebGL and WebRTC</li>
+                <li>Allow camera and microphone permissions</li>
+                <li>Try refreshing the page</li>
               </ul>
             </div>
             <button
@@ -852,6 +1137,9 @@ export default function ZoomVideoSession() {
                 setError("");
                 setLogs([]);
                 setDebugInfo({});
+                setSessionClosed(false);
+                setIntentionalLeave(false);
+                setHasJoinedOnce(false);
                 initialize();
               }}
               className="mt-3 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 text-sm transition-colors"
@@ -868,7 +1156,7 @@ export default function ZoomVideoSession() {
             <div className="bg-white rounded-lg shadow-sm p-6">
               <h2 className="text-lg font-semibold mb-4">Video Stream</h2>
               
-              {isInSession ? (
+              {isInSession && !sessionClosed ? (
                 <div>
                   {/* Video Container */}
                   <div 
@@ -880,13 +1168,36 @@ export default function ZoomVideoSession() {
                     <div className="absolute inset-0 flex items-center justify-center text-white text-lg">
                       {participants.length === 0 ? "Waiting for participants..." : ""}
                     </div>
+                    
+                    {/* Connection status overlay */}
+                    {connectionState !== 'Connected' && isInSession && (
+                      <div className="absolute top-4 left-4 z-20">
+                        <div className="bg-yellow-100 text-yellow-800 px-3 py-1 rounded text-sm">
+                          {connectionState === 'Connecting' ? '🔄 Connecting...' :
+                           connectionState === 'Reconnecting' ? '🔄 Reconnecting...' :
+                           connectionState === 'Closed' ? '⚠️ Connection Lost' :
+                           `📡 ${connectionState}`}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Render readiness overlay */}
+                    {(!canvasesReady || !streamReady) && isInSession && (
+                      <div className="absolute top-4 right-4 z-20">
+                        <div className="bg-blue-100 text-blue-800 px-3 py-1 rounded text-sm">
+                          {!canvasesReady ? '🎨 Setting up video...' : 
+                           !streamReady ? '📡 Preparing stream...' : ''}
+                        </div>
+                      </div>
+                    )}
                   </div>
                   
                   {/* Media Controls */}
                   <div className="flex justify-center space-x-4 mb-4">
                     <button
                       onClick={toggleAudio}
-                      className={`px-6 py-3 rounded-lg font-medium transition-colors ${
+                      disabled={!isInSession || sessionClosed || !streamReady}
+                      className={`px-6 py-3 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                         audioEnabled 
                           ? 'bg-green-600 text-white hover:bg-green-700' 
                           : 'bg-gray-600 text-white hover:bg-gray-700'
@@ -897,7 +1208,8 @@ export default function ZoomVideoSession() {
                     
                     <button
                       onClick={toggleVideo}
-                      className={`px-6 py-3 rounded-lg font-medium transition-colors ${
+                      disabled={!isInSession || sessionClosed || !streamReady}
+                      className={`px-6 py-3 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                         videoEnabled 
                           ? 'bg-blue-600 text-white hover:bg-blue-700' 
                           : 'bg-gray-600 text-white hover:bg-gray-700'
@@ -908,7 +1220,8 @@ export default function ZoomVideoSession() {
                     
                     <button
                       onClick={leaveSession}
-                      className="px-6 py-3 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 transition-colors"
+                      disabled={!zoomClient}
+                      className="px-6 py-3 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       👋 Leave Session
                     </button>
@@ -945,10 +1258,15 @@ export default function ZoomVideoSession() {
                 </div>
               ) : (
                 <div className="bg-gray-100 rounded-lg p-8 text-center">
-                  <div className={step === "failed" ? "" : "animate-pulse"}>
-                    <div className={`h-48 rounded mb-4 ${step === "failed" ? "bg-red-200" : "bg-gray-300"}`}></div>
+                  <div className={step === "failed" || (sessionClosed && hasJoinedOnce) ? "" : "animate-pulse"}>
+                    <div className={`h-48 rounded mb-4 ${
+                      step === "failed" ? "bg-red-200" : 
+                      (sessionClosed && hasJoinedOnce) ? "bg-gray-300" : 
+                      "bg-gray-300"
+                    }`}></div>
                     <p className="text-gray-600">
                       {step === "failed" ? "Connection failed - check console for detailed debug info" : 
+                       (sessionClosed && hasJoinedOnce) ? "Session has ended" :
                        step === "idle" ? "Ready to connect..." :
                        `${step.replace('-', ' ')}...`}
                     </p>
@@ -1009,6 +1327,36 @@ export default function ZoomVideoSession() {
                     {systemInfo.isSecure ? '✅ HTTPS' : '❌ HTTP'}
                   </span>
                 </div>
+                <div className="flex justify-between">
+                  <span>Connection:</span>
+                  <span className={
+                    connectionState === 'Connected' ? 'text-green-600' : 
+                    connectionState === 'Closed' && !hasJoinedOnce ? 'text-gray-600' :
+                    'text-yellow-600'
+                  }>
+                    {connectionState === 'Closed' && !hasJoinedOnce ? 'Initializing' : connectionState || 'Not connected'}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Session State:</span>
+                  <span className={
+                    isInSession ? 'text-green-600' : 
+                    hasJoinedOnce ? 'text-red-600' : 
+                    'text-gray-600'
+                  }>
+                    {isInSession ? 'Active' : hasJoinedOnce ? 'Ended' : 'Not started'}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Video Ready:</span>
+                  <span className={
+                    canvasesReady && streamReady ? 'text-green-600' : 'text-yellow-600'
+                  }>
+                    {canvasesReady && streamReady ? '✅ Ready' : 
+                     canvasesReady ? '⏳ Stream pending' : 
+                     streamReady ? '⏳ Canvas pending' : '⏳ Initializing'}
+                  </span>
+                </div>
               </div>
             </div>
 
@@ -1030,9 +1378,24 @@ export default function ZoomVideoSession() {
                 <div className="mt-2 text-xs text-gray-500">
                   💡 Check browser console for complete debug info
                 </div>
+                {sessionClosed && hasJoinedOnce && (
+                  <button
+                    onClick={async () => {
+                      try {
+                        const newId = await createNewConsultingSession();
+                        router.push(`/servicii/video-sessions/${newId}`);
+                      } catch (err: any) {
+                        addLog("❌ Failed to create new session", err);
+                        setError(err.message);
+                      }
+                    }}
+                    className="mt-3 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
+                  >
+                    🔄 Start New Session
+                  </button>
+                )}
               </div>
             )}
-            
           </div>
         </div>
       </div>
