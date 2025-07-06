@@ -2,6 +2,7 @@
 const nextConfig = {
   experimental: {
     runtime: 'nodejs',
+    // Removed esmExternals for Turbopack compatibility
   },
   typescript: {
     ignoreBuildErrors: true,
@@ -30,7 +31,7 @@ const nextConfig = {
     ],
   },
 
-  // aplica izolare COEP/COOP doar pentru /servicii/video/[sessionid]
+  // Headers pentru Zoom Video SDK
   async headers() {
     return [
       {
@@ -39,10 +40,54 @@ const nextConfig = {
           { key: 'Cross-Origin-Opener-Policy',   value: 'same-origin' },
           { key: 'Cross-Origin-Embedder-Policy', value: 'require-corp' },
           { key: 'Cross-Origin-Resource-Policy', value: 'cross-origin' },
+          { key: 'Permissions-Policy', value: 'camera=*, microphone=*, display-capture=*' },
+          // Additional headers pentru media access
+          { key: 'Feature-Policy', value: 'camera *; microphone *; display-capture *' },
         ],
       },
     ];
   },
+
+  // Simplified webpack config pentru Turbopack compatibility
+  webpack: (config, { isServer }) => {
+    // Only apply fallbacks for client-side
+    if (!isServer) {
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        fs: false,
+        net: false,
+        tls: false,
+        crypto: false,
+        stream: false,
+        url: false,
+        zlib: false,
+        http: false,
+        https: false,
+        assert: false,
+        os: false,
+        path: false,
+      };
+    }
+
+    // Basic handling for Zoom SDK modules
+    config.module.rules.push({
+      test: /\.js$/,
+      include: /node_modules\/@zoom/,
+      type: 'javascript/auto',
+    });
+
+    return config;
+  },
+
+  // Basic optimizations that work with Turbopack
+  swcMinify: true,
+  compress: true,
+  
+  // Production optimizations
+  ...(process.env.NODE_ENV === 'production' && {
+    poweredByHeader: false,
+    generateEtags: false,
+  }),
 };
 
 module.exports = nextConfig;

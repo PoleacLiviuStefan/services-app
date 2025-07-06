@@ -1,0 +1,38 @@
+#root {
+  margin: 0 auto;
+}
+
+main {
+  margin: auto;
+  width: 100vw;
+  height: 100vh;
+}
+
+main #join-flow {
+  text-align: center;
+}
+
+main #join-flow button {
+  margin-top: 20px;
+  background-color: #2d8cff;
+  color: #ffffff;
+  text-decoration: none;
+  padding-top: 10px;
+  padding-bottom: 10px;
+  padding-left: 40px;
+  padding-right: 40px;
+  display: inline-block;
+  border-radius: 10px;
+  cursor: pointer;
+  border: none;
+  outline: none;
+}
+
+main #join-flow button:hover {
+  background-color: #2681f2;
+}
+
+#sessionContainer {
+  width: 100%;
+  height: 100%;
+}
