@@ -546,7 +546,7 @@ const initializeZoom = useCallback(async () => {
   const sendMessage = useCallback(() => {
     if (newMessage.trim() && mountedRef.current) {
       const message = `${auth?.user?.name || 'You'}: ${newMessage.trim()}`;
-      setMessages(prev => [...prev, message]);
+      setMessages((prev: string[]) => [...prev, message]);
       setNewMessage("");
       addLog("💬 Message sent:", newMessage.trim());
     }
@@ -791,9 +791,9 @@ const initializeZoom = useCallback(async () => {
               {messages.length === 0 ? (
                 <p className="text-gray-400 text-sm text-center">No messages yet...</p>
               ) : (
-                messages.map((message, index) => (
-                  <div key={`message-${index}`} className="bg-gray-700 rounded-lg p-3">
-                    <p className="text-white text-sm">{message}</p>
+                messages.map((msg: string, i: number) => (
+                  <div key={`message-${i}`} className="bg-gray-700 rounded-lg p-3">
+                    <p className="text-white text-sm">{msg}</p>
                   </div>
                 ))
               )}
@@ -805,7 +805,7 @@ const initializeZoom = useCallback(async () => {
                   type="text"
                   value={newMessage}
                   onChange={(e) => setNewMessage(e.target.value)}
-                  onKeyPress={(e) => e.key === "Enter" && sendMessage()}
+                  onKeyDown={(e) => e.key === "Enter" && sendMessage()}
                   placeholder="Type a message..."
                   className="flex-1 px-3 py-2 bg-gray-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
@@ -821,37 +821,6 @@ const initializeZoom = useCallback(async () => {
           </div>
         )}
       </div>
-
-      {/* Debug overlay (development only) */}
-      {process.env.NODE_ENV === "development" && (
-        <div className="fixed bottom-4 left-4 bg-black bg-opacity-75 text-white p-2 rounded text-xs max-w-xs z-50">
-          <div>Lock: {initLockRef.current ? "🔒" : "🔓"}</div>
-          <div>State: {connectionState}</div>
-          <div>Participants: {participants.length}</div>
-          <div>Media: {mediaReady ? "Ready" : "Not Ready"}</div>
-          <div>Audio: {audioEnabled ? "ON" : "OFF"}</div>
-          <div>Video: {videoEnabled ? "ON" : "OFF"}</div>
-          
-          {sessionInfo?.token && (
-            <div className="mt-2 pt-2 border-t border-gray-600">
-              <div className="text-yellow-400">Token Info:</div>
-              {(() => {
-                try {
-                  const payload = JSON.parse(atob(sessionInfo.token.split('.')[1]));
-                  return (
-                    <>
-                      <div>Identity: {payload.user_identity}</div>
-                      <div>Role: {payload.role_type}</div>
-                    </>
-                  );
-                } catch (e) {
-                  return <div>Parse error</div>;
-                }
-              })()}
-            </div>
-          )}
-        </div>
-      )}
     </div>
   );
 }
