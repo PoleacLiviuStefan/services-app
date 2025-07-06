@@ -1,15 +1,40 @@
 declare module 'next-auth/react' {
-  import * as React from 'react';
-  const mod: any;
-  export default mod;
-  export * from mod;
+  // minimal Session interface
+  export interface SessionUser {
+    id?: string;
+    name?: string | null;
+    email?: string | null;
+    image?: string | null;
+    [key: string]: unknown;
+  }
+
+  export interface Session {
+    user?: SessionUser | null;
+    expires?: string;
+    [key: string]: unknown;
+  }
+
+  export type SessionStatus = 'loading' | 'unauthenticated' | 'authenticated';
+
+  export function useSession(): {
+    data: Session | null;
+    status: SessionStatus;
+  };
+
+  export function signIn(provider?: string, options?: Record<string, unknown>): Promise<void>;
+  export function signOut(options?: Record<string, unknown>): Promise<void>;
 }
 
 declare module 'next/navigation' {
-  const mod: any;
-  export const useParams: () => Record<string, string>;
-  export const useRouter: () => any;
-  export default mod;
+  export interface Router {
+    push: (href: string) => void;
+    back: () => void;
+    refresh?: () => void;
+    [key: string]: unknown;
+  }
+
+  export function useParams<T extends Record<string, string> = Record<string, string>>(): T;
+  export function useRouter(): Router;
 }
 
 declare module 'lucide-react' {
