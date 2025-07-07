@@ -398,6 +398,16 @@ const initializeZoom = useCallback(async () => {
     const client = ZoomVideo.createClient();
     zoomClientRef.current = client;
 
+    // 5.1 Initialize the Zoom Video SDK (required before join)
+    try {
+      addLog("🛠️ Initializing Zoom Video SDK...");
+      await client.init('en-US', 'Global', { patchJsMedia: true });
+      addLog("✅ Zoom Video SDK initialized");
+    } catch (sdkInitError: any) {
+      addLog("❌ Failed to initialize Zoom Video SDK:", sdkInitError);
+      throw sdkInitError;
+    }
+
     // 6. Setup event listeners
     client.on('connection-change', handleConnectionChange);
     client.on('peer-video-state-change', handleVideoStateChange);
@@ -477,118 +487,17 @@ const initializeZoom = useCallback(async () => {
         }
       });
 
-      // ✅ ZOOM SDK JOIN - ÎNCERCĂRI MULTIPLE CU FORMATTE DIFERITE
-      const joinAttempts = [
-        // Attempt 1: Zoom SDK exact format (cea mai comună cauză)
-        {
-          signature: info.token,
-          topic: info.sessionName,
-          userName: userName,
-          password: "" // Zoom SDK cere password explicit, chiar și gol
-        },
-        // Attempt 2: Fără password (some Zoom versions)
-        {
-          signature: info.token,
-          topic: info.sessionName,
-          userName: userName
-        },
-        // Attempt 3: Cu user object format (alternative format)
-        {
-          signature: info.token,
-          topic: info.sessionName,
-          userName: userName,
-          password: "",
-          userIdentity: payload.user_identity // Explicit user identity
-        },
-        // Attempt 4: Token în payload format (dacă SDK așteaptă alt format)
-        {
-          token: info.token, // 'token' în loc de 'signature'
-          topic: info.sessionName,
-          userName: userName,
-          password: ""
-        }
-      ];
+      // 8. Join the session – use the correct parameter list for SDK v2.x
+      addLog("Joining session with validated params...");
 
-      let joinSuccess = false;
-      let lastJoinError: any = null;
-
-      for (let i = 0; i < joinAttempts.length; i++) {
-        const attempt = joinAttempts[i];
-        
-        addLog(`🔄 Join attempt ${i + 1} (${['standard', 'no-password', 'with-identity', 'token-format'][i]}):`, {
-          format: Object.keys(attempt),
-          signatureOrToken: (attempt as any).signature?.substring(0, 20) || (attempt as any).token?.substring(0, 20) || 'missing',
-          topic: attempt.topic,
-          userName: attempt.userName,
-          hasPassword: 'password' in attempt,
-          hasUserIdentity: 'userIdentity' in attempt
-        });
-
-        try {
-          // ✅ EXPLICIT TYPE CHECKING BEFORE JOIN
-          if ('signature' in attempt && typeof attempt.signature !== 'string') {
-            throw new Error(`Signature is not string: ${typeof attempt.signature}`);
-          }
-          if ('token' in attempt && typeof (attempt as any).token !== 'string') {
-            throw new Error(`Token is not string: ${typeof (attempt as any).token}`);
-          }
-          if (typeof attempt.topic !== 'string') {
-            throw new Error(`Topic is not string: ${typeof attempt.topic}`);
-          }
-          if (typeof attempt.userName !== 'string') {
-            throw new Error(`UserName is not string: ${typeof attempt.userName}`);
-          }
-
-          addLog(`✅ Type validation passed for attempt ${i + 1}`);
-          
-          await client.join(attempt);
-          addLog(`✅ Successfully joined session on attempt ${i + 1}!`);
-          joinSuccess = true;
-          break;
-          
-        } catch (joinError: any) {
-          lastJoinError = joinError;
-          addLog(`❌ Attempt ${i + 1} failed:`, {
-            errorCode: joinError.errorCode,
-            type: joinError.type,
-            reason: joinError.reason,
-            message: joinError.message,
-            stack: joinError.stack?.split('\n')[0] // Prima linie din stack trace
-          });
-          
-          // Continuă cu următoarea încercare
-          if (i < joinAttempts.length - 1) {
-            addLog(`⏭️ Trying next join format...`);
-            // Mică pauză între încercări
-            await new Promise(resolve => setTimeout(resolve, 100));
-            continue;
-          }
-        }
+      try {
+        await client.join(info.sessionName, info.token, userName, "");
+        addLog("✅ Successfully joined the session");
+      } catch (joinError: any) {
+        addLog("❌ Failed to join the session:", joinError);
+        throw new Error(joinError.message || 'Join session failed');
       }
 
-      if (!joinSuccess) {
-        addLog("❌ All join attempts failed.");
-        
-        // ✅ ULTIMUL DEBUGGING - ARATĂ TOTUL
-        addLog("🔍 Complete debugging info:");
-        addLog("Session info received from API:", sessionDataRef.current);
-        addLog("Current auth user:", auth?.user);
-        addLog("Token payload:", payload);
-        addLog("Final error:", lastJoinError);
-        
-        // ✅ SUGESTII PENTRU DEBUGGING
-        addLog("🔧 Debugging suggestions:");
-        addLog("1. Check if ZOOM_SDK_KEY matches the token's app_key:", {
-          envSDKKey: process.env.ZOOM_SDK_KEY?.substring(0, 10) + "...",
-          tokenAppKey: payload.app_key?.substring(0, 10) + "..."
-        });
-        addLog("2. Verify token generation on server - check /lib/zoomVideoSDK.ts");
-        addLog("3. Test with a fresh token - clear cache and retry");
-        addLog("4. Check Zoom SDK version compatibility");
-        
-        throw new Error(`Join failed after ${joinAttempts.length} attempts. Last error: ${lastJoinError?.reason || lastJoinError?.message}`);
-      }
-      
     } catch (tokenAnalysisError: any) {
       addLog("❌ Token analysis failed:", tokenAnalysisError);
       throw new Error(`Token validation failed: ${tokenAnalysisError.message}`);
