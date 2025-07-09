@@ -40,6 +40,15 @@ enum MessageType {
   PRIVATE  // conversații private
 }
 
+/// Status pentru sesiunile de consultanță
+enum SessionStatus {
+  SCHEDULED    // programată
+  IN_PROGRESS  // în desfășurare
+  COMPLETED    // finalizată
+  CANCELLED    // anulată
+  NO_SHOW      // client nu s-a prezentat
+}
+
 model Message {
   id           String      @id @default(uuid())
   content      String
@@ -60,7 +69,6 @@ model Message {
   @@index([fromUsername, toUsername])
   @@index([messageType])
 }
-
 
 model BillingDetails {
   id          String     @id @default(uuid())
@@ -86,7 +94,6 @@ model BillingDetails {
 
   @@map("billing_details")
 }
-
 
 model User {
   id                 String             @id @default(uuid())
@@ -237,6 +244,9 @@ model Tool {
   mainForProviders Provider[] @relation("ProviderMainTool")
 }
 
+// Doar partea ConsultingSession actualizată din schema.prisma
+// Înlocuiește modelul ConsultingSession existent cu această versiune
+
 model ConsultingSession {
   id               String                  @id @default(uuid())
   providerId       String
@@ -245,25 +255,60 @@ model ConsultingSession {
   packageId        String?
   duration         Int?
 
-  zoomSessionName  String?                 @unique
-  zoomTokens       Json?
-  zoomCreatedAt    DateTime                @default(now())
-  zoomSessionId    String?
-  scheduledAt      DateTime?
-  calendlyEventUri String?
-  accountId        Int?
+  // Daily.co integration (înlocuiește Zoom)
+  dailyRoomName    String?                 @unique // numele camerei Daily.co
+  dailyRoomUrl     String?                 // URL-ul complet al camerei Daily.co
+  dailyRoomId      String?                 // ID-ul intern Daily.co
+  dailyRoomConfig  Json?                   // configurări specifice pentru cameră
+  dailyCreatedAt   DateTime?               // când a fost creată camera Daily.co
+  dailyDomainName  String?                 // domeniul Daily.co folosit
 
-  startDate        DateTime?
-  endDate          DateTime?
+  // Session management
+  status           SessionStatus           @default(SCHEDULED)
+  joinedAt         DateTime?               // când s-a alăturat clientul
+  leftAt           DateTime?               // când a părăsit ultima persoană
+  actualDuration   Int?                    // durata reală în minute
+
+  // Calendly integration (păstrat)
+  calendlyEventUri String?                 // URI-ul evenimentului Calendly
+  scheduledAt      DateTime?               // când a fost programată
+
+  // Session details
+  startDate        DateTime?               // data/ora programată
+  endDate          DateTime?               // data/ora de sfârșit
   totalPrice       Int?
   isFinished       Boolean                 @default(false)
 
+  // Session tracking și analytics
+  participantCount Int?                    @default(0) // numărul de participanți care s-au alăturat
+  recordingUrl     String?                 // URL-ul recordării (dacă există)
+  notes            String?                 // notițe post-sesiune
+  rating           Float?                  // rating dat de client
+  feedback         String?                 // feedback text
+
+  // Relații
   provider         Provider                @relation("ProviderSessions", fields: [providerId], references: [id], onDelete: Cascade)
   client           User                    @relation("ClientSessions", fields: [clientId], references: [id], onDelete: Cascade)
   sessionAccount   Account?                @relation("SessionAccount", fields: [accountId], references: [id], onDelete: SetNull)
   speciality       Speciality              @relation("SpecialitySessions", fields: [specialityId], references: [id], onDelete: Cascade)
   userPackage      UserProviderPackage?    @relation("SessionUserPackage", fields: [packageId], references: [id])
 
+  // Legacy fields pentru compatibilitate (pot fi eliminate după migrare)
+  accountId        Int?
+  zoomSessionName  String?                 
+  zoomTokens       Json?
+  zoomCreatedAt    DateTime?
+  zoomSessionId    String?
+
+  // Timestamps cu valori default
+  createdAt        DateTime                @default(now())
+  updatedAt        DateTime                @default(now()) @updatedAt
+
+  @@index([status])
+  @@index([startDate])
+  @@index([providerId, clientId])
+  @@index([dailyRoomName])
+  @@map("ConsultingSession")
 }
 
 model Review {

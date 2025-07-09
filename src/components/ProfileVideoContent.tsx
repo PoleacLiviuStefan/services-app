@@ -74,7 +74,7 @@ export default function ProfileVideoConnect() {
           opacity: canJoin ? 1 : 0.5
         }}
       >
-        {canJoin ? 'Intră în sesiune' : 'În afara intervalului de conectare'}
+        {canJoin ? 'Intră în sesi' : 'În afara intervalului de conectare'}
       </button>
     </div>
   );

@@ -1,245 +1,441 @@
-// File: app/api/calendly/event-scheduled/route.ts
+// /api/calendly/event-scheduled/route.ts - FIXED VERSION
 export const runtime = "nodejs";
 
-import { NextResponse } from "next/server";
-import type { NextRequest } from "next/server";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth/next';
+import { authOptions } from '@/lib/auth';
+import { prisma } from '@/lib/prisma';
 
-interface BodyDTO {
-  providerId:        string;  // userId al provider-ului (venit în body de la Calendly webhook)
-  scheduledEventUri: string;
+// Funcție pentru crearea unei camere Daily.co
+async function createDailyRoom(
+  sessionId: string
+): Promise<{
+  roomUrl: string;
+  roomName: string;
+  roomId: string;
+  domainName: string;
+}> {
+  const dailyApiKey = process.env.DAILY_API_KEY;
+  const dailyDomain = process.env.DAILY_DOMAIN || 'mysticgold.daily.co';
+  if (!dailyApiKey) throw new Error('DAILY_API_KEY is required');
+
+  const roomName = `calendly-session-${sessionId}`;
+  const roomProperties: any = {
+    max_participants: 2,
+    enable_chat: true,
+    enable_screenshare: true,
+    start_video_off: false,
+    start_audio_off: false,
+    exp: Math.floor(Date.now() / 1000) + 24 * 60 * 60,
+    eject_at_room_exp: true,
+  };
+  if (process.env.ENABLE_RECORDING === 'true') {
+    roomProperties.enable_recording = 'cloud';
+  }
+
+  // 1. Creare cameră privată
+  const roomRes = await fetch('https://api.daily.co/v1/rooms', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${dailyApiKey}`,
+    },
+    body: JSON.stringify({
+      name: roomName,
+      privacy: 'private',
+      properties: roomProperties,
+    }),
+  });
+  if (!roomRes.ok) {
+    const err = await roomRes.text();
+    throw new Error(`Failed to create Daily room: ${err}`);
+  }
+  const room = await roomRes.json();
+
+  // 2. Generare token de acces
+  const tokenRes = await fetch('https://api.daily.co/v1/meeting-tokens', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${dailyApiKey}`,
+    },
+    body: JSON.stringify({
+      properties: {
+        room_name: room.name,
+        exp: Math.floor(Date.now() / 1000) + 24 * 60 * 60, // expiră în 24h
+        eject_at_token_exp: true,
+      },
+    }),
+  });
+  if (!tokenRes.ok) {
+    const err = await tokenRes.text();
+    throw new Error(`Failed to create meeting token: ${err}`);
+  }
+  const { token } = await tokenRes.json();
+
+  // 3. Returnare URL cu token ca parametru
+  return {
+    roomUrl: `${room.url}?t=${token}`,
+    roomName: room.name,
+    roomId: room.id,
+    domainName: room.domain_name || dailyDomain,
+  };
 }
 
-export async function POST(req: NextRequest) {
+
+export async function POST(request: Request) {
   try {
-    // ————————————————————————————————
-    // 1. Autentificare & currentUserId
+    console.log('📅 Procesare eveniment Calendly');
+
+    // AUTENTIFICARE OBLIGATORIE - ia utilizatorul curent
     const session = await getServerSession(authOptions);
-    if (!session || !session.user?.id) {
+    if (!session?.user?.id) {
+      console.error('❌ Unauthorized: No authenticated user');
       return NextResponse.json(
-        { error: "Unautorizat. Trebuie să fii autentificat." },
+        { error: 'Authentication required' },
         { status: 401 }
       );
     }
-    const currentUserId = session.user.id;
 
-    // ————————————————————————————————
-    // 2. Parse & validate request body
-    let body: BodyDTO;
-    try {
-      body = await req.json();
-    } catch {
-      return NextResponse.json({ error: "JSON invalid." }, { status: 400 });
-    }
-    const { providerId: userId, scheduledEventUri } = body;
-    if (!userId || !scheduledEventUri) {
+    const currentUserId = session.user.id;
+    console.log(`👤 Client autentificat: ${currentUserId}`);
+
+    const { providerId, scheduledEventUri } = await request.json();
+
+    console.log(`📊 Calendly event data:`, { providerId, scheduledEventUri, clientId: currentUserId });
+
+    // VALIDARE INPUT
+    if (!providerId) {
       return NextResponse.json(
-        { error: "Parametri lipsă: providerId sau scheduledEventUri." },
+        { error: 'providerId este obligatoriu' },
+        { status: 400 }
+      );
+    }
+
+    if (!scheduledEventUri) {
+      return NextResponse.json(
+        { error: 'scheduledEventUri este obligatoriu' },
         { status: 400 }
       );
     }
 
     // ————————————————————————————————
-    // 3. Încarcă datele provider-ului
-    const dbPr = await prisma.provider.findUnique({
-      where: { userId },
+    // ÎNCARCĂ PROVIDER-UL CU TOKEN-URILE CALENDLY
+    // ————————————————————————————————
+    console.log(`🔍 Căutare provider cu token-uri Calendly: ${providerId}`);
+    
+    const provider = await prisma.provider.findUnique({
+      where: { userId: providerId },
       select: {
-        id:                   true,
-        calendlyAccessToken:  true,
+        id: true,
+        userId: true,
+        calendlyAccessToken: true,
         calendlyRefreshToken: true,
-        calendlyExpiresAt:    true,
-        mainSpecialityId:     true,
-      },
+        calendlyExpiresAt: true,
+        mainSpeciality: {
+          select: {
+            id: true,
+            name: true,
+            price: true,
+          }
+        },
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          }
+        }
+      }
     });
-    if (!dbPr) {
-      return NextResponse.json({ error: "Provider invalid." }, { status: 404 });
+
+    if (!provider) {
+      console.error(`❌ Provider-ul cu ID ${providerId} nu a fost găsit`);
+      return NextResponse.json(
+        { error: `Provider-ul cu ID ${providerId} nu a fost găsit` },
+        { status: 404 }
+      );
     }
+
+    if (!provider.mainSpeciality) {
+      console.error(`❌ Provider-ul ${providerId} nu are specialitate principală configurată`);
+      return NextResponse.json(
+        { error: 'Provider-ul nu are o specialitate principală configurată' },
+        { status: 400 }
+      );
+    }
+
+    // Verifică că provider-ul are token-uri Calendly
     let {
-      id: realProviderId,
       calendlyAccessToken: token,
       calendlyRefreshToken: refreshToken,
-      calendlyExpiresAt:    expiresAt,
-      mainSpecialityId,
-    } = dbPr;
+      calendlyExpiresAt: expiresAt,
+    } = provider;
+
+    if (!token) {
+      console.error(`❌ Provider-ul ${providerId} nu are token Calendly configurat`);
+      return NextResponse.json(
+        { error: 'Provider-ul nu are autentificare Calendly configurată' },
+        { status: 400 }
+      );
+    }
+
+    console.log(`✅ Provider găsit: ${provider.user.name || provider.user.email} (${provider.id})`);
+    console.log(`✅ Specialitate: ${provider.mainSpeciality.name}`);
 
     // ————————————————————————————————
-    // 4. Refresh token helper
-    async function refreshOnce(): Promise<boolean> {
-      if (!refreshToken) return false;
-      if (expiresAt && new Date() < expiresAt) return false;
+    // REFRESH TOKEN HELPER
+    // ————————————————————————————————
+    async function refreshCalendlyToken(): Promise<boolean> {
+      if (!refreshToken) {
+        console.warn('⚠️ Nu există refresh token pentru provider');
+        return false;
+      }
+      
+      if (expiresAt && new Date() < expiresAt) {
+        console.log('✅ Token-ul Calendly este încă valid');
+        return false; // Nu e nevoie de refresh
+      }
+
+      console.log('🔄 Refresh token Calendly...');
+      
       const params = new URLSearchParams({
-        grant_type:    "refresh_token",
-        client_id:     process.env.NEXT_PUBLIC_CALENDLY_CLIENT_ID!,
+        grant_type: "refresh_token",
+        client_id: process.env.NEXT_PUBLIC_CALENDLY_CLIENT_ID!,
         client_secret: process.env.CALENDLY_CLIENT_SECRET!,
         refresh_token: refreshToken,
       });
-      const r = await fetch("https://auth.calendly.com/oauth/token", {
-        method:  "POST",
+
+      const response = await fetch("https://auth.calendly.com/oauth/token", {
+        method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body:    params.toString(),
+        body: params.toString(),
       });
-      if (!r.ok) return false;
-      const j = await r.json();
-      token        = j.access_token;
-      refreshToken = j.refresh_token;
-      expiresAt    = new Date(Date.now() + j.expires_in * 1000);
+
+      if (!response.ok) {
+        console.error('❌ Refresh token failed:', response.statusText);
+        return false;
+      }
+
+      const tokenData = await response.json();
+      
+      // Actualizează variabilele locale
+      token = tokenData.access_token;
+      refreshToken = tokenData.refresh_token;
+      expiresAt = new Date(Date.now() + tokenData.expires_in * 1000);
+
+      // Salvează în baza de date
       await prisma.provider.update({
-        where: { id: realProviderId },
+        where: { id: provider.id },
         data: {
-          calendlyAccessToken:  token,
+          calendlyAccessToken: token,
           calendlyRefreshToken: refreshToken,
-          calendlyExpiresAt:    expiresAt,
+          calendlyExpiresAt: expiresAt,
         },
       });
+
+      console.log('✅ Token Calendly actualizat cu succes');
       return true;
     }
 
     // ————————————————————————————————
-    // 5. Fetch scheduled_event de la Calendly
-    let res = await fetch(scheduledEventUri, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (res.status === 401 && await refreshOnce()) {
-      res = await fetch(scheduledEventUri, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-    }
-    const scheduledJson = await res.json();
-    if (!res.ok) {
-      return NextResponse.json(
-        { error: "Eroare Calendly", details: scheduledJson },
-        { status: res.status }
-      );
-    }
-
+    // OBȚINE DETALIILE EVENIMENTULUI CALENDLY
     // ————————————————————————————————
-    // 6. Extrage date din payload
-    const rsrc           = scheduledJson.resource;
-    const scheduledAtStr = rsrc.created_at!;
-    const startStr       = rsrc.start_time!;
-    const endStr         = rsrc.end_time!;
-    if (!scheduledAtStr || !startStr || !endStr) {
-      return NextResponse.json(
-        { error: "Payload incomplet de la Calendly." },
-        { status: 500 }
-      );
-    }
-
-    // 7. Parse Dates & calc duration
-    const scheduledAt = new Date(scheduledAtStr);
-    const startDate   = new Date(startStr);
-    const endDate     = new Date(endStr);
-    const duration    = Math.round((endDate.getTime() - startDate.getTime()) / 60000);
-
-    // ————————————————————————————————
-    // 8. Verifică specialityId
-    const specialityId = mainSpecialityId!;
-    if (!specialityId) {
-      return NextResponse.json(
-        { error: "Nu există specialityId pentru provider." },
-        { status: 400 }
-      );
-    }
-
-    // ————————————————————————————————
-    // 9. Alege pachetul clientului (client = user-ul curent)
-    const pkgs = await prisma.userProviderPackage.findMany({
-      where: {
-        userId:     currentUserId,
-        providerId: realProviderId,
+    console.log('📞 Obținere detalii eveniment Calendly...');
+    
+    let response = await fetch(scheduledEventUri, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
       },
-      include: {
-        providerPackage: { select: { price: true, totalSessions: true } },
-      },
-      orderBy: { createdAt: "asc" },
     });
-    const userPkg = pkgs.find(
-      (p) => p.usedSessions < p.providerPackage.totalSessions
-    );
-    if (!userPkg) {
-      return NextResponse.json(
-        { error: "Nu ai sesiuni disponibile în niciun pachet." },
-        { status: 400 }
-      );
-    }
-    const totalPrice =
-      userPkg.providerPackage.price / userPkg.providerPackage.totalSessions;
 
-    // ————————————————————————————————
-    // 10. Crează întâlnirea Zoom
-    const zoomRes = await fetch(
-      `${process.env.NEXT_PUBLIC_BASE_URL}/api/video/create-session`,
-      {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          users:       [realProviderId, currentUserId],
-          providerId:  realProviderId,
-          clientId:    currentUserId,
-          specialityId,
-          packageId:   userPkg.id,
-        }),
+    // Dacă primim 401, încearcă să reîmprospătezi token-ul
+    if (response.status === 401) {
+      console.log('🔄 Token expirat, încerc refresh...');
+      const refreshed = await refreshCalendlyToken();
+      
+      if (refreshed) {
+        response = await fetch(scheduledEventUri, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        });
       }
-    );
-    const zoomJson = await zoomRes.json();
-    if (!zoomRes.ok) {
+    }
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ Eroare la obținerea detaliilor Calendly:', errorText);
+      throw new Error(`Failed to fetch Calendly event: ${response.statusText}`);
+    }
+
+    const eventDetails = await response.json();
+    const eventData = eventDetails.resource;
+
+    // Extrage informațiile necesare
+    const startTime = new Date(eventData.start_time);
+    const endTime = new Date(eventData.end_time);
+    const clientEmail = eventData.event_memberships?.[0]?.user_email;
+    const clientName = eventData.event_memberships?.[0]?.user_name;
+
+    console.log(`⏰ Timp programat: ${startTime.toISOString()} - ${endTime.toISOString()}`);
+    console.log(`📧 Client din Calendly: ${clientName} (${clientEmail})`);
+
+    // Verifică că utilizatorul curent există în baza de date
+    console.log(`🔍 Verificare utilizator curent: ${currentUserId}`);
+    
+    const clientUser = await prisma.user.findUnique({
+      where: { id: currentUserId },
+      select: { id: true, name: true, email: true, role: true }
+    });
+
+    if (!clientUser) {
+      console.error(`❌ Utilizatorul autentificat ${currentUserId} nu există în baza de date`);
       return NextResponse.json(
-        { error: "Zoom create-session failed", details: zoomJson },
-        { status: zoomRes.status }
+        { error: 'Utilizatorul autentificat nu a fost găsit în baza de date' },
+        { status: 404 }
       );
     }
-    const { sessionName, tokens } = zoomJson;
 
-    // ————————————————————————————————
-    // 11. Upsert ConsultingSession (folosind currentUserId ca clientId)
-    const consultingSession = await prisma.consultingSession.upsert({
-      where: { zoomSessionName: sessionName },
-      update: {
-        scheduledAt,
-        startDate,
-        endDate,
-        duration,
-        totalPrice:        Math.round(totalPrice * 100) / 100,
-        calendlyEventUri:  scheduledEventUri,
-      },
-      create: {
-        providerId:        realProviderId,
-        clientId:          currentUserId,
-        specialityId,
-        packageId:         userPkg.id,
-        duration,
-        scheduledAt,
-        startDate,
-        endDate,
-        totalPrice:        Math.round(totalPrice * 100) / 100,
-        calendlyEventUri:  scheduledEventUri,
-        zoomSessionName:   sessionName,
-        zoomTokens:        tokens,
-        isFinished:        false,
-      },
-    });
+    console.log(`✅ Client confirmat: ${clientUser.name || clientUser.email} (${clientUser.id}) - Role: ${clientUser.role}`);
 
-    // ————————————————————————————————
-    // 12. Increment usedSessions
-    await prisma.userProviderPackage.update({
-      where: { id: userPkg.id },
-      data: { usedSessions: { increment: 1 } },
-    });
+    // Verifică că clientul și provider-ul sunt diferiți
+    if (clientUser.id === provider.userId) {
+      console.error(`❌ Clientul ${clientUser.id} și provider-ul ${provider.userId} sunt aceeași persoană`);
+      return NextResponse.json(
+        { error: 'Nu vă puteți programa o sesiune cu dvs. însuși' },
+        { status: 400 }
+      );
+    }
 
-    // ————————————————————————————————
-    // 13. Răspuns final
-    return NextResponse.json(
-      { ok: true, data: consultingSession },
-      { status: 201 }
+    // Verifică dacă email-ul din Calendly se potrivește cu utilizatorul autentificat (opțional)
+    if (clientEmail && clientUser.email && clientEmail.toLowerCase() !== clientUser.email.toLowerCase()) {
+      console.warn(`⚠️ Email-ul din Calendly (${clientEmail}) diferă de email-ul utilizatorului autentificat (${clientUser.email})`);
+      // Log warning dar continuă - poate utilizatorul a folosit alt email în Calendly
+    }
+
+    // Generează un ID unic pentru sesiune
+    const sessionId = `calendly_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    console.log(`🆔 ID sesiune generat: ${sessionId}`);
+
+    // Creează camera Daily.co
+    console.log('🎥 Creare cameră Daily.co...');
+    const dailyRoom = await createDailyRoom(sessionId);
+
+    // Calculează durata estimată (în minute)
+    const estimatedDuration = Math.round(
+      (endTime.getTime() - startTime.getTime()) / (1000 * 60)
     );
-  } catch (err: any) {
-    console.error("Unexpected error în /api/calendly/event-scheduled:", err);
+
+    // Salvează ședința în baza de date
+    console.log('💾 Salvare sesiune în baza de date...');
+    const sessionRecord = await prisma.consultingSession.create({
+      data: {
+        id: sessionId,
+        providerId: provider.id,
+        clientId: clientUser.id, // Folosește utilizatorul curent autentificat
+        specialityId: provider.mainSpeciality.id,
+        
+        // Daily.co details
+        dailyRoomName: dailyRoom.roomName,
+        dailyRoomUrl: dailyRoom.roomUrl,
+        dailyRoomId: dailyRoom.roomId,
+        dailyDomainName: dailyRoom.domainName,
+        dailyCreatedAt: new Date(),
+        
+        // Session details
+        startDate: startTime,
+        endDate: endTime,
+        duration: estimatedDuration,
+        calendlyEventUri: scheduledEventUri,
+        scheduledAt: new Date(),
+        status: 'SCHEDULED',
+        
+        totalPrice: Math.round(provider.mainSpeciality.price * 100), // în bani
+        notes: `Sesiune programată prin Calendly pentru ${clientUser.name || clientUser.email}. Calendly client: ${clientName} (${clientEmail})`,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }
+    });
+
+    console.log(`✅ Ședință salvată cu succes:`);
+    console.log(`   - ID: ${sessionId}`);
+    console.log(`   - Client: ${clientUser.name || clientUser.email} (${clientUser.id})`);
+    console.log(`   - Provider: ${provider.user.name || provider.user.email} (${provider.id})`);
+    console.log(`   - Specialitate: ${provider.mainSpeciality.name}`);
+    console.log(`   - Camera Daily.co: ${dailyRoom.roomUrl}`);
+    console.log(`   - Timp: ${startTime.toISOString()}`);
+
+    return NextResponse.json({
+      success: true,
+      sessionId: sessionRecord.id,
+      roomUrl: sessionRecord.dailyRoomUrl,
+      joinUrl: `/servicii/video/sessions/${sessionRecord.id}`,
+      message: 'Ședința a fost programată cu succes din Calendly',
+      details: {
+        sessionId: sessionRecord.id,
+        startDate: sessionRecord.startDate?.toISOString(),
+        endDate: sessionRecord.endDate?.toISOString(),
+        duration: sessionRecord.duration,
+        speciality: provider.mainSpeciality.name,
+        client: {
+          id: clientUser.id,
+          name: clientUser.name || clientUser.email,
+          email: clientUser.email,
+          role: clientUser.role
+        },
+        provider: {
+          id: provider.id,
+          name: provider.user.name || provider.user.email,
+          email: provider.user.email
+        },
+        dailyRoom: {
+          roomName: dailyRoom.roomName,
+          roomUrl: dailyRoom.roomUrl,
+          roomId: dailyRoom.roomId,
+          domainName: dailyRoom.domainName
+        },
+        calendlyEvent: {
+          uri: scheduledEventUri,
+          clientName: clientName,
+          clientEmail: clientEmail
+        }
+      }
+    });
+
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('❌ Eroare la salvarea ședinței din Calendly:', message);
+    console.error('Stack trace:', err instanceof Error ? err.stack : 'N/A');
+    
+    // Returnează erori mai specifice bazate pe tipul erorii
+    if (message.includes('Daily.co') || message.includes('DAILY_API_KEY')) {
+      return NextResponse.json(
+        { 
+          error: 'Video room creation failed',
+          message: 'Unable to create video room. Please try again later.'
+        },
+        { status: 503 }
+      );
+    }
+
+    if (message.includes('Calendly') || message.includes('CALENDLY')) {
+      return NextResponse.json(
+        { 
+          error: 'Calendly integration error',
+          message: 'Unable to fetch event details from Calendly. Please check provider Calendly configuration.'
+        },
+        { status: 502 }
+      );
+    }
+
     return NextResponse.json(
-      {
-        error:   "Eroare internă neașteptată",
-        details: err?.message || String(err),
+      { 
+        error: 'Session creation failed',
+        message: 'An unexpected error occurred while creating your session.',
+        details: process.env.NODE_ENV === 'development' ? message : undefined
       },
       { status: 500 }
     );

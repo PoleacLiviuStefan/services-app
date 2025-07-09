@@ -14,6 +14,7 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.823.0",
     "@aws-sdk/s3-request-presigner": "^3.823.0",
+    "@daily-co/daily-js": "^0.80.0",
     "@hookform/resolvers": "^5.0.1",
     "@next-auth/prisma-adapter": "^1.0.7",
     "@obliosoftware/oblioapi": "^2.0.6",
@@ -24,7 +25,6 @@
     "@types/formidable": "^3.4.5",
     "@types/jsonwebtoken": "^9.0.9",
     "@types/jsrsasign": "^10.5.15",
-    "@zoom/videosdk": "^2.2.0",
     "@zoom/videosdk-ui-toolkit": "2.2.0-2",
     "bcrypt": "^5.1.1",
     "classnames": "^2.5.1",
