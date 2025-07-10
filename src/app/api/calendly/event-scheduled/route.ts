@@ -8,13 +8,16 @@ import { prisma } from '@/lib/prisma';
 
 // Funcție pentru crearea unei camere Daily.co
 async function createDailyRoom(
-  sessionId: string
+  sessionId: string,
+  endTime: Date
 ): Promise<{
   roomUrl: string;
   roomName: string;
   roomId: string;
   domainName: string;
 }> {
+  const endDateISO = endTime; // ex: "2025-10-15T14:30:00Z"
+const exp = Math.floor(new Date(endDateISO).getTime() / 1000);
   const dailyApiKey = process.env.DAILY_API_KEY;
   const dailyDomain = process.env.DAILY_DOMAIN || 'mysticgold.daily.co';
   if (!dailyApiKey) throw new Error('DAILY_API_KEY is required');
@@ -26,7 +29,7 @@ async function createDailyRoom(
     enable_screenshare: true,
     start_video_off: false,
     start_audio_off: false,
-    exp: Math.floor(Date.now() / 1000) + 24 * 60 * 60,
+    exp,
     eject_at_room_exp: true,
   };
   if (process.env.ENABLE_RECORDING === 'true') {
@@ -322,7 +325,7 @@ export async function POST(request: Request) {
 
     // Creează camera Daily.co
     console.log('🎥 Creare cameră Daily.co...');
-    const dailyRoom = await createDailyRoom(sessionId);
+    const dailyRoom = await createDailyRoom(sessionId,endTime);
 
     // Calculează durata estimată (în minute)
     const estimatedDuration = Math.round(

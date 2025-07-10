@@ -1,22 +1,18 @@
-// File: components/BuyPackageModal.tsx
 "use client";
 
 import React, { FC, useState, useEffect } from "react";
 import PackageCard from "./PackageCard";
 import { Package } from "@/interfaces/PackageInterface";
 import { useSession } from "next-auth/react";
-import { useRouter } from 'next/navigation';
-
+import { useRouter } from "next/navigation";
 import { Elements } from "@stripe/react-stripe-js";
 import { loadStripe } from "@stripe/stripe-js";
 import CheckoutForm from "./CheckoutForm";
 import Button from "./atoms/button";
 
-// Încarcă Stripe.js cu cheia publicabilă
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
 
 export interface BuyPackageModalProps {
-  providerStripeAccountId?: string | null;
   providerId: string;
   packages: Package[];
   isOpen: boolean;
@@ -24,7 +20,6 @@ export interface BuyPackageModalProps {
 }
 
 const BuyPackageModal: FC<BuyPackageModalProps> = ({
-  providerStripeAccountId,
   providerId,
   packages,
   isOpen,
@@ -35,65 +30,28 @@ const BuyPackageModal: FC<BuyPackageModalProps> = ({
   const [selectedPackageId, setSelectedPackageId] = useState<string | null>(null);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [paymentSuccess, setPaymentSuccess] = useState<boolean>(false);
+  const [processing, setProcessing] = useState(false);
+  const [paymentSuccess, setPaymentSuccess] = useState(false);
 
-  const [currentAmount, setCurrentAmount] = useState<number>(0);
-  const [currentFeeAmount, setCurrentFeeAmount] = useState<number>(0);
-
-  const [billingError,setBillingError]=useState("")
   useEffect(() => {
-    if (isOpen) {
+    if (!isOpen) {
       setSelectedPackageId(null);
       setClientSecret(null);
       setError(null);
+      setProcessing(false);
       setPaymentSuccess(false);
-      setCurrentAmount(0);
-      setCurrentFeeAmount(0);
     }
   }, [isOpen]);
 
-  const handleConnect = async () => {
-    if (!providerStripeAccountId) {
-      setError("Contul Stripe al furnizorului nu există. Crează contul Connect mai întâi.");
-      return;
-    }
-    try {
-      const resp = await fetch(
-        `/api/stripe/connect/account-link?accountId=${providerStripeAccountId}`
-      );
-      const data = await resp.json();
-      if (data.error || !data.url) {
-        setError(data.error || "Eroare la generarea link-ului de conectare Stripe.");
-        return;
-      }
-      window.location.href = data.url;
-    } catch (err: any) {
-      setError(err.message || "Eroare neașteptată la conectarea Stripe.");
-    }
-  };
-
   const handleBuy = async (pkgId: string) => {
-    // 0. Verificare date de facturare
     const userId = session?.user?.id;
     if (!userId) {
-      router.push('/autentificare');
+      router.push("/autentificare");
       return;
-    }
-    try {
-      const resBD = await fetch(`/api/user/billing-details/${userId}`, { credentials: 'include' });
-      if (!resBD.ok) {
-        setBillingError("Pentru a achiziționa un pachet, trebuie să completezi detaliile de facturare.");
-        return;
-      }
-      const bdData = await resBD.json();
-      if (!bdData.billingDetails) {
-        setBillingError("Pentru a achiziționa un pachet, trebuie să completezi detaliile de facturare.");
-      }
-    } catch {
-      setBillingError("Pentru a achiziționa un pachet, trebuie să completezi detaliile de facturare.");
     }
 
     setError(null);
+    setProcessing(true);
     setPaymentSuccess(false);
     setSelectedPackageId(pkgId);
     setClientSecret(null);
@@ -101,139 +59,63 @@ const BuyPackageModal: FC<BuyPackageModalProps> = ({
     const pkg = packages.find((p) => p.id === pkgId);
     if (!pkg) {
       setError("Pachetul selectat nu există.");
-      return;
-    }
-    if (!providerStripeAccountId) {
-      setError("Contul Stripe al furnizorului nu este configurat.");
+      setProcessing(false);
       return;
     }
 
     const amountInCents = Math.round(pkg.price * 100);
-    const feeAmount = Math.round((amountInCents * 10) / 100);
-
-    setCurrentAmount(amountInCents);
-    setCurrentFeeAmount(feeAmount);
 
     try {
+      // Obţinem clientSecret fără fee_percent citeturn0search0
       const params = new URLSearchParams({
         amount: amountInCents.toString(),
         currency: "ron",
-        fee_percent: "10",
       });
 
-      const resp = await fetch(`/api/stripe/create-payment-intent?${params.toString()}`, {
-        method: "GET",
-      });
+      const resp = await fetch(
+        `/api/stripe/create-payment-intent?${params.toString()}`,
+        { method: "GET" }
+      );
       const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || "Server error");
 
-      if (data.error) {
-        setError(data.error);
-        return;
-      }
-      if (data.clientSecret) {
-        setClientSecret(data.clientSecret);
-      } else {
-        setError("Nu am primit clientSecret de la server.");
-      }
+      setClientSecret(data.clientSecret);
     } catch (err: any) {
       setError(err.message || "Eroare la solicitarea clientSecret.");
+      setProcessing(false);
     }
   };
 
   const handlePaymentSuccess = async (paymentIntentId: string) => {
-    if (!session?.user?.id || !providerId || !selectedPackageId || !providerStripeAccountId) {
-      setError("Date incomplete pentru finalizarea comenzii.");
-      return;
-    }
-    const transferAmount = currentAmount - currentFeeAmount;
     try {
-      const respTransfer = await fetch("/api/stripe/create-transfer", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          paymentIntentId,
-          destinationAccount: providerStripeAccountId,
-          transferAmount,
-        }),
-      });
-      const jsonTransfer = await respTransfer.json();
-      if (!respTransfer.ok) {
-        setError(jsonTransfer.error || "Eroare la transferul către furnizor.");
-        return;
-      }
-
+      // Activăm pachetul în baza de date citeturn0search7
       const respPurchase = await fetch("/api/purchase", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          userId:    session.user.id,
+          userId: session?.user?.id,
           providerId,
           packageId: selectedPackageId,
+          paymentIntentId,
         }),
       });
       const jsonPurchase = await respPurchase.json();
       if (!respPurchase.ok) {
-        setError(jsonPurchase.error || "Eroare la activarea pachetului.");
-        return;
+        throw new Error(jsonPurchase.error || "Eroare la activarea pachetului.");
       }
 
       setPaymentSuccess(true);
       onClose();
-
-      const pkg = packages.find((p) => p.id === selectedPackageId)!;
-      const clientPayload = {
-        cif:       session.user.cif ?? "",
-        name:      session.user.name ?? "",
-        email:     session.user.email ?? "",
-        phone:     session.user.phone ?? "",
-        vatPayer:  1,
-      };
-      const productsPayload = [
-        {
-          name:          pkg.service,
-          description:   pkg.description ?? "",
-          price:         pkg.price.toString(),
-          measuringUnit: "buc",
-          currency:      "RON",
-          vatName:       "Normala",
-          vatPercentage: 19,
-          vatIncluded:   true,
-          quantity:      1,
-          productType:   "Serviciu",
-        },
-      ];
-
-      const respInvoice = await fetch("/api/oblio/create-invoice", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          packageId: selectedPackageId,
-          client:    clientPayload,
-          products:  productsPayload,
-          issueDate: new Date().toISOString().slice(0, 10),
-          dueDate:   new Date().toISOString().slice(0, 10),
-        }),
-      });
-      const invoiceResult = await respInvoice.json();
-      if (!respInvoice.ok) {
-        console.error("Eroare la generare factură:", invoiceResult);
-      } else {
-        console.log("Factura generată cu succes:", invoiceResult);
-      }
     } catch (err: any) {
-      setError(err.message || "Eroare neașteptată la finalizarea comenzii.");
+      setError(err.message || "Eroare la finalizarea comenzii.");
+    } finally {
+      setProcessing(false);
     }
   };
 
   const handlePaymentError = (msg: string) => {
     setError(msg);
-  };
-
-  const handleCancelPayment = () => {
-    setSelectedPackageId(null);
-    setClientSecret(null);
-    setError(null);
-    setPaymentSuccess(false);
+    setProcessing(false);
   };
 
   if (!isOpen) return null;
@@ -254,25 +136,8 @@ const BuyPackageModal: FC<BuyPackageModalProps> = ({
         </button>
         <div className="p-6">
           <h2 className="text-xl font-semibold mb-4">Achiziție pachet</h2>
-          {billingError &&<div> <h3 className="text-red-500">{billingError}</h3> <Button className="bg-gradient-to-t border-2 border-buttonPrimaryColor/20 shadow-lg shadow-buttonPrimaryColor/40 from-buttonPrimaryColor to-buttonSecondaryColor px-2 lg:px-4 py-1 lg:py-2 text-md text-white font-semibold" onClick={()=>router.push('/profil?tab=billing')}>Completeaza Datele</Button></div>}
-          {!providerStripeAccountId && !paymentSuccess && (
-            <div className="flex flex-col items-center space-y-4">
-              <p className="text-center text-red-600">
-                Furnizorul nu este conectat la Stripe.
-              </p>
-              <button
-                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-                onClick={handleConnect}
-              >
-                Conectează-te la Stripe
-              </button>
-              {error && (
-                <div className="p-3 bg-red-100 text-red-700 rounded mt-4">{error}</div>
-              )}
-            </div>
-          )}
 
-          {providerStripeAccountId && !selectedPackageId && !paymentSuccess && (
+          {!selectedPackageId && !paymentSuccess && (
             <div className="space-y-4">
               {packages.map((pkg) => (
                 <PackageCard key={pkg.id} pkg={pkg} onBuy={handleBuy} />
@@ -282,45 +147,54 @@ const BuyPackageModal: FC<BuyPackageModalProps> = ({
               )}
             </div>
           )}
-    {
-      !billingError &&
-          selectedPackageId && !clientSecret && !paymentSuccess && (
+
+          {selectedPackageId && !clientSecret && !paymentSuccess && (
             <div className="mt-4 text-center">
-              {error ? (
+              {processing ? (
+                <p>Se pregătește formularul de plată…</p>
+              ) : error ? (
                 <div className="p-3 bg-red-100 text-red-700 rounded">
                   {error}
                   <button
-                    onClick={handleCancelPayment}
+                    onClick={() => setSelectedPackageId(null)}
                     className="block mt-3 px-4 py-2 bg-gray-200 rounded hover:bg-gray-300"
                   >
                     Înapoi la pachete
                   </button>
                 </div>
-              ) : (
-                <p>Se pregătește formularul de plată…</p>
-              )}
+              ) : null}
             </div>
-          )
-        }
+          )}
 
-          {selectedPackageId && clientSecret && !paymentSuccess && !billingError && (
+          {clientSecret && !paymentSuccess && (
             <div className="flex flex-col items-center w-full mt-6">
               <h3 className="text-lg font-medium mb-2">
-                Confirmă plata pentru “{packages.find((p) => p.id === selectedPackageId)?.service}”
+                Confirmă plata pentru “
+                {packages.find((p) => p.id === selectedPackageId)?.service}”
               </h3>
               <span className="font-bold">
                 TOTAL: {packages.find((p) => p.id === selectedPackageId)?.price} RON
               </span>
               <Elements stripe={stripePromise} options={{ clientSecret }}>
-                <CheckoutForm clientSecret={clientSecret} onSuccess={handlePaymentSuccess} onError={handlePaymentError} />
-                <button type="button" onClick={handleCancelPayment} className="mt-4 px-4 py-2 bg-gray-200 rounded hover:bg-gray-300">Renunță și alege alt pachet</button>
+                <CheckoutForm
+                  clientSecret={clientSecret}
+                  onSuccess={handlePaymentSuccess}
+                  onError={handlePaymentError}
+                />
               </Elements>
+              <button
+                type="button"
+                onClick={() => setSelectedPackageId(null)}
+                className="mt-4 px-4 py-2 bg-gray-200 rounded hover:bg-gray-300"
+              >
+                Renunță și alege alt pachet
+              </button>
             </div>
           )}
 
           {paymentSuccess && (
             <div className="mb-4 p-4 bg-green-100 text-green-800 rounded">
-              Pachetul a fost activat cu succes! Modalul se va închide acum.
+              Pachetul a fost activat cu succes!
             </div>
           )}
         </div>

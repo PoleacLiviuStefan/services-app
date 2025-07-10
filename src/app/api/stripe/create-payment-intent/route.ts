@@ -1,4 +1,4 @@
-// File: app/api/stripe/create-payment-intent/route.ts
+// app/api/stripe/create-payment-intent/route.ts
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
 
@@ -10,41 +10,26 @@ export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const amountParam = searchParams.get("amount");
-    const currency = searchParams.get("currency") ?? "eur";
-    const feePercentParam = searchParams.get("fee_percent");
-    const feePercent = feePercentParam ? parseFloat(feePercentParam) : 10;
+    const currency = searchParams.get("currency") ?? "ron";
 
     // Validare amount
     const amount = amountParam ? parseInt(amountParam, 10) : NaN;
-    if (!amount || isNaN(amount) || amount <= 0) {
+    if (isNaN(amount) || amount <= 0) {
       return NextResponse.json(
         { error: 'Parametru "amount" invalid sau lipsă' },
         { status: 400 }
       );
     }
-    if (isNaN(feePercent) || feePercent < 0) {
-      return NextResponse.json(
-        { error: 'Parametru "fee_percent" invalid' },
-        { status: 400 }
-      );
-    }
 
-    // Calculul comisionului (dar **nu** îl transferăm direct acum)
-    const feeAmount = Math.round((amount * feePercent) / 100);
-
-    // Creăm PaymentIntent pe contul platformei (fără transfer_data)
+    // Creăm PaymentIntent standard pe contul platformei
     const paymentIntent = await stripe.paymentIntents.create({
       amount,
       currency,
-      // Opțional: poți salva metadate, ex: { providerId: "...", packageId: "..." }
-      metadata: {
-        fee_amount: feeAmount.toString(),
-      },
       automatic_payment_methods: { enabled: true },
-    });
+    }); // Stripe va încasa întreaga sumă către platformă citestripe_docs_payment_intent_1
 
     return NextResponse.json(
-      { clientSecret: paymentIntent.client_secret, feeAmount, currency },
+      { clientSecret: paymentIntent.client_secret, currency },
       { status: 200 }
     );
   } catch (error: any) {
