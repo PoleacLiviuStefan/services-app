@@ -25,39 +25,97 @@ export async function GET(): Promise<NextResponse> {
 
     console.log(`👤 User ${userId} este ${isProvider ? 'provider' : 'client'}`);
 
-    // Construiește query-ul în funcție de rolul utilizatorului
-    const whereCondition = isProvider 
-      ? { providerId: provider.id }
-      : { clientId: userId };
+    // Pentru clienți, verifică mai multe strategii
+    let whereCondition;
+    
+    if (isProvider) {
+      whereCondition = { providerId: provider.id };
+    } else {
+      // STRATEGIA 1: Încearcă cu model `client` (lowercase)
+      try {
+        const clientRecord = await prisma.client.findUnique({
+          where: { userId },
+          select: { id: true }
+        });
+        
+        if (clientRecord) {
+          whereCondition = { clientId: clientRecord.id };
+          console.log(`✅ Strategia 1 - folosesc clientId din model client: ${clientRecord.id}`);
+        } else {
+          console.log(`⚠️ Strategia 1 - nu s-a găsit client record pentru userId: ${userId}`);
+          whereCondition = { clientId: userId }; // Fallback la strategia 2
+        }
+      } catch (error) {
+        console.log(`❌ Strategia 1 failed (model client nu există):`, error.message);
+        
+        // STRATEGIA 2: clientId se referă direct la userId
+        console.log(`🔄 Încerc strategia 2 - clientId = userId direct`);
+        whereCondition = { clientId: userId };
+      }
+    }
+
+    console.log('🔍 Where condition:', whereCondition);
 
     // Obține sesiunile cu toate câmpurile de recording
-    const consultingSessions = await prisma.consultingSession.findMany({
-      where: whereCondition,
-      include: {
-        provider: {
-          include: {
-            user: {
-              select: { id: true, name: true, email: true, image: true }
+    let consultingSessions;
+    
+    try {
+      consultingSessions = await prisma.consultingSession.findMany({
+        where: whereCondition,
+        include: {
+          provider: {
+            include: {
+              user: {
+                select: { id: true, name: true, email: true, image: true }
+              }
+            }
+          },
+          client: {
+            select: { id: true, name: true, email: true, image: true }
+          },
+          speciality: {
+            select: { id: true, name: true, description: true, price: true }
+          },
+          userPackage: {
+            select: { 
+              id: true, 
+              totalSessions: true, 
+              usedSessions: true,
+              expiresAt: true
             }
           }
         },
-        client: {
-          select: { id: true, name: true, email: true, image: true }
-        },
-        speciality: {
-          select: { id: true, name: true, description: true, price: true }
-        },
-        userPackage: {
-          select: { 
-            id: true, 
-            totalSessions: true, 
-            usedSessions: true,
-            expiresAt: true
+        orderBy: { startDate: 'desc' }
+      });
+    } catch (includeError) {
+      console.log(`❌ Eroare cu include client, încerc fără:`, includeError.message);
+      
+      // Dacă include-ul pentru client eșuează, încearcă fără el
+      consultingSessions = await prisma.consultingSession.findMany({
+        where: whereCondition,
+        include: {
+          provider: {
+            include: {
+              user: {
+                select: { id: true, name: true, email: true, image: true }
+              }
+            }
+          },
+          speciality: {
+            select: { id: true, name: true, description: true, price: true }
+          },
+          userPackage: {
+            select: { 
+              id: true, 
+              totalSessions: true, 
+              usedSessions: true,
+              expiresAt: true
+            }
           }
-        }
-      },
-      orderBy: { startDate: 'desc' }
-    });
+        },
+        orderBy: { startDate: 'desc' }
+      });
+    }
 
     console.log(`📊 Găsite ${consultingSessions.length} sesiuni pentru user ${userId}`);
 
@@ -95,17 +153,28 @@ export async function GET(): Promise<NextResponse> {
 
     // Mapează datele pentru frontend
     const sessions = consultingSessions.map(sess => {
-      const counterpart = isProvider 
-        ? sess.client?.name || sess.client?.email || 'Client necunoscut'
-        : sess.provider.user.name || sess.provider.user.email || 'Provider necunoscut';
-
-      const counterpartEmail = isProvider 
-        ? sess.client?.email || null
-        : sess.provider.user.email || null;
-
-      const counterpartImage = isProvider 
-        ? sess.client?.image || null
-        : sess.provider.user.image || null;
+      // Pentru counterpart info, adaptează-te la structura disponibilă
+      let counterpart, counterpartEmail, counterpartImage;
+      
+      if (isProvider) {
+        // Pentru provider, afișează info despre client
+        if (sess.client) {
+          // Dacă există relația client
+          counterpart = sess.client.name || sess.client.email || 'Client necunoscut';
+          counterpartEmail = sess.client.email || null;
+          counterpartImage = sess.client.image || null;
+        } else {
+          // Dacă nu există relația client, poate că clientId e direct userId
+          counterpart = 'Client necunoscut';
+          counterpartEmail = null;
+          counterpartImage = null;
+        }
+      } else {
+        // Pentru client, afișează info despre provider  
+        counterpart = sess.provider.user.name || sess.provider.user.email || 'Provider necunoscut';
+        counterpartEmail = sess.provider.user.email || null;
+        counterpartImage = sess.provider.user.image || null;
+      }
 
       // Determină dacă sesiunea are înregistrare disponibilă
       const hasRecording = !!(sess.hasRecording || sess.recordingUrl);
@@ -169,10 +238,12 @@ export async function GET(): Promise<NextResponse> {
         // Package information
         packageInfo: sess.userPackage ? {
           id: sess.userPackage.id,
+          service: sess.speciality?.name || 'Serviciu necunoscut',
           totalSessions: sess.userPackage.totalSessions,
           usedSessions: sess.userPackage.usedSessions,
           remainingSessions: sess.userPackage.totalSessions - sess.userPackage.usedSessions,
-          expiresAt: sess.userPackage.expiresAt?.toISOString() || null
+          expiresAt: sess.userPackage.expiresAt?.toISOString() || null,
+          price: sess.speciality?.price || 0
         } : null,
 
         // Calendly integration (dacă există)
@@ -203,8 +274,20 @@ export async function GET(): Promise<NextResponse> {
 
   } catch (error) {
     console.error("❌ Error fetching user sessions:", error);
+    
+    // Log-uri mai detaliate pentru debugging
+    console.error("❌ Error stack:", error.stack);
+    console.error("❌ Error details:", {
+      name: error.name,
+      message: error.message,
+      cause: error.cause
+    });
+    
     return NextResponse.json(
-      { error: "Eroare internă la obținerea sesiunilor" },
+      { 
+        error: "Eroare internă la obținerea sesiunilor",
+        details: process.env.NODE_ENV === 'development' ? error.message : undefined
+      },
       { status: 500 }
     );
   }
