@@ -1,268 +1,252 @@
-// /api/user/sessions/route.ts - VERSIUNEA CORECTATĂ
-import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth/next';
-import { authOptions } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+// /api/user/sessions/route.ts
+import { NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 
-export async function GET(request: Request) {
+export async function GET(): Promise<NextResponse> {
   try {
-    // 1. Verificăm sesiunea utilizatorului
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json({ error: "Neautentificat" }, { status: 401 });
     }
+
     const userId = session.user.id;
 
-    console.log(`🔍 Căutare sesiuni pentru user: ${userId}`);
+    console.log(`📋 Obținere sesiuni pentru user: ${userId}`);
 
-    // 2. Determinăm dacă utilizatorul e provider sau client
-    const providerRecord = await prisma.provider.findUnique({
+    // Verifică dacă utilizatorul este provider
+    const provider = await prisma.provider.findUnique({
       where: { userId },
       select: { id: true }
     });
 
-    console.log(`👤 Provider record:`, providerRecord?.id || 'Nu este provider');
+    const isProvider = !!provider;
 
-    let allSessions: any[] = [];
+    console.log(`👤 User ${userId} este ${isProvider ? 'provider' : 'client'}`);
 
-    if (providerRecord) {
-      // 3a. Preluăm toate sesiunile ca provider
-      console.log(`🔍 Căutare sesiuni ca provider pentru: ${providerRecord.id}`);
-      
-      const providerSessions = await prisma.consultingSession.findMany({
-        where: { providerId: providerRecord.id },
-        orderBy: { startDate: 'asc' },
-        include: { 
-          client: { select: { name: true, email: true } },
-          speciality: { select: { id: true, name: true, description: true, price: true } },
-          userPackage: {
-            select: {
-              id: true,
-              totalSessions: true,
-              usedSessions: true,
-              expiresAt: true
+    // Construiește query-ul în funcție de rolul utilizatorului
+    const whereCondition = isProvider 
+      ? { providerId: provider.id }
+      : { clientId: userId };
+
+    // Obține sesiunile cu toate câmpurile de recording
+    const consultingSessions = await prisma.consultingSession.findMany({
+      where: whereCondition,
+      include: {
+        provider: {
+          include: {
+            user: {
+              select: { id: true, name: true, email: true, image: true }
             }
           }
-        }
-      });
-
-      console.log(`📊 Găsite ${providerSessions.length} sesiuni ca provider`);
-
-      allSessions = [...allSessions, ...providerSessions.map(sess => ({
-        ...sess,
-        isProvider: true,
-        counterpartInfo: sess.client
-      }))];
-    }
-
-    // 3b. Preluăm toate sesiunile ca client (indiferent dacă e și provider)
-    console.log(`🔍 Căutare sesiuni ca client pentru: ${userId}`);
-    
-    const clientSessions = await prisma.consultingSession.findMany({
-      where: { clientId: userId },
-      orderBy: { startDate: 'asc' },
-      include: { 
-        provider: { 
-          select: { 
-            id: true,
-            user: { select: { name: true, email: true } }
-          }
         },
-        speciality: { select: { id: true, name: true, description: true, price: true } },
+        client: {
+          select: { id: true, name: true, email: true, image: true }
+        },
+        speciality: {
+          select: { id: true, name: true, description: true, price: true }
+        },
         userPackage: {
-          select: {
-            id: true,
-            totalSessions: true,
+          select: { 
+            id: true, 
+            totalSessions: true, 
             usedSessions: true,
             expiresAt: true
           }
         }
+      },
+      orderBy: { startDate: 'desc' }
+    });
+
+    console.log(`📊 Găsite ${consultingSessions.length} sesiuni pentru user ${userId}`);
+
+    // Pentru fiecare sesiune finalizată fără recording URL, încearcă să obții de la Daily.co
+    for (const sess of consultingSessions) {
+      if (sess.status === 'COMPLETED' && !sess.recordingUrl && sess.dailyRoomName) {
+        console.log(`🔍 Verificare înregistrare pentru sesiunea ${sess.id} (${sess.dailyRoomName})`);
+        
+        try {
+          const recordingUrl = await fetchRecordingFromDaily(sess.dailyRoomName);
+          if (recordingUrl) {
+            // Actualizează sesiunea cu URL-ul găsit
+            await prisma.consultingSession.update({
+              where: { id: sess.id },
+              data: { 
+                recordingUrl: recordingUrl,
+                hasRecording: true,
+                recordingStatus: 'READY',
+                updatedAt: new Date()
+              }
+            });
+            
+            // Actualizează obiectul local pentru response
+            sess.recordingUrl = recordingUrl;
+            sess.hasRecording = true;
+            sess.recordingStatus = 'READY';
+            
+            console.log(`✅ URL înregistrare găsit și salvat pentru ${sess.id}: ${recordingUrl}`);
+          }
+        } catch (error) {
+          console.error(`❌ Eroare la obținerea înregistrării pentru ${sess.id}:`, error);
+        }
       }
-    });
+    }
 
-    console.log(`📊 Găsite ${clientSessions.length} sesiuni ca client`);
+    // Mapează datele pentru frontend
+    const sessions = consultingSessions.map(sess => {
+      const counterpart = isProvider 
+        ? sess.client?.name || sess.client?.email || 'Client necunoscut'
+        : sess.provider.user.name || sess.provider.user.email || 'Provider necunoscut';
 
-    allSessions = [...allSessions, ...clientSessions.map(sess => ({
-      ...sess,
-      isProvider: false,
-      counterpartInfo: sess.provider.user
-    }))];
+      const counterpartEmail = isProvider 
+        ? sess.client?.email || null
+        : sess.provider.user.email || null;
 
-    // 4. Sortăm toate sesiunile după data de start
-    allSessions.sort((a, b) => {
-      const dateA = a.startDate ? new Date(a.startDate).getTime() : 0;
-      const dateB = b.startDate ? new Date(b.startDate).getTime() : 0;
-      return dateA - dateB;
-    });
+      const counterpartImage = isProvider 
+        ? sess.client?.image || null
+        : sess.provider.user.image || null;
 
-    console.log(`📋 Total sesiuni găsite: ${allSessions.length}`);
+      // Determină dacă sesiunea are înregistrare disponibilă
+      const hasRecording = !!(sess.hasRecording || sess.recordingUrl);
 
-    // 5. Transformăm datele pentru frontend
-    const sessionsData = allSessions.map(sess => {
-      const counterpart = sess.counterpartInfo;
+      // Determină statusul real al sesiunii
+      const now = new Date();
+      let actualStatus = sess.status;
       
+      // Dacă sesiunea e programată dar a trecut timpul, poate fi considerată "missed" 
+      if (sess.status === 'SCHEDULED' && sess.startDate && new Date(sess.startDate) < now) {
+        // Verifică dacă cineva s-a alăturat
+        if (!sess.joinedAt) {
+          actualStatus = 'NO_SHOW';
+        }
+      }
+
       return {
         id: sess.id,
-        startDate: sess.startDate ? sess.startDate.toISOString() : '',
-        endDate: sess.endDate ? sess.endDate.toISOString() : null,
-        joinUrl: sess.dailyRoomUrl || sess.calendlyEventUri || '', // preferă Daily.co, fallback la Calendly
-        roomName: sess.dailyRoomName || null,
-        counterpart: counterpart?.name || counterpart?.email || 'Necunoscut',
-        speciality: sess.speciality?.name || 'Specialitate necunoscută',
-        status: sess.status || 'SCHEDULED',
-        duration: sess.duration || null,
-        actualDuration: sess.actualDuration || null,
-        isFinished: sess.isFinished || false,
-        participantCount: sess.participantCount || null,
-        rating: sess.rating || null,
-        feedback: sess.feedback || null,
-        totalPrice: sess.totalPrice || null,
-        role: sess.isProvider ? 'provider' : 'client',
-        createdAt: sess.createdAt ? sess.createdAt.toISOString() : new Date().toISOString(),
+        startDate: sess.startDate?.toISOString() || null,
+        endDate: sess.endDate?.toISOString() || null,
+        joinUrl: sess.dailyRoomUrl || '',
+        roomName: sess.dailyRoomName,
+        roomId: sess.dailyRoomId,
+        counterpart,
+        counterpartEmail,
+        counterpartImage,
+        speciality: sess.speciality?.name || 'Serviciu necunoscut',
+        specialityId: sess.speciality?.id || null,
+        status: actualStatus,
+        duration: sess.duration, // Durata estimată
+        actualDuration: sess.actualDuration, // Durata reală
+        isFinished: sess.isFinished,
+        participantCount: sess.participantCount,
+        rating: sess.rating,
+        feedback: sess.feedback,
+        notes: sess.notes,
+        totalPrice: sess.totalPrice,
+        role: isProvider ? 'provider' as const : 'client' as const,
+        createdAt: sess.createdAt?.toISOString() || new Date().toISOString(),
+        updatedAt: sess.updatedAt?.toISOString() || new Date().toISOString(),
+        
+        // Session timing
+        scheduledAt: sess.scheduledAt?.toISOString() || null,
+        joinedAt: sess.joinedAt?.toISOString() || null,
+        leftAt: sess.leftAt?.toISOString() || null,
+        
+        // Recording information - ACTUALIZAT
+        recordingUrl: sess.recordingUrl,
+        hasRecording,
+        recordingStarted: sess.recordingStarted || false,
+        recordingStartedAt: sess.recordingStartedAt?.toISOString() || null,
+        recordingStoppedAt: sess.recordingStoppedAt?.toISOString() || null,
+        recordingDuration: sess.recordingDuration || null,
+        recordingStatus: sess.recordingStatus || 'NONE',
+        
+        // Daily.co integration
+        dailyRoomName: sess.dailyRoomName,
+        dailyDomainName: sess.dailyDomainName,
+        dailyCreatedAt: sess.dailyCreatedAt?.toISOString() || null,
+        
+        // Package information
+        packageInfo: sess.userPackage ? {
+          id: sess.userPackage.id,
+          totalSessions: sess.userPackage.totalSessions,
+          usedSessions: sess.userPackage.usedSessions,
+          remainingSessions: sess.userPackage.totalSessions - sess.userPackage.usedSessions,
+          expiresAt: sess.userPackage.expiresAt?.toISOString() || null
+        } : null,
+
+        // Calendly integration (dacă există)
+        calendlyEventUri: sess.calendlyEventUri
       };
     });
 
-    console.log(`✅ Returnare ${sessionsData.length} sesiuni formatate`);
+    // Grupează sesiunile pe statusuri pentru statistici
+    const stats = {
+      total: sessions.length,
+      scheduled: sessions.filter(s => s.status === 'SCHEDULED').length,
+      inProgress: sessions.filter(s => s.status === 'IN_PROGRESS').length,
+      completed: sessions.filter(s => s.status === 'COMPLETED').length,
+      cancelled: sessions.filter(s => s.status === 'CANCELLED').length,
+      noShow: sessions.filter(s => s.status === 'NO_SHOW').length,
+      withRecording: sessions.filter(s => s.hasRecording).length
+    };
 
-    // 6. Returnăm JSON în formatul așteptat de componentă
-    return NextResponse.json({ 
-      sessions: sessionsData,
-      totalCount: sessionsData.length,
-      isProvider: !!providerRecord
+    console.log(`📈 Statistici sesiuni pentru user ${userId}:`, stats);
+
+    return NextResponse.json({
+      sessions,
+      totalCount: sessions.length,
+      isProvider,
+      stats,
+      providerId: provider?.id || null
     });
 
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error('❌ Error fetching sessions:', message);
-    
+  } catch (error) {
+    console.error("❌ Error fetching user sessions:", error);
     return NextResponse.json(
-      { 
-        error: 'Internal Server Error',
-        details: process.env.NODE_ENV === 'development' ? message : undefined
-      },
+      { error: "Eroare internă la obținerea sesiunilor" },
       { status: 500 }
     );
   }
 }
 
-// Endpoint pentru actualizarea statusului unei sesiuni
-export async function PATCH(request: Request) {
+// Funcție helper pentru a obține înregistrarea de la Daily.co
+async function fetchRecordingFromDaily(roomName: string | null): Promise<string | null> {
+  if (!roomName) return null;
+
+  const dailyApiKey = process.env.DAILY_API_KEY;
+  if (!dailyApiKey) {
+    console.warn('⚠️ DAILY_API_KEY not configured, cannot fetch recordings');
+    return null;
+  }
+
   try {
-    const session = await getServerSession(authOptions);
-    
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const { 
-      sessionId, 
-      status, 
-      joinedAt, 
-      leftAt, 
-      actualDuration,
-      participantCount,
-      rating,
-      feedback,
-      notes 
-    } = await request.json();
-    
-    if (!sessionId) {
-      return NextResponse.json(
-        { error: 'sessionId este obligatoriu' },
-        { status: 400 }
-      );
-    }
-
-    const userId = session.user.id;
-
-    console.log(`📝 Actualizare sesiune ${sessionId} de către user ${userId}`);
-
-    // Verificăm dacă utilizatorul este provider
-    const providerRecord = await prisma.provider.findUnique({
-      where: { userId },
-      select: { id: true }
-    });
-
-    // Verificăm dacă utilizatorul are dreptul să modifice această sesiune
-    const userSession = await prisma.consultingSession.findFirst({
-      where: {
-        id: sessionId,
-        OR: [
-          { providerId: providerRecord?.id },
-          { clientId: userId }
-        ]
+    const response = await fetch(`https://api.daily.co/v1/recordings`, {
+      headers: {
+        'Authorization': `Bearer ${dailyApiKey}`,
+        'Content-Type': 'application/json'
       }
     });
 
-    if (!userSession) {
-      return NextResponse.json(
-        { error: 'Sesiunea nu a fost găsită sau nu ai permisiuni' },
-        { status: 404 }
-      );
+    if (!response.ok) {
+      console.warn(`⚠️ Failed to fetch recordings from Daily.co: ${response.statusText}`);
+      return null;
     }
 
-    // Pregătim datele pentru actualizare
-    const updateData: any = {
-      updatedAt: new Date()
-    };
-
-    if (status) updateData.status = status;
-    if (joinedAt) updateData.joinedAt = new Date(joinedAt);
-    if (leftAt) updateData.leftAt = new Date(leftAt);
-    if (actualDuration !== undefined) updateData.actualDuration = actualDuration;
-    if (participantCount !== undefined) updateData.participantCount = participantCount;
-    if (rating !== undefined) updateData.rating = rating;
-    if (feedback !== undefined) updateData.feedback = feedback;
-    if (notes !== undefined) updateData.notes = notes;
-
-    // Marchează ca finalizată dacă statusul este COMPLETED
-    if (status === 'COMPLETED') {
-      updateData.isFinished = true;
-      if (!leftAt) updateData.leftAt = new Date();
-    }
-
-    // Actualizăm sesiunea
-    const updatedSession = await prisma.consultingSession.update({
-      where: { id: sessionId },
-      data: updateData
-    });
-
-    // Dacă sesiunea s-a finalizat și este din pachet, actualizăm sesiunile folosite
-    if (status === 'COMPLETED' && userSession.packageId) {
-      await prisma.userProviderPackage.update({
-        where: { id: userSession.packageId },
-        data: {
-          usedSessions: {
-            increment: 1
-          }
-        }
-      });
-    }
-
-    console.log(`✅ Sesiune ${sessionId} actualizată cu succes`);
-
-    return NextResponse.json({
-      success: true,
-      session: {
-        id: updatedSession.id,
-        status: updatedSession.status,
-        isFinished: updatedSession.isFinished,
-        actualDuration: updatedSession.actualDuration,
-        participantCount: updatedSession.participantCount,
-        updatedAt: updatedSession.updatedAt ? updatedSession.updatedAt.toISOString() : null
-      }
-    });
-
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error('❌ Error updating session:', message);
+    const data = await response.json();
+    const recordings = data.data || [];
     
-    return NextResponse.json(
-      { 
-        error: 'Internal Server Error',
-        details: process.env.NODE_ENV === 'development' ? message : undefined
-      },
-      { status: 500 }
-    );
+    // Găsește înregistrarea pentru camera specificată
+    const recording = recordings.find((r: any) => r.room_name === roomName);
+    
+    if (recording && recording.download_link && recording.status === 'finished') {
+      return recording.download_link;
+    }
+
+    return null;
+
+  } catch (error) {
+    console.error('❌ Error fetching recording from Daily.co:', error);
+    return null;
   }
 }

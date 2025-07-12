@@ -139,8 +139,8 @@ const BuyPackageModal: FC<BuyPackageModalProps> = ({
 
           {!selectedPackageId && !paymentSuccess && (
             <div className="space-y-4">
-              {packages.map((pkg) => (
-                <PackageCard key={pkg.id} pkg={pkg} onBuy={handleBuy} />
+              {packages.map((pkg,index) => (
+                <PackageCard key={`package-${pkg.id || index}`} pkg={pkg} onBuy={handleBuy} />
               ))}
               {error && (
                 <div className="p-3 bg-red-100 text-red-700 rounded mt-4">{error}</div>

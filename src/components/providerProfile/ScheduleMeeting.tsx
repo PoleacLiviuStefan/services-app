@@ -26,6 +26,7 @@ export default function ScheduleMeeting({
   providerStripeAccountId,
   locale = "ro",
 }: ScheduleMeetingProps) {
+  console.log("found services", services);
   const [schedulingUrl, setSchedulingUrl] = useState<string>("");
   const [scriptReady, setScriptReady] = useState(false);
 
@@ -174,7 +175,7 @@ export default function ScheduleMeeting({
               {services.length === 0 ? (
                 <p>Momentan nu există servicii disponibile.</p>
               ) : (
-                <Button onClick={() => openBuyModal(services[0])}>
+                <Button onClick={() => openBuyModal(services[0])}  className="flex items-center gap-2 border-2 border-primaryColor text-primaryColor px-6 py-3 rounded-md hover:bg-primaryColor hover:text-white transition-all duration-300">
                   <Icon>
                     <FaVideo size={20} />
                   </Icon>
@@ -241,9 +242,8 @@ export default function ScheduleMeeting({
 
       {showBuyModal && selectedService && (
         <BuyPackageModal
-          providerStripeAccountId={providerStripeAccountId}
           providerId={providerId}
-          packages={services.map((s) => ({ id: s, service: s } as any))}
+          packages={services}
           isOpen={showBuyModal}
           onClose={() => setShowBuyModal(false)}
         />

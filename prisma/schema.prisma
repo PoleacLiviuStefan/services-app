@@ -286,6 +286,16 @@ model ConsultingSession {
   rating           Float?                  // rating dat de client
   feedback         String?                 // feedback text
 
+  // Recording management
+  recordingStarted     Boolean   @default(false)  // 🆕 dacă înregistrarea e activă
+  recordingStartedAt   DateTime?                  // 🆕 când a început înregistrarea
+  recordingStoppedAt   DateTime?                  // 🆕 când s-a oprit înregistrarea
+  hasRecording         Boolean   @default(false)  // 🆕 dacă sesiunea are înregistrare
+  recordingDuration    Int?                       // 🆕 durata înregistrării în minute
+  recordingFileSize    BigInt?                    // 🆕 mărimea fișierului în bytes
+  recordingStatus      String?                    // 🆕 statusul procesării ("PROCESSING", "READY", etc.)
+  endedBy              String?                    // 🆕 ID-ul user-ului care a închis sesiunea
+
   // Relații
   provider         Provider                @relation("ProviderSessions", fields: [providerId], references: [id], onDelete: Cascade)
   client           User                    @relation("ClientSessions", fields: [clientId], references: [id], onDelete: Cascade)

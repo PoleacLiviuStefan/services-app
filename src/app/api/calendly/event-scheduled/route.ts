@@ -16,75 +16,79 @@ async function createDailyRoom(
   roomId: string;
   domainName: string;
 }> {
-  const endDateISO = endTime; // ex: "2025-10-15T14:30:00Z"
-const exp = Math.floor(new Date(endDateISO).getTime() / 1000);
+  if (!process.env.DAILY_API_KEY) {
+    throw new Error('DAILY_API_KEY is required');
+  }
   const dailyApiKey = process.env.DAILY_API_KEY;
-  const dailyDomain = process.env.DAILY_DOMAIN || 'mysticgold.daily.co';
-  if (!dailyApiKey) throw new Error('DAILY_API_KEY is required');
+  const dailyDomain = process.env.DAILY_DOMAIN ?? 'mysticgold.daily.co';
 
-  const roomName = `calendly-session-${sessionId}`;
-  const roomProperties: any = {
-    max_participants: 2,
+  // 1. calulează timestamp-ul de expirare
+  const exp = Math.floor(endTime.getTime() / 1000);
+
+  // 2. configurarea camerei (fără recording_layout)
+  const roomProperties = {
+    enable_recording: 'cloud',
+    max_participants: 10,
     enable_chat: true,
     enable_screenshare: true,
     start_video_off: false,
     start_audio_off: false,
     exp,
     eject_at_room_exp: true,
+    enable_prejoin_ui: true,
+    enable_network_ui: true,
+    enable_people_ui: true,
+    lang: 'en',
+    geo: 'auto',
   };
-  if (process.env.ENABLE_RECORDING === 'true') {
-    roomProperties.enable_recording = 'cloud';
-  }
 
-  // 1. Creare cameră privată
-  const roomRes = await fetch('https://api.daily.co/v1/rooms', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${dailyApiKey}`,
-    },
-    body: JSON.stringify({
-      name: roomName,
-      privacy: 'private',
-      properties: roomProperties,
-    }),
-  });
-  if (!roomRes.ok) {
-    const err = await roomRes.text();
-    throw new Error(`Failed to create Daily room: ${err}`);
-  }
-  const room = await roomRes.json();
-
-  // 2. Generare token de acces
-  const tokenRes = await fetch('https://api.daily.co/v1/meeting-tokens', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${dailyApiKey}`,
-    },
-    body: JSON.stringify({
-      properties: {
-        room_name: room.name,
-        exp: Math.floor(Date.now() / 1000) + 24 * 60 * 60, // expiră în 24h
-        eject_at_token_exp: true,
+  // helper pentru POST-uri
+  const apiPost = async (path: string, body: any) => {
+    const res = await fetch(`https://api.daily.co/v1/${path}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${dailyApiKey}`,
       },
-    }),
-  });
-  if (!tokenRes.ok) {
-    const err = await tokenRes.text();
-    throw new Error(`Failed to create meeting token: ${err}`);
-  }
-  const { token } = await tokenRes.json();
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`Daily API error (${path}): ${text}`);
+    }
+    return res.json();
+  };
 
-  // 3. Returnare URL cu token ca parametru
+  // 3. creare cameră
+  const room = await apiPost('rooms', {
+    name: `calendly-session-${sessionId}`,
+    privacy: 'private',
+    properties: roomProperties,
+  });
+
+  // 4. creare token cu înregistrare automată și layout
+  const { token } = await apiPost('meeting-tokens', {
+    properties: {
+      room_name: room.name,
+      exp: Math.floor(Date.now() / 1000) + 24 * 3600,
+      eject_at_token_exp: true,
+      enable_recording: 'cloud',
+      start_cloud_recording: true,
+      start_cloud_recording_opts: {
+        layout: { preset: 'active-speaker' },
+      },
+      // is_owner: true,
+    },
+  });
+
+  // 5. returnează URL-ul cu token
   return {
     roomUrl: `${room.url}?t=${token}`,
     roomName: room.name,
     roomId: room.id,
-    domainName: room.domain_name || dailyDomain,
+    domainName: room.domain_name ?? dailyDomain,
   };
 }
-
 
 export async function POST(request: Request) {
   try {
