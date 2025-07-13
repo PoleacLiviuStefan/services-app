@@ -1,4 +1,5 @@
-// /api/video/session/[sessionId]/recording/route.ts
+// /api/video/session/[sessionId]/recording/route.ts - ACTUALIZAT pentru associere prin session ID
+
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
@@ -22,7 +23,7 @@ export async function POST(
     const { sessionId } = await params;
     const userId = session.user.id;
     const body = await req.json();
-    const { action, recordingUrl } = body; // 'start', 'stop', or 'update_url'
+    const { action, recordingUrl, dailyRecordingId } = body; // adăugat dailyRecordingId
 
     console.log(`🎥 Recording action: ${action} pentru sesiunea ${sessionId} de către user ${userId}`);
 
@@ -34,9 +35,6 @@ export async function POST(
           include: {
             user: true
           }
-        },
-        client: {
-          select: { id: true, name: true, email: true }
         }
       }
     });
@@ -55,14 +53,15 @@ export async function POST(
     };
 
     if (action === 'start') {
-      // Marchează că înregistrarea a început
+      // Marchează că înregistrarea a început și salvează daily recording ID dacă este furnizat
       updateData = {
         ...updateData,
         status: 'IN_PROGRESS',
         joinedAt: consultingSession.joinedAt || new Date(),
-        recordingStarted: true,  // ⭐ CRUCIAL
-        recordingStartedAt: new Date(),  // ⭐ CRUCIAL
-        recordingStatus: 'RECORDING',  // ⭐ CRUCIAL
+        recordingStarted: true,
+        recordingStartedAt: new Date(),
+        recordingStatus: 'RECORDING',
+        dailyRecordingId: dailyRecordingId || null, // ⭐ SALVEAZĂ DAILY RECORDING ID
         notes: consultingSession.notes ? 
           `${consultingSession.notes}\n[${new Date().toISOString()}] Înregistrare începută` : 
           `[${new Date().toISOString()}] Înregistrare începută`
@@ -74,6 +73,9 @@ export async function POST(
       });
 
       console.log(`✅ Înregistrarea a început pentru sesiunea ${sessionId} - BD actualizată`);
+      if (dailyRecordingId) {
+        console.log(`📋 Daily recording ID salvat: ${dailyRecordingId}`);
+      }
 
       return NextResponse.json({ 
         success: true, 
@@ -87,49 +89,62 @@ export async function POST(
       let recordingDuration = null;
       if (consultingSession.recordingStartedAt) {
         const durationMs = new Date().getTime() - new Date(consultingSession.recordingStartedAt).getTime();
-        recordingDuration = Math.round(durationMs / (1000 * 60)); // în minute
+        recordingDuration = Math.round(durationMs / (1000 * 60));
       }
 
-      // Marchează că înregistrarea s-a oprit și că sesiunea ARE înregistrare
+      // Calculează durata actuală a sesiunii
+      let actualDuration = null;
+      if (consultingSession.joinedAt) {
+        const sessionDurationMs = new Date().getTime() - new Date(consultingSession.joinedAt).getTime();
+        actualDuration = Math.round(sessionDurationMs / (1000 * 60));
+      } else if (consultingSession.startDate) {
+        const sessionDurationMs = new Date().getTime() - new Date(consultingSession.startDate).getTime();
+        actualDuration = Math.round(sessionDurationMs / (1000 * 60));
+      }
+
+      console.log(`📊 Calculare durate: recordingDuration=${recordingDuration}min, actualDuration=${actualDuration}min`);
+
       updateData = {
         ...updateData,
-        recordingStarted: false,  // ⭐ CRUCIAL
-        recordingStoppedAt: new Date(),  // ⭐ CRUCIAL
-        hasRecording: true,  // ⭐ CRUCIAL - marchează că sesiunea are înregistrare
-        recordingDuration: recordingDuration,  // ⭐ CRUCIAL
-        recordingStatus: 'PROCESSING',  // ⭐ CRUCIAL
+        recordingStarted: false,
+        recordingStoppedAt: new Date(),
+        hasRecording: true, // ⭐ CRUCIAL
+        recordingDuration: recordingDuration,
+        actualDuration: actualDuration,
+        recordingStatus: 'PROCESSING',
+        dailyRecordingId: dailyRecordingId || consultingSession.dailyRecordingId, // ⭐ ACTUALIZEAZĂ DAILY RECORDING ID
         notes: consultingSession.notes ? 
-          `${consultingSession.notes}\n[${new Date().toISOString()}] Înregistrare oprită` : 
-          `[${new Date().toISOString()}] Înregistrare oprită`
+          `${consultingSession.notes}\n[${new Date().toISOString()}] Înregistrare oprită - durată: ${recordingDuration || 'N/A'}min` : 
+          `[${new Date().toISOString()}] Înregistrare oprită - durată: ${recordingDuration || 'N/A'}min`
       };
-
-      // Calculează durata actuală dacă este posibil
-      if (consultingSession.joinedAt) {
-        const durationMs = new Date().getTime() - new Date(consultingSession.joinedAt).getTime();
-        updateData.actualDuration = Math.round(durationMs / (1000 * 60)); // în minute
-      }
 
       await prisma.consultingSession.update({
         where: { id: sessionId },
         data: updateData
       });
 
-      console.log(`✅ Înregistrarea s-a oprit pentru sesiunea ${sessionId} - BD actualizată cu hasRecording: true`);
+      console.log(`✅ Înregistrarea s-a oprit pentru sesiunea ${sessionId}`, {
+        hasRecording: true,
+        recordingDuration,
+        actualDuration,
+        dailyRecordingId: dailyRecordingId || consultingSession.dailyRecordingId
+      });
 
       return NextResponse.json({ 
         success: true, 
         message: "Înregistrarea s-a oprit - sesiunea va avea înregistrare disponibilă",
         recordingStarted: false,
         hasRecording: true,
-        actualDuration: updateData.actualDuration,
-        recordingDuration: recordingDuration
+        actualDuration: actualDuration,
+        recordingDuration: recordingDuration,
+        recordingStatus: 'PROCESSING'
       });
 
     } else if (action === 'update_url' && recordingUrl) {
-      // Actualizează URL-ul înregistrării când devine disponibil
       updateData = {
         ...updateData,
         recordingUrl: recordingUrl,
+        recordingStatus: 'READY',
         notes: consultingSession.notes ? 
           `${consultingSession.notes}\n[${new Date().toISOString()}] URL înregistrare disponibil` : 
           `[${new Date().toISOString()}] URL înregistrare disponibil`
@@ -161,7 +176,7 @@ export async function POST(
   }
 }
 
-// GET - Get recording URL
+// GET - Get recording URL - ACTUALIZAT pentru căutare prin session ID și daily recording ID
 export async function GET(
   _req: Request,
   { params }: RouteContext
@@ -186,9 +201,6 @@ export async function GET(
             user: true
           }
         },
-        client: {
-          select: { id: true, name: true, email: true }
-        },
         speciality: {
           select: { id: true, name: true }
         }
@@ -199,17 +211,114 @@ export async function GET(
       return NextResponse.json({ error: "Sesiunea nu a fost găsită" }, { status: 404 });
     }
 
-    // Verifică dacă user-ul curent este participant în sesiune
+    console.log(`🔍 Sesiune găsită: ${consultingSession.id}`, {
+      providerId: consultingSession.provider.user.id,
+      clientId: consultingSession.clientId,
+      dailyRoomName: consultingSession.dailyRoomName,
+      dailyRecordingId: consultingSession.dailyRecordingId,
+      hasRecording: consultingSession.hasRecording,
+      recordingUrl: !!consultingSession.recordingUrl
+    });
+
+    // Verifică accesul - ÎMBUNĂTĂȚIT
     const isProvider = consultingSession.provider.user.id === userId;
-    const isClient = consultingSession.clientId === userId;
+    let isClient = false;
+    
+    if (!isProvider) {
+      // Multiple strategii pentru verificarea clientului
+      if (consultingSession.clientId === userId) {
+        isClient = true;
+      } else {
+        try {
+          const clientRecord = await prisma.client.findUnique({
+            where: { userId },
+            select: { id: true }
+          });
+          if (clientRecord && consultingSession.clientId === clientRecord.id) {
+            isClient = true;
+          }
+        } catch (error) {
+          console.log(`ℹ️ Nu s-a putut verifica prin tabela Client:`, error.message);
+        }
+      }
+    }
+
+    console.log(`👤 Access check: isProvider=${isProvider}, isClient=${isClient}`);
 
     if (!isProvider && !isClient) {
       return NextResponse.json({ error: "Nu ai acces la această sesiune" }, { status: 403 });
     }
 
-    // Dacă există deja URL de înregistrare, returnează-l
+    // CĂUTARE PRIN MULTIPLE STRATEGII - în ordine de prioritate
+    console.log(`🔍 CĂUTARE ÎNREGISTRARE prin multiple strategii...`);
+    
+    let recordingData = null;
+
+    // Strategia 1: Dacă avem daily recording ID salvat în BD
+    if (consultingSession.dailyRecordingId) {
+      console.log(`🎯 Strategia 1: Căutare prin daily recording ID: ${consultingSession.dailyRecordingId}`);
+      recordingData = await fetchRecordingByDailyId(consultingSession.dailyRecordingId);
+      if (recordingData) {
+        console.log(`✅ GĂSIT prin daily recording ID!`);
+      }
+    }
+
+    // Strategia 2: Căutare prin session ID în numele camerei
+    if (!recordingData) {
+      console.log(`🎯 Strategia 2: Căutare prin session ID în numele camerei: ${sessionId}`);
+      recordingData = await fetchRecordingBySessionId(sessionId);
+      if (recordingData) {
+        console.log(`✅ GĂSIT prin session ID în numele camerei!`);
+      }
+    }
+
+    // Strategia 3: Căutare prin numele camerei (metoda originală)
+    if (!recordingData && consultingSession.dailyRoomName) {
+      console.log(`🎯 Strategia 3: Căutare prin numele camerei: ${consultingSession.dailyRoomName}`);
+      recordingData = await fetchRecordingByRoomName(consultingSession.dailyRoomName);
+      if (recordingData) {
+        console.log(`✅ GĂSIT prin numele camerei!`);
+      }
+    }
+
+    // Strategia 4: Căutare prin timestamp (sesiuni din aceeași zi)
+    if (!recordingData && consultingSession.startDate) {
+      console.log(`🎯 Strategia 4: Căutare prin timestamp aproximativ`);
+      recordingData = await fetchRecordingByTimestamp(consultingSession.startDate, sessionId);
+      if (recordingData) {
+        console.log(`✅ GĂSIT prin căutare timestamp!`);
+      }
+    }
+
+    if (recordingData && recordingData.url) {
+      console.log(`✅ ÎNREGISTRARE GĂSITĂ! Actualizez BD...`);
+      
+      // Actualizează sesiunea cu toate informațiile găsite
+      await prisma.consultingSession.update({
+        where: { id: sessionId },
+        data: { 
+          recordingUrl: recordingData.url,
+          hasRecording: true,
+          recordingStatus: recordingData.status,
+          recordingDuration: recordingData.duration,
+          dailyRecordingId: recordingData.dailyId, // Salvează daily recording ID pentru viitor
+          updatedAt: new Date()
+        }
+      });
+
+      return NextResponse.json({ 
+        recordingUrl: recordingData.url,
+        recordingAvailable: true,
+        source: recordingData.source,
+        status: recordingData.status,
+        duration: recordingData.duration,
+        dailyRecordingId: recordingData.dailyId
+      });
+    }
+
+    // Dacă există deja URL în BD, returnează-l
     if (consultingSession.recordingUrl) {
-      console.log(`✅ URL înregistrare existent: ${consultingSession.recordingUrl}`);
+      console.log(`✅ URL înregistrare existent în BD: ${consultingSession.recordingUrl}`);
       return NextResponse.json({ 
         recordingUrl: consultingSession.recordingUrl,
         recordingAvailable: true,
@@ -217,61 +326,45 @@ export async function GET(
       });
     }
 
-    // Încearcă să obții înregistrarea de la Daily.co
-    console.log(`🔍 Căutare înregistrare în Daily.co pentru camera: ${consultingSession.dailyRoomName}`);
-    const recordingUrl = await fetchRecordingFromDaily(consultingSession.dailyRoomName);
+    // Nu s-a găsit nimic
+    console.log(`❌ NU S-A GĂSIT înregistrare pentru sesiunea ${sessionId}`);
     
-    if (recordingUrl) {
-      // Actualizează sesiunea cu URL-ul găsit
-      await prisma.consultingSession.update({
-        where: { id: sessionId },
-        data: { 
-          recordingUrl: recordingUrl,
-          hasRecording: true,
-          recordingStatus: 'READY',
-          updatedAt: new Date()
-        }
-      });
-
-      console.log(`✅ URL înregistrare găsit și salvat: ${recordingUrl}`);
-
-      return NextResponse.json({ 
-        recordingUrl: recordingUrl,
-        recordingAvailable: true,
-        source: 'daily.co'
-      });
-    } else {
-      return NextResponse.json({ 
-        error: "Înregistrarea nu este încă disponibilă sau nu a fost realizată",
-        recordingAvailable: false,
-        note: "Înregistrarea va fi disponibilă în câteva minute după încheierea sesiunii. Încearcă din nou în 2-3 minute."
-      }, { status: 404 });
-    }
+    return NextResponse.json({ 
+      error: "Înregistrarea nu este încă disponibilă",
+      recordingAvailable: false,
+      note: "Înregistrarea va fi disponibilă în câteva minute după încheierea sesiunii. Încearcă din nou în 2-3 minute.",
+      debug: {
+        sessionId: sessionId,
+        roomName: consultingSession.dailyRoomName,
+        dailyRecordingId: consultingSession.dailyRecordingId,
+        hasRecordingInDb: !!consultingSession.recordingUrl,
+        recordingStatus: consultingSession.recordingStatus
+      }
+    }, { status: 404 });
 
   } catch (error) {
     console.error("❌ Error getting recording:", error);
     return NextResponse.json(
-      { error: "Eroare internă la obținerea înregistrării" },
+      { 
+        error: "Eroare internă la obținerea înregistrării",
+        details: error.message 
+      },
       { status: 500 }
     );
   }
 }
 
-// Funcție helper pentru a obține înregistrarea de la Daily.co
-async function fetchRecordingFromDaily(roomName: string | null): Promise<string | null> {
-  if (!roomName) return null;
+// FUNCȚII HELPER PENTRU CĂUTARE PRIN MULTIPLE STRATEGII
 
+// Strategia 1: Căutare directă prin Daily recording ID
+async function fetchRecordingByDailyId(dailyRecordingId: string): Promise<any> {
   const dailyApiKey = process.env.DAILY_API_KEY;
-  if (!dailyApiKey) {
-    console.warn('⚠️ DAILY_API_KEY not configured, cannot fetch recordings');
-    return null;
-  }
+  if (!dailyApiKey) return null;
 
   try {
-    console.log(`🔍 Căutare înregistrare Daily.co pentru camera: ${roomName}`);
+    console.log(`🔍 Căutare prin Daily recording ID: ${dailyRecordingId}`);
     
-    // Obține toate înregistrările
-    const response = await fetch(`https://api.daily.co/v1/recordings`, {
+    const response = await fetch(`https://api.daily.co/v1/recordings/${dailyRecordingId}`, {
       headers: {
         'Authorization': `Bearer ${dailyApiKey}`,
         'Content-Type': 'application/json'
@@ -279,48 +372,171 @@ async function fetchRecordingFromDaily(roomName: string | null): Promise<string 
     });
 
     if (!response.ok) {
-      console.warn(`⚠️ Failed to fetch recordings from Daily.co: ${response.statusText}`);
+      console.log(`⚠️ Nu s-a găsit recording cu ID: ${dailyRecordingId}`);
       return null;
     }
+
+    const recording = await response.json();
+    
+    return {
+      url: recording.download_link || null,
+      status: recording.status === 'finished' ? 'READY' : 'PROCESSING',
+      duration: recording.duration ? Math.round(recording.duration / 60) : null,
+      dailyId: recording.id,
+      source: 'daily_recording_id'
+    };
+
+  } catch (error) {
+    console.error('❌ Error fetching by daily recording ID:', error);
+    return null;
+  }
+}
+
+// Strategia 2: Căutare prin session ID în numele camerei
+async function fetchRecordingBySessionId(sessionId: string): Promise<any> {
+  const dailyApiKey = process.env.DAILY_API_KEY;
+  if (!dailyApiKey) return null;
+
+  try {
+    console.log(`🔍 Căutare prin session ID în nume: ${sessionId}`);
+    
+    const response = await fetch(`https://api.daily.co/v1/recordings?limit=100`, {
+      headers: {
+        'Authorization': `Bearer ${dailyApiKey}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) return null;
 
     const data = await response.json();
     const recordings = data.data || [];
     
-    console.log(`📊 Găsite ${recordings.length} înregistrări în Daily.co`);
-    
-    // Găsește înregistrarea pentru camera specificată
-    const recording = recordings.find((r: any) => r.room_name === roomName);
+    // Caută înregistrări care conțin session ID-ul în numele camerei
+    const recording = recordings.find((r: any) => 
+      r.room_name && (
+        r.room_name.includes(sessionId) ||
+        r.room_name.includes(sessionId.split('-').pop()) // Ultimele caractere din UUID
+      )
+    );
     
     if (recording) {
-      console.log(`✅ Înregistrare găsită pentru camera ${roomName}:`, {
-        id: recording.id,
-        status: recording.status,
-        duration: recording.duration,
-        download_link: recording.download_link ? 'Available' : 'Not ready'
-      });
-
-      // Verifică dacă înregistrarea este gata pentru download
-      if (recording.download_link && recording.status === 'finished') {
-        return recording.download_link;
-      } else if (recording.status === 'in-progress') {
-        console.log(`⏳ Înregistrarea pentru ${roomName} este încă în procesare`);
-        return null;
-      } else {
-        console.log(`⏳ Înregistrarea pentru ${roomName} nu este încă gata (status: ${recording.status})`);
-        return null;
-      }
+      console.log(`✅ Găsit prin session ID: ${recording.room_name}`);
+      return {
+        url: recording.download_link || null,
+        status: recording.status === 'finished' ? 'READY' : 'PROCESSING',
+        duration: recording.duration ? Math.round(recording.duration / 60) : null,
+        dailyId: recording.id,
+        source: 'session_id_match'
+      };
     }
 
-    console.log(`📭 Nu s-a găsit înregistrare pentru camera ${roomName}`);
-    
-    // Debug: afișează toate camerele disponibile
-    const roomNames = recordings.map((r: any) => r.room_name).slice(0, 5);
-    console.log(`🔍 Primele 5 camere cu înregistrări: ${roomNames.join(', ')}`);
-    
     return null;
 
   } catch (error) {
-    console.error('❌ Error fetching recording from Daily.co:', error);
+    console.error('❌ Error fetching by session ID:', error);
+    return null;
+  }
+}
+
+// Strategia 3: Căutare prin numele camerei (metoda originală)
+async function fetchRecordingByRoomName(roomName: string): Promise<any> {
+  const dailyApiKey = process.env.DAILY_API_KEY;
+  if (!dailyApiKey || !roomName) return null;
+
+  try {
+    console.log(`🔍 Căutare prin numele camerei: ${roomName}`);
+    
+    const response = await fetch(`https://api.daily.co/v1/recordings?limit=100`, {
+      headers: {
+        'Authorization': `Bearer ${dailyApiKey}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) return null;
+
+    const data = await response.json();
+    const recordings = data.data || [];
+    
+    // Căutare exactă și fuzzy
+    let recording = recordings.find((r: any) => r.room_name === roomName);
+    
+    if (!recording) {
+      recording = recordings.find((r: any) => 
+        r.room_name && roomName && 
+        (r.room_name.toLowerCase().includes(roomName.toLowerCase()) || 
+         roomName.toLowerCase().includes(r.room_name.toLowerCase()))
+      );
+    }
+    
+    if (recording) {
+      return {
+        url: recording.download_link || null,
+        status: recording.status === 'finished' ? 'READY' : 'PROCESSING',
+        duration: recording.duration ? Math.round(recording.duration / 60) : null,
+        dailyId: recording.id,
+        source: 'room_name_match'
+      };
+    }
+
+    return null;
+
+  } catch (error) {
+    console.error('❌ Error fetching by room name:', error);
+    return null;
+  }
+}
+
+// Strategia 4: Căutare prin timestamp (pentru sesiuni din aceeași perioadă)
+async function fetchRecordingByTimestamp(sessionStartDate: Date, sessionId: string): Promise<any> {
+  const dailyApiKey = process.env.DAILY_API_KEY;
+  if (!dailyApiKey) return null;
+
+  try {
+    console.log(`🔍 Căutare prin timestamp pentru sesiunea din: ${sessionStartDate.toISOString()}`);
+    
+    const response = await fetch(`https://api.daily.co/v1/recordings?limit=100`, {
+      headers: {
+        'Authorization': `Bearer ${dailyApiKey}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) return null;
+
+    const data = await response.json();
+    const recordings = data.data || [];
+    
+    // Găsește înregistrări din aceeași zi
+    const sessionDate = sessionStartDate.toISOString().split('T')[0]; // YYYY-MM-DD
+    
+    const candidateRecordings = recordings.filter((r: any) => {
+      if (!r.started_at) return false;
+      const recordingDate = new Date(r.started_at).toISOString().split('T')[0];
+      return recordingDate === sessionDate;
+    });
+    
+    console.log(`📅 Găsite ${candidateRecordings.length} înregistrări din ${sessionDate}`);
+    
+    if (candidateRecordings.length === 1) {
+      // Dacă e doar o înregistrare din ziua aia, probabil e cea căutată
+      const recording = candidateRecordings[0];
+      console.log(`🎯 Găsită o singură înregistrare din ziua ${sessionDate}, probabil e cea căutată`);
+      
+      return {
+        url: recording.download_link || null,
+        status: recording.status === 'finished' ? 'READY' : 'PROCESSING',
+        duration: recording.duration ? Math.round(recording.duration / 60) : null,
+        dailyId: recording.id,
+        source: 'timestamp_match'
+      };
+    }
+
+    return null;
+
+  } catch (error) {
+    console.error('❌ Error fetching by timestamp:', error);
     return null;
   }
 }

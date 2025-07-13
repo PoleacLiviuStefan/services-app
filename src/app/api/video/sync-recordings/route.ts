@@ -10,37 +10,31 @@ export async function POST(): Promise<NextResponse> {
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Neautentificat" }, { status: 401 });
     }
+    const userId = session.user.id;
 
-    console.log('🔄 Sincronizare înregistrări cu Daily.co...');
+    // Verifică dacă utilizatorul este provider
+    const provider = await prisma.provider.findUnique({
+      where: { userId },
+      select: { id: true },
+    });
+    if (!provider) {
+      return NextResponse.json(
+        { error: "Doar providerii pot sincroniza înregistrările" },
+        { status: 403 }
+      );
+    }
 
-    // 1. Găsește toate sesiunile care ar putea avea înregistrări
+    console.log(`🔄 Începe sincronizarea înregistrărilor pentru provider ${provider.id}`);
+
+    // Obține toate sesiunile completed ale provider-ului din ultimele 30 de zile
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     const sessions = await prisma.consultingSession.findMany({
       where: {
-        OR: [
-          // Sesiuni care au notes cu înregistrare dar hasRecording = false
-          {
-            notes: {
-              contains: 'Înregistrare începută'
-            },
-            hasRecording: false
-          },
-          // Sesiuni completed fără recordingUrl dar cu dailyRoomName
-          {
-            status: 'COMPLETED',
-            recordingUrl: null,
-            dailyRoomName: {
-              not: null
-            }
-          },
-          // Sesiuni cu recordingStatus = PROCESSING (să verificăm dacă s-au terminat)
-          {
-            recordingStatus: 'PROCESSING'
-          }
-        ],
-        // Doar sesiuni din ultimele 30 zile
-        createdAt: {
-          gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
-        }
+        providerId: provider.id,
+        status: "COMPLETED",
+        startDate: { gte: thirtyDaysAgo },
+        dailyRoomName: { not: null },
       },
       select: {
         id: true,
@@ -48,183 +42,250 @@ export async function POST(): Promise<NextResponse> {
         recordingUrl: true,
         hasRecording: true,
         recordingStatus: true,
-        notes: true,
-        createdAt: true,
-        startDate: true
-      }
+        startDate: true,
+        endDate: true,
+      },
     });
+    console.log(`📊 Găsite ${sessions.length} sesiuni pentru sincronizare`);
 
-    console.log(`📊 Găsite ${sessions.length} sesiuni pentru verificare`);
+    // Obține toate înregistrările de la Daily.co (până la 100)
+    const dailyRecordings = await fetchAllRecordingsFromDaily();
+    console.log(`📊 Găsite ${dailyRecordings.length} înregistrări în Daily.co`);
 
-    if (sessions.length === 0) {
+    if (dailyRecordings.length === 0) {
+      console.log("⚠️ Nu s-au găsit înregistrări în Daily.co");
       return NextResponse.json({
         success: true,
-        message: 'Nu există sesiuni de sincronizat',
-        updated: 0
+        message: "Nu s-au găsit înregistrări în Daily.co pentru sincronizare",
+        total: sessions.length,
+        updated: 0,
+        dailyRecordings: 0,
+        orphanRecordings: 0,
+        strategiesUsed: {},
       });
     }
 
-    // 2. Obține toate înregistrările de la Daily.co
-    const dailyRecordings = await fetchAllDailyRecordings();
-    
-    if (!dailyRecordings) {
-      return NextResponse.json({
-        error: 'Nu s-au putut obține înregistrările de la Daily.co',
-        note: 'Verifică DAILY_API_KEY'
-      }, { status: 500 });
-    }
-
-    console.log(`📊 Găsite ${dailyRecordings.length} înregistrări în Daily.co`);
-
     let updatedCount = 0;
-    const results = [];
+    let totalChecked = 0;
+    const strategiesUsed: Record<string, number> = {
+      daily_recording_id: 0,
+      exact_room_name: 0,
+      session_id_in_room_name: 0,
+      fuzzy_room_name: 0,
+      timestamp_single_match: 0,
+      timestamp_closest_match: 0,
+      not_found: 0,
+    };
 
-    // 3. Pentru fiecare sesiune, verifică dacă există înregistrare
     for (const sess of sessions) {
-      try {
-        console.log(`🔍 Verificare sesiune ${sess.id} (${sess.dailyRoomName})`);
+      totalChecked++;
+      console.log(`🔍 Verificare sesiunea ${sess.id} - camera: ${sess.dailyRoomName}`);
+      let recording: any = null;
+      let matchStrategy = "";
 
-        // Găsește înregistrarea corespunzătoare în Daily.co
-        const recording = dailyRecordings.find(r => r.room_name === sess.dailyRoomName);
-
+      // STRATEGIA 0: dailyRecordingId
+      if ((sess as any).dailyRecordingId) {
+        recording = dailyRecordings.find(r => r.id === (sess as any).dailyRecordingId);
         if (recording) {
-          console.log(`✅ Înregistrare găsită pentru ${sess.id}:`, {
-            status: recording.status,
-            duration: recording.duration,
-            download_link: recording.download_link ? 'Available' : 'Not ready'
-          });
+          matchStrategy = "daily_recording_id";
+          console.log(`✅ STRATEGIA 0 - Match prin Daily Recording ID: ${(sess as any).dailyRecordingId}`);
+        }
+      }
 
-          const updateData: any = {
-            updatedAt: new Date()
-          };
+      // STRATEGIA 1: room_name exact
+      if (!recording && sess.dailyRoomName) {
+        recording = dailyRecordings.find(r => r.room_name === sess.dailyRoomName);
+        if (recording) {
+          matchStrategy = "exact_room_name";
+          console.log(`✅ STRATEGIA 1 - Match exact prin numele camerei: ${sess.dailyRoomName}`);
+        }
+      }
 
-          // Dacă sesiunea are înregistrare în notes dar hasRecording = false
-          if (sess.notes?.includes('Înregistrare începută') && !sess.hasRecording) {
-            updateData.hasRecording = true;
-            updateData.recordingStarted = false;
-            console.log(`📝 Marcând sesiunea ${sess.id} ca având înregistrare (din notes)`);
+      // STRATEGIA 2: session ID in room_name
+      if (!recording) {
+        recording = dailyRecordings.find(r =>
+          r.room_name &&
+          (r.room_name.includes(sess.id) ||
+            r.room_name.includes(sess.id.split("-").pop()!))
+        );
+        if (recording) {
+          matchStrategy = "session_id_in_room_name";
+          console.log(`✅ STRATEGIA 2 - Match prin session ID în numele camerei: ${recording.room_name}`);
+        }
+      }
+
+      // STRATEGIA 3: fuzzy room name
+      if (!recording && sess.dailyRoomName) {
+        recording = dailyRecordings.find(r =>
+          r.room_name &&
+          (r.room_name.toLowerCase().includes(sess.dailyRoomName.toLowerCase()) ||
+           sess.dailyRoomName.toLowerCase().includes(r.room_name.toLowerCase()))
+        );
+        if (recording) {
+          matchStrategy = "fuzzy_room_name";
+          console.log(`✅ STRATEGIA 3 - Match fuzzy: ${sess.dailyRoomName} ↔ ${recording.room_name}`);
+        }
+      }
+
+      // STRATEGIA 4: timestamp (using start_ts)
+      if (!recording && sess.startDate) {
+        const sessionTime = sess.startDate.getTime();
+        const sameDay = dailyRecordings.filter(r => {
+          if (typeof r.start_ts !== "number") return false;
+          const recTime = r.start_ts * 1000;
+          const dRec = new Date(recTime);
+          const dSess = new Date(sessionTime);
+          return (
+            dRec.getFullYear() === dSess.getFullYear() &&
+            dRec.getMonth() === dSess.getMonth() &&
+            dRec.getDate() === dSess.getDate()
+          );
+        });
+        if (sameDay.length === 1) {
+          recording = sameDay[0];
+          matchStrategy = "timestamp_single_match";
+          console.log(`✅ STRATEGIA 4 - Single match zi: ${recording.room_name}`);
+        } else if (sameDay.length > 1) {
+          let closest = sameDay[0];
+          let minDiff = Infinity;
+          for (const cand of sameDay) {
+            const diff = Math.abs(sessionTime - cand.start_ts * 1000);
+            if (diff < minDiff) {
+              minDiff = diff;
+              closest = cand;
+            }
           }
-
-          // Dacă înregistrarea este gata și are download_link
-          if (recording.download_link && recording.status === 'finished') {
-            updateData.recordingUrl = recording.download_link;
-            updateData.hasRecording = true;
-            updateData.recordingStatus = 'READY';
-            updateData.recordingDuration = recording.duration ? Math.round(recording.duration / 60) : null;
-            console.log(`🔗 Salvând URL înregistrare pentru ${sess.id}: ${recording.download_link}`);
-          } else if (recording.status === 'in-progress') {
-            updateData.recordingStatus = 'PROCESSING';
-            updateData.hasRecording = true;
-            console.log(`⏳ Înregistrarea pentru ${sess.id} este încă în procesare`);
-          } else {
-            updateData.recordingStatus = 'PROCESSING';
-            updateData.hasRecording = true;
-            console.log(`⏳ Înregistrarea pentru ${sess.id} nu este încă gata (status: ${recording.status})`);
-          }
-
-          // Actualizează sesiunea
-          await prisma.consultingSession.update({
-            where: { id: sess.id },
-            data: updateData
-          });
-
-          updatedCount++;
-          results.push({
-            sessionId: sess.id,
-            roomName: sess.dailyRoomName,
-            action: 'updated',
-            recordingStatus: recording.status,
-            hasDownloadLink: !!recording.download_link
-          });
-
-        } else {
-          console.log(`📭 Nu s-a găsit înregistrare pentru ${sess.id} (${sess.dailyRoomName})`);
-          
-          // Dacă sesiunea are înregistrare în notes, marchează-o ca având înregistrare oricum
-          if (sess.notes?.includes('Înregistrare începută') && sess.notes?.includes('Înregistrare oprită')) {
-            await prisma.consultingSession.update({
-              where: { id: sess.id },
-              data: {
-                hasRecording: true,
-                recordingStatus: 'READY', // Presupunem că e gata
-                recordingStarted: false,
-                updatedAt: new Date()
-              }
-            });
-
-            updatedCount++;
-            results.push({
-              sessionId: sess.id,
-              roomName: sess.dailyRoomName,
-              action: 'marked_from_notes',
-              note: 'Marcată ca având înregistrare din notes'
-            });
-
-            console.log(`📝 Sesiunea ${sess.id} marcată ca având înregistrare din notes`);
-          } else {
-            results.push({
-              sessionId: sess.id,
-              roomName: sess.dailyRoomName,
-              action: 'no_recording_found'
-            });
+          if (minDiff < 2 * 60 * 60 * 1000) {
+            recording = closest;
+            matchStrategy = "timestamp_closest_match";
+            console.log(`✅ STRATEGIA 4 - Closest match: ${closest.room_name}`);
           }
         }
+      }
 
-      } catch (error) {
-        console.error(`❌ Eroare la procesarea sesiunii ${sess.id}:`, error);
-        results.push({
-          sessionId: sess.id,
-          action: 'error',
-          error: (error as Error).message
+      if (recording) {
+        console.log(`✅ Înregistrare găsită pentru ${sess.id} prin ${matchStrategy}:`, recording);
+
+        // 1) Obține download_link dacă e finished
+        if (recording.status === "finished") {
+          const link = await fetchDownloadLink(recording.id);
+          recording.download_link = link;
+        }
+
+        // 2) Actualizează DB dacă e nevoie
+        const updateData: any = { updatedAt: new Date() };
+        if (recording.status === "finished" && recording.download_link) {
+          if (!sess.recordingUrl || sess.recordingUrl !== recording.download_link) {
+            updateData.recordingUrl = recording.download_link;
+            updateData.hasRecording = true;
+            updateData.recordingStatus = "READY";
+          }
+        } else if (recording.status === "in-progress") {
+          updateData.recordingStatus = "PROCESSING";
+          updateData.hasRecording = true;
+        } else if (recording.status === "failed") {
+          updateData.recordingStatus = "FAILED";
+          updateData.hasRecording = false;
+        }
+
+        if (Object.keys(updateData).length > 1) {
+          await prisma.consultingSession.update({
+            where: { id: sess.id },
+            data: updateData,
+          });
+          updatedCount++;
+          console.log(`📹 Sesiunea ${sess.id} actualizată`);
+        } else {
+          console.log(`ℹ️ Sesiunea ${sess.id} deja sincronizată`);
+        }
+
+        strategiesUsed[matchStrategy]++;
+
+      } else {
+        strategiesUsed.not_found++;
+        console.log(`❌ Nu s-a găsit înregistrare pentru ${sess.id}`);
+        await prisma.consultingSession.update({
+          where: { id: sess.id },
+          data: {
+            recordingStatus: "NOT_FOUND",
+            updatedAt: new Date(),
+          },
         });
       }
     }
 
-    console.log(`✅ Sincronizare completă: ${updatedCount} sesiuni actualizate`);
+    // Găsește orphan recordings
+    const orphanRecordings = dailyRecordings.filter(dr =>
+      !sessions.some(s => s.dailyRoomName === dr.room_name)
+    );
+    console.log(`⚠️ Orphan recordings: ${orphanRecordings.length}`);
 
     return NextResponse.json({
       success: true,
-      message: `Sincronizare completă: ${updatedCount} sesiuni actualizate din ${sessions.length} verificate`,
+      total: totalChecked,
       updated: updatedCount,
-      total: sessions.length,
-      results: results
+      dailyRecordings: dailyRecordings.length,
+      orphanRecordings: orphanRecordings.length,
+      strategiesUsed,
     });
 
   } catch (error) {
     console.error("❌ Error syncing recordings:", error);
     return NextResponse.json(
-      { error: "Eroare internă la sincronizarea înregistrărilor" },
+      { error: "Eroare internă", details: String(error) },
       { status: 500 }
     );
   }
 }
 
-// Funcție helper pentru obținerea tuturor înregistrărilor de la Daily.co
-async function fetchAllDailyRecordings(): Promise<any[] | null> {
+// Helper: listare + acces link
+async function fetchAllRecordingsFromDaily(): Promise<any[]> {
   const dailyApiKey = process.env.DAILY_API_KEY;
   if (!dailyApiKey) {
-    console.warn('⚠️ DAILY_API_KEY not configured');
-    return null;
+    console.warn("⚠️ DAILY_API_KEY not configured");
+    return [];
   }
 
-  try {
-    const response = await fetch('https://api.daily.co/v1/recordings', {
-      headers: {
-        'Authorization': `Bearer ${dailyApiKey}`,
-        'Content-Type': 'application/json'
-      }
-    });
+  // 1) Listează până la 100
+  const resp = await fetch("https://api.daily.co/v1/recordings?limit=100", {
+    headers: {
+      Authorization: `Bearer ${dailyApiKey}`,
+      "Content-Type": "application/json",
+    },
+  });
+  if (!resp.ok) {
+    console.error("❌ Eroare la fetch recordings:", resp.statusText);
+    return [];
+  }
+  const body = await resp.json();
+  const recordings = Array.isArray(body.data) ? body.data : [];
 
-    if (!response.ok) {
-      console.warn(`⚠️ Failed to fetch recordings from Daily.co: ${response.statusText}`);
+  console.log(`📊 Preluate ${recordings.length} înregistrări`);
+
+  return recordings;
+}
+
+// Helper: generează download_link
+async function fetchDownloadLink(recordingId: string): Promise<string | null> {
+  const dailyApiKey = process.env.DAILY_API_KEY!;
+  try {
+    const resp = await fetch(
+      `https://api.daily.co/v1/recordings/${recordingId}/access-link`,
+      {
+        headers: {
+          Authorization: `Bearer ${dailyApiKey}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+    if (!resp.ok) {
+      console.error(`❌ Eroare access-link (${recordingId}):`, resp.statusText);
       return null;
     }
-
-    const data = await response.json();
-    return data.data || [];
-
-  } catch (error) {
-    console.error('❌ Error fetching recordings from Daily.co:', error);
+    const json = await resp.json();
+    return json.download_link || null;
+  } catch (e) {
+    console.error("❌ Exception access-link:", e);
     return null;
   }
 }

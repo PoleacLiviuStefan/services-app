@@ -1,4 +1,4 @@
-// File: components/UserSessions.tsx
+// File: components/UserSessions.tsx - ACTUALIZAT
 
 "use client";
 
@@ -42,9 +42,12 @@ interface SessionItem {
   joinedAt: string | null;
   leftAt: string | null;
   
-  // Recording information
+  // Recording information - EXTENDED
   recordingUrl: string | null;
   hasRecording: boolean;
+  recordingAvailable: boolean;
+  recordingProcessing: boolean;
+  recordingStatus: string;
   
   // Daily.co integration
   dailyRoomName: string | null;
@@ -78,6 +81,8 @@ interface SessionsResponse {
     cancelled: number;
     noShow: number;
     withRecording: number;
+    recordingReady?: number;
+    recordingProcessing?: number;
   };
   providerId: string | null;
 }
@@ -89,7 +94,9 @@ export default function UserSessions() {
   const [isProvider, setIsProvider] = useState(false);
   const [stats, setStats] = useState<any>(null);
   const [loadingRecording, setLoadingRecording] = useState<string | null>(null);
-  const [syncingRecordings, setSyncingRecordings] = useState(false); // 🆕 Pentru sincronizare
+  const [syncingRecordings, setSyncingRecordings] = useState(false);
+  const [modalUrl, setModalUrl] = useState<string | null>(null);
+  
 
   useEffect(() => {
     fetch("/api/user/sessions", { credentials: "include" })
@@ -155,14 +162,57 @@ export default function UserSessions() {
 
   const formatPrice = (price: number | null) => {
     if (!price) return null;
-    return (price / 100).toFixed(2) + ' RON'; // presupunând că prețul e în bani
+    return (price / 100).toFixed(2) + ' RON';
   };
 
   const renderStars = (rating: number) => {
     return '⭐'.repeat(Math.floor(rating)) + (rating % 1 >= 0.5 ? '⭐' : '');
   };
 
-  // Funcție pentru obținerea link-ului de înregistrare
+const openModal = (url: string) => {
+    setModalUrl(url);
+  };
+  const closeModal = () => {
+    setModalUrl(null);
+  };
+
+
+  // Funcție pentru refresh manual a unei sesiuni specifice
+  const handleRefreshSession = async (sessionId: string) => {
+    try {
+      // Încearcă să obți din nou informațiile despre această sesiune specifică
+      const response = await fetch(`/api/video/session/${sessionId}/recording`, {
+        credentials: 'include'
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok && data.recordingUrl) {
+        // Actualizează sesiunea în lista locală
+        setSessions(sessions.map(sess => 
+          sess.id === sessionId 
+            ? { 
+                ...sess, 
+                recordingUrl: data.recordingUrl, 
+                recordingAvailable: true,
+                hasRecording: true,
+                recordingStatus: data.status || 'READY'
+              }
+            : sess
+        ));
+        alert('Sesiunea a fost actualizată! Înregistrarea este acum disponibilă.');
+      } else {
+        // Dacă nu găsește, rulează sync pentru toate sesiunile
+        console.log('Nu s-a găsit înregistrarea individual, rulează sync complet...');
+        await handleSyncRecordings();
+      }
+    } catch (error) {
+      console.error('Eroare la refresh sesiune:', error);
+      alert('Eroare la actualizarea sesiunii: ' + (error as Error).message);
+    }
+  };
+
+  // Funcție pentru obținerea link-ului de înregistrare - ÎMBUNĂTĂȚITĂ
   const handleGetRecording = async (sessionId: string) => {
     setLoadingRecording(sessionId);
     try {
@@ -170,22 +220,45 @@ export default function UserSessions() {
         credentials: 'include'
       });
       
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Eroare la obținerea înregistrării');
-      }
-      
       const data = await response.json();
+      
+      if (!response.ok) {
+        // Afișează informații de debug dacă sunt disponibile
+        let errorMessage = data.error || 'Eroare la obținerea înregistrării';
+        if (data.debug) {
+          errorMessage += `\n\nInfo debug:\n- Camera: ${data.debug.roomName}\n- Are URL în BD: ${data.debug.hasRecordingInDb}\n- Status: ${data.debug.recordingStatus}`;
+        }
+        throw new Error(errorMessage);
+      }
       
       if (data.recordingUrl) {
         // Deschide înregistrarea într-o fereastră nouă
         window.open(data.recordingUrl, '_blank');
+        
+        // Actualizează sesiunea în lista locală pentru a reflecta că înregistrarea e disponibilă
+        setSessions(sessions.map(sess => 
+          sess.id === sessionId 
+            ? { 
+                ...sess, 
+                recordingUrl: data.recordingUrl, 
+                recordingAvailable: true,
+                recordingStatus: data.status || 'READY'
+              }
+            : sess
+        ));
       } else {
-        alert('Înregistrarea nu este încă disponibilă. Te rugăm să încerci din nou în câteva minute.');
+        let message = 'Înregistrarea nu este încă disponibilă.';
+        if (data.note) {
+          message += '\n\n' + data.note;
+        }
+        if (data.debug) {
+          message += `\n\nInfo: Camera ${data.debug.roomName}`;
+        }
+        alert(message);
       }
     } catch (error) {
       console.error('Eroare la obținerea înregistrării:', error);
-      alert('Nu s-a putut obține înregistrarea. ' + (error as Error).message);
+      alert('Nu s-a putut obține înregistrarea.\n\n' + (error as Error).message);
     } finally {
       setLoadingRecording(null);
     }
@@ -227,13 +300,13 @@ export default function UserSessions() {
       setSyncingRecordings(false);
     }
   };
+
   async function handleCancelSession(sessionId: string) {
     if (!confirm('Ești sigur că vrei să anulezi această sesiune?')) {
       return;
     }
 
     try {
-      // Folosește endpoint-ul din /api/video/session-info/[sessionId]/route.ts
       const response = await fetch(`/api/video/session-info/${sessionId}`, {
         method: 'DELETE',
         credentials: 'include',
@@ -244,7 +317,6 @@ export default function UserSessions() {
         throw new Error(errorData.error || 'Eroare la anularea sesiunii');
       }
 
-      // Actualizează lista după anulare
       setSessions(sessions.map(sess => 
         sess.id === sessionId 
           ? { ...sess, status: 'CANCELLED' as const }
@@ -258,7 +330,6 @@ export default function UserSessions() {
     }
   }
 
-  // Funcție pentru forțarea închiderii unei sesiuni (doar provider)
   async function handleForceEndSession(sessionId: string) {
     if (!confirm('Ești sigur că vrei să închizi această sesiune definitiv?')) {
       return;
@@ -277,7 +348,6 @@ export default function UserSessions() {
         throw new Error(errorData.error || 'Eroare la închiderea sesiunii');
       }
 
-      // Actualizează lista după închidere
       setSessions(sessions.map(sess => 
         sess.id === sessionId 
           ? { ...sess, status: 'COMPLETED' as const, isFinished: true }
@@ -303,29 +373,65 @@ export default function UserSessions() {
           </div>
           {/* Buton sincronizare înregistrări pentru provideri */}
           {isProvider && (
-            <button
-              onClick={handleSyncRecordings}
-              disabled={syncingRecordings}
-              className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50 flex items-center gap-2 transition-colors"
-            >
-              {syncingRecordings ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  Sincronizare...
-                </>
-              ) : (
-                <>
-                  🔄 Sincronizează înregistrări
-                </>
+            <>
+              <button
+                onClick={handleSyncRecordings}
+                disabled={syncingRecordings}
+                className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50 flex items-center gap-2 transition-colors"
+                title="Sincronizează înregistrările folosind strategii multiple de căutare"
+              >
+                {syncingRecordings ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    Sincronizare inregistrari...
+                  </>
+                ) : (
+                  <>
+                    🔄 Sincronizare inregistrari
+                  </>
+                )}
+              </button>
+              
+              {/* Buton debug pentru dezvoltare */}
+              {process.env.NODE_ENV === 'development' && (
+                <button
+                  onClick={async () => {
+                    try {
+                      const response = await fetch('/api/video/sync-recordings', {
+                        method: 'GET',
+                        credentials: 'include',
+                      });
+                      const data = await response.json();
+                      
+                      const info = `Debug Info înregistrări:
+                      
+📊 Total înregistrări Daily.co: ${data.dailyRecordings}
+📋 Total sesiuni în BD: ${data.sessions}
+                      
+🔍 Primele camere Daily.co:
+${data.dailyRoomNames.join('\n')}
+
+📋 Sesiuni în BD:
+${data.sessionDetails.map((s: any) => `${s.roomName}: ${s.hasRecording ? '✅' : '❌'} (${s.recordingStatus})`).join('\n')}`;
+                      
+                      alert(info);
+                    } catch (error) {
+                      alert('Eroare la obținerea informațiilor debug: ' + error.message);
+                    }
+                  }}
+                  className="px-3 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 text-sm"
+                >
+                  🐛 Debug
+                </button>
               )}
-            </button>
+            </>
           )}
         </div>
       </div>
 
-      {/* Statistici */}
+      {/* Statistici - ACTUALIZATE */}
       {stats && (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4 mb-6">
           <div className="bg-blue-50 p-3 rounded-lg text-center">
             <div className="text-2xl font-bold text-blue-600">{stats.scheduled}</div>
             <div className="text-sm text-blue-800">Programate</div>
@@ -347,8 +453,16 @@ export default function UserSessions() {
             <div className="text-sm text-yellow-800">Absent</div>
           </div>
           <div className="bg-purple-50 p-3 rounded-lg text-center">
-            <div className="text-2xl font-bold text-purple-600">{stats.withRecording}</div>
-            <div className="text-sm text-purple-800">Cu înregistrare</div>
+            <div className="text-2xl font-bold text-purple-600">{stats.recordingReady || 0}</div>
+            <div className="text-sm text-purple-800">Înregistrări gata</div>
+          </div>
+          <div className="bg-orange-50 p-3 rounded-lg text-center">
+            <div className="text-2xl font-bold text-orange-600">{stats.recordingProcessing || 0}</div>
+            <div className="text-sm text-orange-800">În procesare</div>
+          </div>
+          <div className="bg-indigo-50 p-3 rounded-lg text-center">
+            <div className="text-2xl font-bold text-indigo-600">{stats.withRecording}</div>
+            <div className="text-sm text-indigo-800">Total înregistrări</div>
           </div>
         </div>
       )}
@@ -372,9 +486,11 @@ export default function UserSessions() {
                          (sess.status === 'SCHEDULED' || sess.status === 'IN_PROGRESS') &&
                          !sess.isFinished;
 
-          // Determină dacă sesiunea este completă și dacă există înregistrare
+          // Determină statusul înregistrării - LOGICĂ ÎMBUNĂTĂȚITĂ
           const isCompleted = sess.status === 'COMPLETED' || sess.isFinished;
-          const hasRecording = sess.hasRecording || sess.recordingUrl;
+          const hasRecordingAvailable = sess.recordingAvailable;
+          const hasRecordingProcessing = sess.recordingProcessing;
+          const hasAnyRecording = sess.hasRecording;
 
           return (
             <li
@@ -391,9 +507,20 @@ export default function UserSessions() {
                     <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(sess.status)}`}>
                       {getStatusText(sess.status)}
                     </span>
-                    {hasRecording && isCompleted && (
+                    {/* Indicatori de înregistrare ÎMBUNĂTĂȚIȚI */}
+                    {hasRecordingAvailable && isCompleted && (
                       <span className="px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
-                        📹 Înregistrat
+                        📹 Înregistrare gata
+                      </span>
+                    )}
+                    {hasRecordingProcessing && isCompleted && (
+                      <span className="px-2 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                        ⏳ În procesare
+                      </span>
+                    )}
+                    {hasAnyRecording && !hasRecordingAvailable && !hasRecordingProcessing && isCompleted && (
+                      <span className="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                        📹 Status necunoscut
                       </span>
                     )}
                   </div>
@@ -426,17 +553,15 @@ export default function UserSessions() {
                       </p>
                     )}
 
-                    {sess.duration && (
-                      <p>
-                        <span className="font-medium">Durată estimată:</span>{" "}
-                        {sess.duration} minute
-                      </p>
-                    )}
-
-                    {sess.actualDuration && (
+                    {sess.actualDuration ? (
                       <p>
                         <span className="font-medium">Durată reală:</span>{" "}
                         {sess.actualDuration} minute
+                      </p>
+                    ) : sess.duration && (
+                      <p>
+                        <span className="font-medium">Durată estimată:</span>{" "}
+                        {sess.duration} minute
                       </p>
                     )}
 
@@ -468,10 +593,23 @@ export default function UserSessions() {
                       </p>
                     )}
 
-                    {sess.notes && (
+                    {sess.notes && process.env.NODE_ENV === 'development' && (
                       <p>
                         <span className="font-medium">Notițe:</span>{" "}
                         <span className="text-xs">{sess.notes}</span>
+                      </p>
+                    )}
+
+                    {/* Debug info pentru înregistrări (doar în development) */}
+                    {process.env.NODE_ENV === 'development' && isCompleted && (
+                      <p className="text-xs bg-gray-100 p-2 rounded">
+                        <span className="font-medium">Debug înregistrare:</span><br/>
+                        • hasRecording: {sess.hasRecording.toString()}<br/>
+                        • recordingAvailable: {sess.recordingAvailable?.toString()}<br/>
+                        • recordingProcessing: {sess.recordingProcessing?.toString()}<br/>
+                        • recordingStatus: {sess.recordingStatus}<br/>
+                        • recordingUrl: {sess.recordingUrl ? 'DA' : 'NU'}<br/>
+                        • roomName: {sess.roomName || 'N/A'}
                       </p>
                     )}
 
@@ -503,10 +641,10 @@ export default function UserSessions() {
                     >
                       {sess.status === 'IN_PROGRESS' ? 'Reintră în sesiune' : 'Intră în sesiune'}
                     </Link>
-                  ) : isCompleted && hasRecording ? (
+                  ) : isCompleted && hasRecordingAvailable ? (
                     <button
-                      onClick={() => handleGetRecording(sess.id)}
-                      disabled={loadingRecording === sess.id}
+                      onClick={() => openModal(sess.recordingUrl!)}
+                      
                       className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 text-center transition-colors disabled:opacity-50 flex items-center gap-2 justify-center"
                     >
                       {loadingRecording === sess.id ? (
@@ -520,7 +658,29 @@ export default function UserSessions() {
                         </>
                       )}
                     </button>
-                  ) : isCompleted && !hasRecording ? (
+  
+                  ) : isCompleted && hasRecordingProcessing ? (
+                    <div className="px-4 py-2 bg-orange-100 text-orange-800 rounded text-center text-sm">
+                      ⏳ Înregistrare în procesare
+                    </div>
+                  ) : isCompleted && hasAnyRecording ? (
+                    <button
+                      onClick={() => handleGetRecording(sess.id)}
+                      disabled={loadingRecording === sess.id}
+                      className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 text-center transition-colors disabled:opacity-50 flex items-center gap-2 justify-center"
+                    >
+                      {loadingRecording === sess.id ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                          Se încarcă...
+                        </>
+                      ) : (
+                        <>
+                          🔍 Verifică înregistrarea
+                        </>
+                      )}
+                    </button>
+                  ) : isCompleted && !hasAnyRecording ? (
                     <div className="px-4 py-2 bg-gray-100 text-gray-600 rounded text-center text-sm">
                       Fără înregistrare
                     </div>
@@ -557,6 +717,8 @@ export default function UserSessions() {
                       Închide sesiunea
                     </button>
                   )}
+
+
                 </div>
               </div>
 
@@ -572,6 +734,29 @@ export default function UserSessions() {
           );
         })}
       </ul>
+       {/* Modal */}
+      {modalUrl && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center"
+          onClick={closeModal}
+        >
+          <div
+            className="bg-white rounded-lg overflow-hidden shadow-lg max-w-3xl w-full"
+            onClick={e => e.stopPropagation() /* previne închiderea la click în modal */}
+          >
+            <div className="flex justify-end p-2">
+              <button onClick={closeModal} className="text-gray-600 hover:text-gray-900">
+                ×
+              </button>
+            </div>
+            <div className="px-4 pb-4">
+              <video controls src={modalUrl} className="w-full rounded">
+                Browser-ul tău nu suportă video HTML5.
+              </video>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

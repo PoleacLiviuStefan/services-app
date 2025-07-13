@@ -30,7 +30,7 @@ export default function VideoSession() {
       .then(data => {
         if (data.error) {
           console.error('Error checking provider status:', data.error);
-          router.push('/dashboard');
+          router.push('/profil');
           return;
         }
         setIsProvider(data.isProvider || false);
@@ -151,7 +151,7 @@ export default function VideoSession() {
             credentials: 'include'
           });
         }
-        router.push('/dashboard');
+        router.push(`/servicii/video/sessions/${sessionId}/feedback`);
       });
 
       frameRef.current.on('participant-left', (event: any) => {
@@ -205,7 +205,7 @@ export default function VideoSession() {
   const handleLeave = async () => {
     if (frameRef.current) {
       await frameRef.current.leave();
-      router.push('/dashboard');
+      router.push('/profil');
     }
   };
 
@@ -257,7 +257,7 @@ export default function VideoSession() {
 
       setSessionEnded(true);
       alert('Sesiunea a fost închisă cu succes! Înregistrarea va fi disponibilă în câteva minute.');
-      router.push('/dashboard');
+      router.push('/profil');
       
     } catch (error) {
       console.error('Error ending session:', error);
@@ -292,7 +292,7 @@ export default function VideoSession() {
 
       {/* Controale pentru Provider */}
       {isProvider && (
-        <div className="absolute top-4 left-4 space-y-2">
+        <div className="absolute top-8 left-4 space-y-2">
           {/* Buton Leave */}
           <button
             onClick={handleLeave}
@@ -332,9 +332,9 @@ export default function VideoSession() {
 
       {/* Indicator de înregistrare */}
       {isRecording && (
-        <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 px-4 py-2 bg-red-600 text-white rounded-lg font-medium flex items-center gap-2 animate-pulse">
+        <div className="absolute bottom-12 left-1/2 transform -translate-x-1/2 px-4 py-2 bg-red-600 text-white rounded-lg font-medium flex items-center gap-2 animate-pulse">
           <div className="w-3 h-3 bg-white rounded-full animate-ping"></div>
-          ÎNREGISTRARE ÎN CURS - Controlează din toolbar Daily.co
+          ÎNREGISTRARE ÎN CURS
         </div>
       )}
     </div>
