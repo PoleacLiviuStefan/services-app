@@ -283,8 +283,8 @@ const ProfilePage: React.FC = () => {
       )}
 
       {/* Tabs */}
-      <div className="max-w-4xl mx-auto">
-        <nav className="flex border-b overflow-x-auto">
+      <div className="w-full lg:max-w-4xl mx-auto">
+        <nav className="flex justify-center flex-wrap border-b w-full">
           <button 
             onClick={() => handleTabChange('packages')} 
             className={`px-4 py-2 -mb-px text-sm font-medium whitespace-nowrap ${

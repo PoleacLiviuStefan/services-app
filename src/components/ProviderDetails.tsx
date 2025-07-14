@@ -429,7 +429,8 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
           <strong>Cont Stripe:</strong>{" "}
           {localProvider.stripeAccountId ? (
             <span className="text-green-700">
-              Conectat ({localProvider.stripeAccountId})
+              Conectat
+              {/* ({localProvider.stripeAccountId}) */}
             </span>
           ) : (
             <span className="text-red-600">Nu ești conectat</span>

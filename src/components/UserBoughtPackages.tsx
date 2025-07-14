@@ -104,7 +104,11 @@ export default function UserBoughtPackages({ isProvider }: UserBoughtPackagesPro
   if (loading) return <p>Se încarcă datele…</p>;
   if (error)   return <p className="text-red-500">Eroare: {error}</p>;
   if (!items.length) {
-    return <p>{isProvider ? "Nicio vânzare încă." : "Nu ai cumpărat niciun pachet."}</p>;
+    return (
+      <p className="text-center text-gray-500">
+        {isProvider ? "Nicio vânzare încă." : "Nu ai cumpărat niciun pachet."}
+      </p>
+    );
   }
 
   // 6. Render

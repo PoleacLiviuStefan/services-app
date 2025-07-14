@@ -140,7 +140,7 @@ const UserConversations: React.FC<UserConversationsProps> = ({ className = "" })
             Conversațiile tale vor apărea aici după ce trimiți primul mesaj.
           </p>
           <p className="text-sm text-gray-500">
-            Vizitează profilul unui provider și începe o conversație!
+            Vizitează profilul unui astrolog și începe o conversație!
           </p>
         </div>
       </div>

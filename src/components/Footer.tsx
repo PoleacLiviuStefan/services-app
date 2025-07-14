@@ -7,7 +7,7 @@ import mysticLogo from "../../public/mysticnoblack.svg";
 const Footer = () => {
   return (
     <div className="w-full h-full py-4  lg:h-[200px] bg-gradient-to-t from-secondaryColor to-primaryColor/80 via-primaryColor px-20">
-      <div className="flex flex-col text-white lg:flex-row h-full flex justify-between items-center">
+      <div className="flex flex-col space-y-4 text-white lg:flex-row h-full flex justify-between items-center">
         {/* Coloana 1: Logo */}
         <div className="flex flex-col items-center">
           <Link href="/">
@@ -22,7 +22,7 @@ const Footer = () => {
         </div>
 
         {/* Coloana 2: Elemente din Navbar */}
-        <div className="flex flex-col space-y-5">
+        <div className="flex flex-col items-center lg:items-start space-3 lg:space-y-5">
           <h4 className="text-xl font-semibold">Navigare</h4>
           <ul className="flex flex-col items-center lg:items-start space-y-3  text-white">
             {["ACASA", "ASTROLOGI", "DESPRE NOI"].map((item, index) => (
@@ -36,7 +36,7 @@ const Footer = () => {
         </div>
 
                 {/* Coloana 3: Elemente din Navbar */}
-        <div className="flex flex-col space-y-5">
+        <div className="flex flex-col items-center lg:items-start space-y-3 lg:space-y-5">
           <h4 className="text-xl font-semibold">Juridic</h4>
           <ul className="flex flex-col items-center lg:items-start space-y-3  text-white">
           

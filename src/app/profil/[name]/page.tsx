@@ -88,7 +88,7 @@ export default function PsychicProfile() {
 
   if (loading) {
     return (
-      <div className="p-4 max-w-4xl mx-auto bg-white shadow-lg rounded-lg space-y-6">
+      <div className="p-4 w-full lg:max-w-4xl mx-auto bg-white shadow-lg rounded-lg space-y-6">
         {/* …skeleton loading… */}
         <div className="flex flex-col lg:flex-row items-start animate-pulse space-x-4">
           <div className="bg-gray-200 rounded-lg h-[350px] w-[250px]" />
@@ -120,7 +120,7 @@ export default function PsychicProfile() {
   if (!provider) return null; // nu afișăm nimic dacă niciun provider nu a fost găsit
 
   return (
-    <div className="flex flex-col justify-center p-4 max-w-4xl mx-auto bg-white shadow-lg rounded-lg overflow-hidden gap-12 p-8">
+    <div className="flex flex-col justify-center p-4 w-full lg:max-w-4xl mx-auto bg-white shadow-lg rounded-lg overflow-hidden gap-12 p-8">
       <ProfileMainInfo provider={provider} />
       <ProviderProfileSection provider={provider} />
     </div>

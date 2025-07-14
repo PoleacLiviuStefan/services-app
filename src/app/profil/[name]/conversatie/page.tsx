@@ -350,7 +350,7 @@ export default function ConversatiePage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="max-w-4xl mx-auto h-screen flex flex-col">
+      <div className="w-full lg:max-w-4xl mx-auto h-screen flex flex-col">
         {/* Header */}
         <div className="bg-white shadow-sm p-4 border-b">
           <div className="flex items-center justify-between">

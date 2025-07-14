@@ -101,20 +101,6 @@ export async function POST(
         data: updateData
       });
 
-      // Actualizează pachetul utilizatorului dacă există
-      if (consultingSession.userPackage && consultingSession.packageId) {
-        await tx.userProviderPackage.update({
-          where: { id: consultingSession.packageId },
-          data: {
-            usedSessions: {
-              increment: 1
-            },
-            updatedAt: now
-          }
-        });
-
-        console.log(`📦 Pachet actualizat: sesiuni folosite incrementate pentru pachetul ${consultingSession.packageId}`);
-      }
 
       return updatedSession;
     });
