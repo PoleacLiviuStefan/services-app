@@ -4,7 +4,7 @@ import React, { Suspense } from 'react';
 import VideoSession from '@/components/VideoSession';
 
 export const metadata = {
-  title: 'Video Session',
+  title: 'Sesiune Video',
 };
 
 export default function Page() {

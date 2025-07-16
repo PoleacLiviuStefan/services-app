@@ -41,7 +41,7 @@ export default function FeedbackPage() {
       }
 
       // După succes, redirecționează la dashboard sau pagina de mulțumire
-      router.push('/profile');
+      router.push('/profil');
 
     } catch (err: any) {
       console.error('Feedback error:', err);
@@ -54,7 +54,7 @@ export default function FeedbackPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
       <div className="w-full max-w-md bg-white rounded-lg shadow-md p-6">
-        <h2 className="text-2xl font-bold mb-4 text-gray-800">Feedback sesiune</h2>
+        <h2 className="text-xl font-bold mb-4 text-gray-800">Feedback sesiune</h2>
 
         {error && <p className="text-red-500 mb-4">{error}</p>}
 

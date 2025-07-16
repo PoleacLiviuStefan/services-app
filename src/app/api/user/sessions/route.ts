@@ -1,4 +1,4 @@
-// /api/user/sessions/route.ts - ACTUALIZAT pentru dual view
+// /api/user/sessions/route.ts - ACTUALIZAT pentru dual view + verificare expirare
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
@@ -145,9 +145,48 @@ export async function GET(): Promise<NextResponse> {
       }
     }
 
-    // === PROCESARE ÎNREGISTRĂRI ===
+    // === VERIFICARE ȘI ACTUALIZARE SESIUNI EXPIRATE ===
     const allSessions = [...providerSessions, ...clientSessions];
+    const expiredSessionsToUpdate: string[] = [];
     
+    for (const sess of allSessions) {
+      const isExpired = checkIfSessionExpired(sess);
+      
+      if (isExpired && !sess.isFinished) {
+        console.log(`⏰ Sesiunea ${sess.id} este expirată și va fi marcată ca finalizată`);
+        expiredSessionsToUpdate.push(sess.id);
+        
+        // Actualizează obiectul local
+        sess.isFinished = true;
+        if (sess.status === 'SCHEDULED' || sess.status === 'IN_PROGRESS') {
+          sess.status = 'NO_SHOW';
+        }
+      }
+    }
+
+    // Actualizează sesiunile expirate în baza de date (în batch)
+    if (expiredSessionsToUpdate.length > 0) {
+      console.log(`🔄 Actualizez ${expiredSessionsToUpdate.length} sesiuni expirate în baza de date`);
+      
+      try {
+        await prisma.consultingSession.updateMany({
+          where: {
+            id: { in: expiredSessionsToUpdate }
+          },
+          data: {
+            isFinished: true,
+            status: 'NO_SHOW',
+            updatedAt: new Date()
+          }
+        });
+        
+        console.log(`✅ Sesiuni expirate actualizate cu succes`);
+      } catch (error) {
+        console.error(`❌ Eroare la actualizarea sesiunilor expirate:`, error);
+      }
+    }
+
+    // === PROCESARE ÎNREGISTRĂRI ===
     // Pentru fiecare sesiune completă, încearcă să obții înregistrarea
     for (const sess of allSessions) {
       const isSessionCompleted = sess.status === 'COMPLETED' || sess.isFinished;
@@ -295,6 +334,7 @@ export async function GET(): Promise<NextResponse> {
       completed: sessions.filter(s => s.status === 'COMPLETED').length,
       cancelled: sessions.filter(s => s.status === 'CANCELLED').length,
       noShow: sessions.filter(s => s.status === 'NO_SHOW').length,
+      expired: sessions.filter(s => s.isFinished && s.status === 'NO_SHOW').length,
       withRecording: sessions.filter(s => s.hasRecording || s.recordingProcessing).length,
       recordingReady: sessions.filter(s => s.recordingAvailable).length,
       recordingProcessing: sessions.filter(s => s.recordingProcessing).length
@@ -308,7 +348,8 @@ export async function GET(): Promise<NextResponse> {
     console.log(`📈 Statistici DUAL pentru user ${userId}:`, {
       provider: stats.provider,
       client: stats.client,
-      total: mappedProviderSessions.length + mappedClientSessions.length
+      total: mappedProviderSessions.length + mappedClientSessions.length,
+      expiredSessions: expiredSessionsToUpdate.length
     });
 
     return NextResponse.json({
@@ -317,7 +358,8 @@ export async function GET(): Promise<NextResponse> {
       totalCount: mappedProviderSessions.length + mappedClientSessions.length,
       isProvider,
       stats,
-      providerId: provider?.id || null
+      providerId: provider?.id || null,
+      expiredSessionsUpdated: expiredSessionsToUpdate.length
     });
 
   } catch (error) {
@@ -332,6 +374,56 @@ export async function GET(): Promise<NextResponse> {
       { status: 500 }
     );
   }
+}
+
+// === FUNCȚIE PENTRU VERIFICAREA EXPIRĂRII SESIUNILOR ===
+function checkIfSessionExpired(session: any): boolean {
+  const now = new Date();
+  
+  // Dacă sesiunea este deja finalizată, nu e expirată
+  if (session.isFinished) {
+    return false;
+  }
+  
+  // Dacă sesiunea este deja completată sau anulată, nu e expirată
+  if (['COMPLETED', 'CANCELLED'].includes(session.status)) {
+    return false;
+  }
+  
+  // Verifică dacă există endDate și este în trecut
+  if (session.endDate) {
+    const endDate = new Date(session.endDate);
+    if (endDate < now) {
+      console.log(`⏰ Sesiunea ${session.id} expirată prin endDate: ${endDate.toISOString()} < ${now.toISOString()}`);
+      return true;
+    }
+  }
+  
+  // Verifică dacă există startDate și sunt trecute mai mult de 2 ore (buffer pentru întârzieri)
+  if (session.startDate) {
+    const startDate = new Date(session.startDate);
+    const bufferTime = 2 * 60 * 60 * 1000; // 2 ore în milisecunde
+    const expirationTime = new Date(startDate.getTime() + bufferTime);
+    
+    if (expirationTime < now) {
+      console.log(`⏰ Sesiunea ${session.id} expirată prin startDate + buffer: ${expirationTime.toISOString()} < ${now.toISOString()}`);
+      return true;
+    }
+  }
+  
+  // Verifică dacă există scheduledAt și sunt trecute mai mult de 2 ore
+  if (session.scheduledAt) {
+    const scheduledAt = new Date(session.scheduledAt);
+    const bufferTime = 2 * 60 * 60 * 1000; // 2 ore în milisecunde
+    const expirationTime = new Date(scheduledAt.getTime() + bufferTime);
+    
+    if (expirationTime < now) {
+      console.log(`⏰ Sesiunea ${session.id} expirată prin scheduledAt + buffer: ${expirationTime.toISOString()} < ${now.toISOString()}`);
+      return true;
+    }
+  }
+  
+  return false;
 }
 
 // Funcție helper pentru a obține înregistrarea de la Daily.co

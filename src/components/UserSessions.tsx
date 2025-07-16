@@ -197,39 +197,6 @@ export default function UserSessions() {
     setModalUrl(null);
   };
 
-  const handleRefreshSession = async (sessionId: string) => {
-    try {
-      const response = await fetch(`/api/video/session/${sessionId}/recording`, {
-        credentials: 'include'
-      });
-      
-      const data = await response.json();
-      
-      if (response.ok && data.recordingUrl) {
-        // Actualizează sesiunea în ambele liste
-        const updateSession = (sess: SessionItem) => 
-          sess.id === sessionId 
-            ? { 
-                ...sess, 
-                recordingUrl: data.recordingUrl, 
-                recordingAvailable: true,
-                hasRecording: true,
-                recordingStatus: data.status || 'READY'
-              }
-            : sess;
-            
-        setProviderSessions(prev => prev.map(updateSession));
-        setClientSessions(prev => prev.map(updateSession));
-        alert('Sesiunea a fost actualizată! Înregistrarea este acum disponibilă.');
-      } else {
-        console.log('Nu s-a găsit înregistrarea individual, rulează sync complet...');
-        await handleSyncRecordings();
-      }
-    } catch (error) {
-      console.error('Eroare la refresh sesiune:', error);
-      alert('Eroare la actualizarea sesiunii: ' + (error as Error).message);
-    }
-  };
 
   const handleGetRecording = async (sessionId: string) => {
     setLoadingRecording(sessionId);
@@ -418,7 +385,7 @@ export default function UserSessions() {
               key={sess.id}
               className="border rounded-lg p-4 shadow-sm bg-white hover:shadow-md transition-shadow"
             >
-              <div className="flex flex-col lg:flex-row justify-center lg:justify-between items-start w-full space-x-4">
+              <div className="flex flex-col lg:flex-row justify-center lg:justify-between items-start w-full space-x-4 space-y-4">
                 <div className="flex-1">
                   <div className="flex items-center gap-3 mb-2">
                     <h3 className="font-semibold  text-lg leading-[1]">
@@ -478,7 +445,7 @@ export default function UserSessions() {
                       </p>
                     )}
 
-                    {sess.actualDuration ? (
+                    {/* {sess.actualDuration ? (
                       <p>
                         <span className="font-medium">Durată reală:</span>{" "}
                         {sess.actualDuration} minute
@@ -488,14 +455,14 @@ export default function UserSessions() {
                         <span className="font-medium">Durată estimată:</span>{" "}
                         {sess.duration} minute
                       </p>
-                    )}
+                    )} */}
 
-                    {sess.totalPrice && (
+                    {/* {sess.totalPrice && (
                       <p>
                         <span className="font-medium">Preț:</span>{" "}
                         {formatPrice(sess.totalPrice)}
                       </p>
-                    )}
+                    )} */}
 
                     {sess.rating && (
                       <p>
@@ -514,7 +481,7 @@ export default function UserSessions() {
                 </div>
 
                 {/* Acțiuni */}
-                <div className="flex flex-col space-y-2">
+                <div className="flex flex-col items-center w-full lg:w-auto space-y-2">
                   {canJoin ? (
                     <Link
                       href={{

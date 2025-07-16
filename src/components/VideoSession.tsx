@@ -151,7 +151,7 @@ export default function VideoSession() {
             credentials: 'include'
           });
         }
-        router.push(`/servicii/video/sessions/${sessionId}/feedback`);
+        router.push(`/servicii/video/sessions/${sessionId}/recenzie`);
       });
 
       frameRef.current.on('participant-left', (event: any) => {
@@ -276,19 +276,19 @@ export default function VideoSession() {
       
       {/* Timer */}
       {params.get('end') && (
-        <div className="absolute top-4 right-4 p-2 bg-gray-800 bg-opacity-75 rounded-lg text-white font-mono">
-          <span className="text-2xl font-bold mr-1">{minutesLeft}</span>
+        <div className="absolute bottom-12 left-8 p-2 bg-gray-800 bg-opacity-75 rounded-lg text-white font-mono">
+          <span className="text-lg lg:text-xl font-bold mr-1">{minutesLeft}</span>
           <span>minute rămase</span>
         </div>
       )}
 
       {/* Informații sesiune */}
-      {sessionData && (
+      {/* {sessionData && (
         <div className="absolute top-4 right-4 mr-32 p-2 bg-gray-800 bg-opacity-75 rounded-lg text-white text-sm">
           <div>Camera: {sessionData.roomName}</div>
           <div>Status: {sessionData.status}</div>
         </div>
-      )}
+      )} */}
 
       {/* Controale pentru Provider */}
       {isProvider && (
@@ -296,7 +296,7 @@ export default function VideoSession() {
           {/* Buton Leave */}
           <button
             onClick={handleLeave}
-            className="block w-full px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg font-medium transition-colors duration-200 flex items-center gap-2"
+            className="block w-full px-2 py-1 bg-gray-600 hover:bg-gray-700 text-white rounded-lg font-medium transition-colors duration-200 flex items-center gap-2"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
@@ -307,7 +307,7 @@ export default function VideoSession() {
           {/* Buton Închidere Sesiune */}
           <button
             onClick={handleEndSession}
-            className="block w-full px-4 py-2 bg-red-700 hover:bg-red-800 text-white rounded-lg font-medium transition-colors duration-200 flex items-center gap-2"
+            className="block w-full px-2 py-1 bg-red-700 hover:bg-red-800 text-white rounded-lg font-medium transition-colors duration-200 flex items-center gap-2"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -331,12 +331,12 @@ export default function VideoSession() {
       )}
 
       {/* Indicator de înregistrare */}
-      {isRecording && (
+      {/* {isRecording && (
         <div className="absolute bottom-12 left-1/2 transform -translate-x-1/2 px-4 py-2 bg-red-600 text-white rounded-lg font-medium flex items-center gap-2 animate-pulse">
           <div className="w-3 h-3 bg-white rounded-full animate-ping"></div>
           ÎNREGISTRARE ÎN CURS
         </div>
-      )}
+      )} */}
     </div>
   );
 }
