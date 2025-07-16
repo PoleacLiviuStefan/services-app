@@ -127,7 +127,7 @@ export default function UserBillingDetails() {
   if (error)   return <p className="text-red-500">{error}</p>;
 
   return (
-    <div className="bg-white shadow rounded p-6">
+    <div className="bg-white shadow rounded p-6 lg:max-w-4xl">
       <h3 className="text-lg font-semibold mb-4">Detalii facturare</h3>
 
       <div className="mb-4">

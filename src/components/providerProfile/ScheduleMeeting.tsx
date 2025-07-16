@@ -9,7 +9,7 @@ import Button from "../atoms/button";
 import BuyPackageModal from "../BuyPackageModal";
 import BoughtPackageCard from "../BoughtPackageCard";
 import { BoughtPackage } from "@/interfaces/PackageInterface";
-import { FaVideo, FaExclamationTriangle, FaRedo } from "react-icons/fa";
+import { FaVideo, FaExclamationTriangle, FaRedo, FaArrowLeft, FaCheck, FaClock, FaCalendarAlt } from "react-icons/fa";
 import Link from "next/link";
 
 interface ScheduleMeetingProps {
@@ -20,6 +20,14 @@ interface ScheduleMeetingProps {
   locale?: string;
 }
 
+// Enum pentru stările componentei
+enum ScheduleStep {
+  LOADING = 'loading',
+  SELECT_PACKAGE = 'select_package',
+  SCHEDULING = 'scheduling',
+  COMPLETED = 'completed'
+}
+
 export default function ScheduleMeeting({
   providerId,
   services,
@@ -27,6 +35,13 @@ export default function ScheduleMeeting({
   locale = "ro",
 }: ScheduleMeetingProps) {
   console.log("found services", services);
+  
+  // State pentru flow-ul de programare
+  const [currentStep, setCurrentStep] = useState<ScheduleStep>(ScheduleStep.LOADING);
+  const [selectedPackage, setSelectedPackage] = useState<BoughtPackage | null>(null);
+  const [schedulingInProgress, setSchedulingInProgress] = useState(false);
+  
+  // State-uri existente
   const [schedulingUrl, setSchedulingUrl] = useState<string>("");
   const [scriptReady, setScriptReady] = useState(false);
   const [scriptError, setScriptError] = useState(false);
@@ -65,9 +80,8 @@ export default function ScheduleMeeting({
           clearTimeout(scriptTimeoutRef.current);
         }
       }
-    }, 500); // verifică la fiecare 500ms
+    }, 500);
 
-    // Oprește polling după 10 secunde
     setTimeout(() => {
       clearInterval(pollInterval);
     }, 10000);
@@ -103,30 +117,86 @@ export default function ScheduleMeeting({
         setBoughtPackages(boughtPackages);
         setCurrentPage(1);
         setErrorBought(null);
+        
+        // Determinăm pasul următor în funcție de pachete
+        const validPackages = boughtPackages.filter(
+          (pkg: BoughtPackage) => pkg.totalSessions - pkg.usedSessions > 0
+        );
+        
+        if (validPackages.length === 0) {
+          setCurrentStep(ScheduleStep.SELECT_PACKAGE); // Va arăta mesajul de cumpărare
+        } else {
+          setCurrentStep(ScheduleStep.SELECT_PACKAGE);
+        }
       })
-      .catch((err) => setErrorBought((err as Error).message))
+      .catch((err) => {
+        setErrorBought((err as Error).message);
+        setCurrentStep(ScheduleStep.SELECT_PACKAGE);
+      })
       .finally(() => setLoadingBought(false));
   }, [providerId]);
 
-  // 3) Calendly message handler
+  // 3) Calendly message handler - ACTUALIZAT pentru a include packageId
   const onCalendlyMessage = useCallback(
     (e: MessageEvent) => {
-      if (!e.data) return;
+      if (!e.data || !selectedPackage) return;
+      
       let msg: any;
       try {
         msg = typeof e.data === "string" ? JSON.parse(e.data) : e.data;
       } catch {
         return;
       }
+      
       if (msg.event === "calendly.event_scheduled" && msg.payload?.event?.uri) {
+        setSchedulingInProgress(true);
+        
+        // Trimite packageId selectat la backend
         fetch("/api/calendly/event-scheduled", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ providerId, scheduledEventUri: msg.payload.event.uri }),
+          body: JSON.stringify({ 
+            providerId, 
+            scheduledEventUri: msg.payload.event.uri,
+            packageId: selectedPackage.id // 🆕 Adăugăm packageId
+          }),
+        })
+        .then(async (res) => {
+          if (!res.ok) {
+            throw new Error('Eroare la procesarea programării');
+          }
+          return res.json();
+        })
+        .then((data) => {
+          console.log('Programare confirmată:', data);
+          
+          // Actualizează pachetul local pentru a reflecta sesiunea folosită
+          setSelectedPackage(prev => prev ? {
+            ...prev,
+            usedSessions: prev.usedSessions + 1
+          } : null);
+          
+          // Actualizează lista de pachete
+          setBoughtPackages(prev => 
+            prev.map(pkg => 
+              pkg.id === selectedPackage.id 
+                ? { ...pkg, usedSessions: pkg.usedSessions + 1 }
+                : pkg
+            )
+          );
+          
+          setCurrentStep(ScheduleStep.COMPLETED);
+        })
+        .catch((error) => {
+          console.error('Eroare la confirmare:', error);
+          // Aici poți adăuga un toast sau alert pentru eroare
+        })
+        .finally(() => {
+          setSchedulingInProgress(false);
         });
       }
     },
-    [providerId]
+    [providerId, selectedPackage]
   );
   
   useEffect(() => {
@@ -140,12 +210,12 @@ export default function ScheduleMeeting({
   );
   const totalPages = Math.ceil(validPackages.length / pageSize);
 
-  // 5) Initialize Calendly widget
+  // 5) Initialize Calendly widget - ACTUALIZAT pentru a include packageId în URL
   useEffect(() => {
-    // only once script has loaded, Calendly URL is present, and there are valid packages
     if (
       !scriptReady ||
-      validPackages.length === 0 ||
+      currentStep !== ScheduleStep.SCHEDULING ||
+      !selectedPackage ||
       !schedulingUrl ||
       !checkCalendlyAvailability()
     ) {
@@ -155,20 +225,37 @@ export default function ScheduleMeeting({
     const container = document.getElementById("calendly-inline");
     if (!container) return;
 
-    // clear out any previous widget
     container.innerHTML = "";
 
     try {
-      // init widget
+      // 🆕 Adăugăm packageId în URL-ul Calendly pentru tracking
+      const calendlyUrl = `${schedulingUrl}?locale=${locale}&package_id=${selectedPackage.id}`;
+      
       (window as any).Calendly.initInlineWidget({
-        url: `${schedulingUrl}?locale=${locale}`,
+        url: calendlyUrl,
         parentElement: container,
       });
     } catch (error) {
       console.error("Eroare la inițializarea widget-ului Calendly:", error);
       setScriptError(true);
     }
-  }, [scriptReady, schedulingUrl, validPackages.length, locale, checkCalendlyAvailability]);
+  }, [scriptReady, schedulingUrl, selectedPackage, currentStep, locale, checkCalendlyAvailability]);
+
+  // Funcții pentru navigare
+  const handlePackageSelect = (pkg: BoughtPackage) => {
+    setSelectedPackage(pkg);
+    setCurrentStep(ScheduleStep.SCHEDULING);
+  };
+
+  const handleBackToPackageSelection = () => {
+    setSelectedPackage(null);
+    setCurrentStep(ScheduleStep.SELECT_PACKAGE);
+  };
+
+  const handleStartNewBooking = () => {
+    setSelectedPackage(null);
+    setCurrentStep(ScheduleStep.SELECT_PACKAGE);
+  };
 
   // Funcție pentru retry
   const handleRetryScript = () => {
@@ -178,21 +265,18 @@ export default function ScheduleMeeting({
       setScriptLoading(true);
       setScriptReady(false);
       
-      // Resetează timeout-ul
       if (scriptTimeoutRef.current) {
         clearTimeout(scriptTimeoutRef.current);
       }
       
-      // Pornește din nou polling-ul
       pollForCalendly();
       
-      // Setează un nou timeout
       scriptTimeoutRef.current = setTimeout(() => {
         if (!scriptReady) {
           setScriptLoading(false);
           setScriptError(true);
         }
-      }, 15000); // 15 secunde timeout
+      }, 15000);
     }
   };
 
@@ -211,11 +295,23 @@ export default function ScheduleMeeting({
   };
 
   const renderCalendlyStatus = () => {
+    if (schedulingInProgress) {
+      return (
+        <div className="p-4 text-center text-blue-600">
+          <div className="animate-spin inline-block w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full mb-2"></div>
+          <p>Se procesează programarea...</p>
+          <p className="text-sm text-gray-500 mt-1">
+            Te rugăm să aștepți confirmarea
+          </p>
+        </div>
+      );
+    }
+
     if (scriptLoading && !scriptError) {
       return (
         <div className="p-4 text-center text-gray-600">
           <div className="animate-spin inline-block w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full mb-2"></div>
-          <p>Se încarcă scriptul Calendly…</p>
+          <p>Se încarcă calendarul...</p>
           <p className="text-sm text-gray-500 mt-1">
             Încercare {retryCountRef.current + 1} din {maxRetries + 1}
           </p>
@@ -249,16 +345,239 @@ export default function ScheduleMeeting({
       );
     }
 
-    if (scriptReady && !schedulingUrl) {
-      return (
-        <div className="p-4 text-center text-gray-600">
-          <div className="animate-pulse">Se încarcă calendarul…</div>
-        </div>
-      );
-    }
-
     return null;
   };
+
+  // 🆕 Componentă pentru afișarea pachetelor cu selecție
+  const renderPackageSelection = () => (
+    <div className="max-w-2xl mx-auto">
+      <div className="text-center mb-6">
+        <h2 className="text-2xl font-bold text-gray-900 mb-2">
+          Selectează pachetul pentru programare
+        </h2>
+        <p className="text-gray-600">
+          Alege unul dintre pachetele tale pentru a programa o ședință
+        </p>
+      </div>
+
+      {validPackages.length === 0 ? (
+        <div className="text-center p-6 border rounded-lg bg-yellow-50 border-yellow-200">
+          <Icon className="text-yellow-600 mb-4 mx-auto">
+            <FaExclamationTriangle size={32} />
+          </Icon>
+          <h3 className="text-lg font-medium text-yellow-800 mb-2">
+            Nu ai pachete disponibile
+          </h3>
+          <p className="text-yellow-700 mb-4">
+            Pentru a programa o ședință, trebuie să cumperi mai întâi un pachet.
+          </p>
+          {services.length > 0 && (
+            <Button 
+              onClick={() => openBuyModal(services[0])}
+              className="bg-primaryColor text-white px-6 py-3 rounded-md hover:bg-primaryColor/90 flex items-center gap-2 mx-auto"
+            >
+              <FaVideo />
+              Cumpără Pachete
+            </Button>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {validPackages
+            .slice((currentPage - 1) * pageSize, currentPage * pageSize)
+            .map((pkg) => {
+              const remainingSessions = pkg.totalSessions - pkg.usedSessions;
+              const progressPercent = (pkg.usedSessions / pkg.totalSessions) * 100;
+              
+              return (
+                <div
+                  key={pkg.id}
+                  className="border border-gray-200 rounded-lg p-4 hover:border-blue-300 hover:shadow-md transition-all cursor-pointer"
+                  onClick={() => handlePackageSelect(pkg)}
+                >
+                  <div className="flex justify-between items-start mb-3">
+                    <div>
+                      <h4 className="font-semibold text-lg text-gray-900">
+                        {pkg.providerPackage?.service || 'Serviciu'}
+                      </h4>
+                      <p className="text-sm text-gray-600">
+                        <span className="font-medium">{remainingSessions}</span> sesiuni rămase 
+                        din <span className="font-medium">{pkg.totalSessions}</span>
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-lg font-bold text-green-600">
+                        {pkg.providerPackage?.price || 0} lei
+                      </span>
+                      {pkg.expiresAt && (
+                        <p className="text-xs text-gray-500">
+                          Expiră: {new Date(pkg.expiresAt).toLocaleDateString('ro-RO')}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  
+                  {/* Progress bar */}
+                  <div className="mb-3">
+                    <div className="bg-gray-200 rounded-full h-2">
+                      <div
+                        className={`h-2 rounded-full transition-all ${
+                          remainingSessions <= 1 ? 'bg-red-500' :
+                          remainingSessions <= 3 ? 'bg-orange-500' : 'bg-blue-500'
+                        }`}
+                        style={{ width: `${progressPercent}%` }}
+                      />
+                    </div>
+                  </div>
+                  
+                  <div className="flex justify-between items-center">
+                    <div className="flex items-center text-sm text-gray-600">
+                      <FaClock className="mr-1" />
+                      <span>Click pentru a programa</span>
+                    </div>
+                    
+                    {remainingSessions <= 1 && (
+                      <span className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded-full">
+                        Ultima sesiune
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex justify-center items-center space-x-4 mt-6">
+              <button
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50 hover:bg-gray-300"
+              >
+                Anterior
+              </button>
+              <span className="text-sm text-gray-600">
+                Pagina {currentPage} din {totalPages}
+              </span>
+              <button
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50 hover:bg-gray-300"
+              >
+                Următor
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+
+  // 🆕 Componentă pentru programare
+  const renderScheduling = () => (
+    <div className="max-w-2xl mx-auto">
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center">
+            <Icon className="text-blue-600 mr-3">
+              <FaCheck size={20} />
+            </Icon>
+            <div>
+              <h4 className="font-semibold text-blue-900">
+                Pachet selectat: {selectedPackage?.providerPackage?.service}
+              </h4>
+              <p className="text-sm text-blue-700">
+                {(selectedPackage?.totalSessions || 0) - (selectedPackage?.usedSessions || 0)} sesiuni rămase
+              </p>
+            </div>
+          </div>
+          <Button
+            onClick={handleBackToPackageSelection}
+            className="text-blue-600 hover:text-blue-800 flex items-center gap-1 text-sm"
+          >
+            <FaArrowLeft size={12} />
+            Schimbă
+          </Button>
+        </div>
+      </div>
+
+      <h3 className="text-xl font-semibold mb-4 text-center">
+        <FaCalendarAlt className="inline mr-2" />
+        Selectează data și ora
+      </h3>
+      
+      <div
+        id="calendly-inline"
+        className="w-full h-[600px] border border-gray-300 rounded-lg bg-white"
+      >
+        {renderCalendlyStatus()}
+      </div>
+    </div>
+  );
+
+  // 🆕 Componentă pentru confirmare
+  const renderCompleted = () => (
+    <div className="max-w-md mx-auto text-center">
+      <div className="bg-green-50 border border-green-200 rounded-lg p-6">
+        <Icon className="text-green-600 mb-4 mx-auto">
+          <FaCheck size={48} />
+        </Icon>
+        <h3 className="text-xl font-semibold text-green-900 mb-2">
+          Programare confirmată!
+        </h3>
+        <p className="text-green-700 mb-4">
+          Ședința ta a fost programată cu succes. Vei primi un email de confirmare.
+        </p>
+        <p className="text-sm text-gray-600 mb-4">
+          <strong>Pachet folosit:</strong> {selectedPackage?.providerPackage?.service}<br/>
+          <strong>Sesiuni rămase:</strong> {(selectedPackage?.totalSessions || 0) - (selectedPackage?.usedSessions || 0)}
+        </p>
+        <Button
+          onClick={handleStartNewBooking}
+          className="bg-blue-500 text-white px-6 py-2 rounded hover:bg-blue-600"
+        >
+          Programează altă ședință
+        </Button>
+      </div>
+    </div>
+  );
+
+  // Loading state
+  if (currentStep === ScheduleStep.LOADING || loadingBought) {
+    return (
+      <div className="max-w-2xl mx-auto text-center p-8">
+        <div className="animate-spin inline-block w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full mb-4"></div>
+        <p className="w-full text-center">Se încarcă...</p>
+      </div>
+    );
+  }
+
+  // Error state
+  if (errorBought) {
+    return (
+      <div className="max-w-2xl mx-auto text-center p-8">
+        <Icon className="text-red-500 mb-4 mx-auto">
+          <FaExclamationTriangle size={32} />
+        </Icon>
+        {errorBought === "Nu am găsit pachetele cumpărate" ? (
+          <>
+            <h3 className="text-xl font-semibold mb-2">Autentificare necesară</h3>
+            <p className="mb-4">Trebuie să te autentifici pentru a putea programa o ședință.</p>
+            <Link href="/autentificare">
+              <Button className="bg-primaryColor text-white px-6 py-3 rounded">
+                Autentificare
+              </Button>
+            </Link>
+          </>
+        ) : (
+          <>
+            <h3 className="text-xl font-semibold mb-2">Eroare</h3>
+            <p>{errorBought}</p>
+          </>
+        )}
+      </div>
+    );
+  }
 
   return (
     <>
@@ -269,91 +588,10 @@ export default function ScheduleMeeting({
         />
       </Head>
 
-      <div className="max-w-2xl mx-auto mb-6">
-        {loadingBought && <p>Se încarcă pachetele cumpărate…</p>}
-        {errorBought && (
-          <p>
-            {errorBought === "Nu am găsit pachetele cumpărate" ? (
-              <>
-                <p>
-                  Autentifică-te mai întâi pentru a putea programa o ședință
-                </p>
-                <Link href="/autentificare">
-                  <Button>Autentificare</Button>
-                </Link>
-              </>
-            ) : (
-              `Eroare: ${errorBought}`
-            )}
-          </p>
-        )}
-
-        {/* No valid packages */}
-        {!loadingBought && !errorBought && validPackages.length === 0 && (
-          <>
-            <h3 className="text-xl font-semibold mb-2">
-              Alege un pachet înainte de a programa
-            </h3>
-            <div className="flex flex-wrap justify-center gap-4">
-              {services.length === 0 ? (
-                <p>Momentan nu există servicii disponibile.</p>
-              ) : (
-                <Button onClick={() => openBuyModal(services[0])}  className="flex items-center gap-2 border-2 border-primaryColor text-primaryColor px-6 py-3 rounded-md hover:bg-primaryColor hover:text-white transition-all duration-300">
-                  <Icon>
-                    <FaVideo size={20} />
-                  </Icon>
-                  Cumpără Ședințe
-                </Button>
-              )}
-            </div>
-          </>
-        )}
-
-        {/* Show valid packages and scheduling */}
-        {!loadingBought && !errorBought && validPackages.length > 0 && (
-          <>
-            <h3 className="text-xl font-semibold mb-2">Pachetele tale</h3>
-            <ul className="space-y-2 mb-4">
-              {validPackages
-                .slice((currentPage - 1) * pageSize, currentPage * pageSize)
-                .map((pkg) => (
-                  <BoughtPackageCard key={pkg.id} pkg={pkg} />
-                ))}
-            </ul>
-
-            <div className="flex justify-center items-center space-x-4 mb-4">
-              <button
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                disabled={currentPage === 1}
-                className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50"
-              >
-                Anterior
-              </button>
-              <span>
-                Pagina {currentPage} din {totalPages}
-              </span>
-              <button
-                onClick={() =>
-                  setCurrentPage((p) => Math.min(totalPages, p + 1))
-                }
-                disabled={currentPage === totalPages}
-                className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50"
-              >
-                Următor
-              </button>
-            </div>
-
-            <h3 className="text-xl font-semibold mb-2">
-              Programează-ți o ședință
-            </h3>
-            <div
-              id="calendly-inline"
-              className="w-full h-[600px] border-dashed border-2 border-gray-300"
-            >
-              {renderCalendlyStatus()}
-            </div>
-          </>
-        )}
+      <div className="mb-6">
+        {currentStep === ScheduleStep.SELECT_PACKAGE && renderPackageSelection()}
+        {currentStep === ScheduleStep.SCHEDULING && renderScheduling()}
+        {currentStep === ScheduleStep.COMPLETED && renderCompleted()}
       </div>
 
       {showBuyModal && selectedService && (
@@ -362,6 +600,11 @@ export default function ScheduleMeeting({
           packages={services}
           isOpen={showBuyModal}
           onClose={() => setShowBuyModal(false)}
+          onSuccess={() => {
+            setShowBuyModal(false);
+            // Refresh packages după cumpărare
+            window.location.reload();
+          }}
         />
       )}
 
@@ -370,7 +613,6 @@ export default function ScheduleMeeting({
         strategy="afterInteractive"
         onLoad={() => {
           console.log("Calendly widget script loaded");
-          // Verifică dacă Calendly este cu adevărat disponibil
           if (checkCalendlyAvailability()) {
             setScriptReady(true);
             setScriptLoading(false);
@@ -378,7 +620,6 @@ export default function ScheduleMeeting({
               clearTimeout(scriptTimeoutRef.current);
             }
           } else {
-            // Dacă script-ul s-a încărcat dar Calendly nu e disponibil, începe polling
             pollForCalendly();
           }
         }}
@@ -388,16 +629,14 @@ export default function ScheduleMeeting({
           setScriptLoading(false);
         }}
         onReady={() => {
-          // Setează un timeout pentru cazul în care onLoad nu se apelează
           scriptTimeoutRef.current = setTimeout(() => {
             if (!scriptReady && !checkCalendlyAvailability()) {
               console.warn("Timeout pentru încărcarea script-ului Calendly");
               setScriptLoading(false);
               setScriptError(true);
             }
-          }, 15000); // 15 secunde timeout
+          }, 15000);
           
-          // Începe și polling-ul ca backup
           pollForCalendly();
         }}
       />

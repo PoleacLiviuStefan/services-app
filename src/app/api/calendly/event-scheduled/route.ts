@@ -1,4 +1,4 @@
-// /api/calendly/event-scheduled/route.ts - FIXED VERSION
+// /api/calendly/event-scheduled/route.ts - FINAL VERSION
 export const runtime = "nodejs";
 
 import { NextResponse } from 'next/server';
@@ -77,7 +77,6 @@ async function createDailyRoom(
       start_cloud_recording_opts: {
         layout: { preset: 'active-speaker' },
       },
-      // is_owner: true,
     },
   });
 
@@ -90,9 +89,81 @@ async function createDailyRoom(
   };
 }
 
+// 🆕 Funcție pentru validarea și obținerea pachetului
+async function validateUserPackage(packageId: string, userId: string, providerId: string) {
+  console.log(`🔍 Validare pachet: ${packageId} pentru user ${userId} și provider ${providerId}`);
+  
+  const userPackage = await prisma.userProviderPackage.findFirst({
+    where: {
+      id: packageId,
+      userId: userId,
+      providerId: providerId,
+    },
+    include: {
+      providerPackage: {
+        select: {
+          service: true,
+          price: true
+        }
+      },
+      provider: {
+        select: {
+          mainSpecialityId: true,
+          user: {
+            select: {
+              name: true,
+              email: true
+            }
+          }
+        }
+      },
+      _count: {
+        select: {
+          sessions: {
+            where: {
+              wasPackageSession: true,
+              status: {
+                not: 'CANCELLED'
+              }
+            }
+          }
+        }
+      }
+    }
+  });
+
+  if (!userPackage) {
+    console.error(`❌ Pachetul ${packageId} nu a fost găsit sau nu aparține user-ului ${userId}`);
+    throw new Error('Pachetul nu a fost găsit sau nu vă aparține');
+  }
+
+  const actualUsedSessions = userPackage._count.sessions;
+  const remainingSessions = userPackage.totalSessions - actualUsedSessions;
+
+  console.log(`📊 Statistici pachet: ${actualUsedSessions}/${userPackage.totalSessions} sesiuni folosite, ${remainingSessions} rămase`);
+
+  if (remainingSessions <= 0) {
+    console.error(`❌ Pachetul ${packageId} nu mai are sesiuni disponibile (${actualUsedSessions}/${userPackage.totalSessions})`);
+    throw new Error('Pachetul nu mai are sesiuni disponibile');
+  }
+
+  if (userPackage.expiresAt && userPackage.expiresAt < new Date()) {
+    console.error(`❌ Pachetul ${packageId} a expirat la ${userPackage.expiresAt}`);
+    throw new Error('Pachetul a expirat');
+  }
+
+  console.log(`✅ Pachet valid: ${userPackage.providerPackage?.service} - ${remainingSessions} sesiuni rămase`);
+  
+  return {
+    userPackage,
+    actualUsedSessions,
+    remainingSessions
+  };
+}
+
 export async function POST(request: Request) {
   try {
-    console.log('📅 Procesare eveniment Calendly');
+    console.log('📅 Procesare eveniment Calendly cu pachete');
 
     // AUTENTIFICARE OBLIGATORIE - ia utilizatorul curent
     const session = await getServerSession(authOptions);
@@ -107,12 +178,19 @@ export async function POST(request: Request) {
     const currentUserId = session.user.id;
     console.log(`👤 Client autentificat: ${currentUserId}`);
 
-    const { providerId, scheduledEventUri } = await request.json();
+    // 🆕 Parsează datele cu packageId
+    const { providerId, scheduledEventUri, packageId } = await request.json();
 
-    console.log(`📊 Calendly event data:`, { providerId, scheduledEventUri, clientId: currentUserId });
+    console.log(`📊 Calendly event data:`, { 
+      providerId, 
+      scheduledEventUri, 
+      packageId, // 🆕 
+      clientId: currentUserId 
+    });
 
     // VALIDARE INPUT
     if (!providerId) {
+      console.error('❌ providerId lipsește');
       return NextResponse.json(
         { error: 'providerId este obligatoriu' },
         { status: 400 }
@@ -120,8 +198,18 @@ export async function POST(request: Request) {
     }
 
     if (!scheduledEventUri) {
+      console.error('❌ scheduledEventUri lipsește');
       return NextResponse.json(
         { error: 'scheduledEventUri este obligatoriu' },
+        { status: 400 }
+      );
+    }
+
+    // 🆕 Validare packageId
+    if (!packageId) {
+      console.error('❌ packageId lipsește');
+      return NextResponse.json(
+        { error: 'packageId este obligatoriu pentru programare' },
         { status: 400 }
       );
     }
@@ -189,6 +277,14 @@ export async function POST(request: Request) {
 
     console.log(`✅ Provider găsit: ${provider.user.name || provider.user.email} (${provider.id})`);
     console.log(`✅ Specialitate: ${provider.mainSpeciality.name}`);
+
+    // 🆕 VALIDEAZĂ PACHETUL ÎNAINTE DE CALENDLY
+    console.log('🔍 Validare pachet...');
+    const { userPackage, actualUsedSessions, remainingSessions } = await validateUserPackage(
+      packageId, 
+      currentUserId, 
+      provider.id
+    );
 
     // ————————————————————————————————
     // REFRESH TOKEN HELPER
@@ -329,64 +425,136 @@ export async function POST(request: Request) {
 
     // Creează camera Daily.co
     console.log('🎥 Creare cameră Daily.co...');
-    const dailyRoom = await createDailyRoom(sessionId,endTime);
+    const dailyRoom = await createDailyRoom(sessionId, endTime);
 
     // Calculează durata estimată (în minute)
     const estimatedDuration = Math.round(
       (endTime.getTime() - startTime.getTime()) / (1000 * 60)
     );
 
-    // Salvează ședința în baza de date
-    console.log('💾 Salvare sesiune în baza de date...');
-    const sessionRecord = await prisma.consultingSession.create({
-      data: {
-        id: sessionId,
-        providerId: provider.id,
-        clientId: clientUser.id, // Folosește utilizatorul curent autentificat
-        specialityId: provider.mainSpeciality.id,
-        
-        // Daily.co details
-        dailyRoomName: dailyRoom.roomName,
-        dailyRoomUrl: dailyRoom.roomUrl,
-        dailyRoomId: dailyRoom.roomId,
-        dailyDomainName: dailyRoom.domainName,
-        dailyCreatedAt: new Date(),
-        
-        // Session details
-        startDate: startTime,
-        endDate: endTime,
-        duration: estimatedDuration,
-        calendlyEventUri: scheduledEventUri,
-        scheduledAt: new Date(),
-        status: 'SCHEDULED',
-        
-        totalPrice: Math.round(provider.mainSpeciality.price * 100), // în bani
-        notes: `Sesiune programată prin Calendly pentru ${clientUser.name || clientUser.email}. Calendly client: ${clientName} (${clientEmail})`,
-        createdAt: new Date(),
-        updatedAt: new Date(),
+    // 🆕 CREEAZĂ SESIUNEA ÎN TRANZACȚIE CU PACHETE ȘI INCREMENTAREA SESIUNILOR FOLOSITE
+    console.log('💾 Salvare sesiune în baza de date cu pachete...');
+    
+    const result = await prisma.$transaction(async (tx) => {
+      // Verifică din nou disponibilitatea pachetului în tranzacție (pentru concurență)
+      const currentPackage = await tx.userProviderPackage.findUnique({
+        where: { id: packageId },
+        include: {
+          _count: {
+            select: {
+              sessions: {
+                where: {
+                  wasPackageSession: true,
+                  status: { not: 'CANCELLED' }
+                }
+              }
+            }
+          }
+        }
+      });
+
+      if (!currentPackage) {
+        console.error(`❌ Pachetul ${packageId} nu mai există`);
+        throw new Error('Pachetul nu mai există');
       }
+
+      const currentUsedSessions = currentPackage._count.sessions;
+      if (currentUsedSessions >= currentPackage.totalSessions) {
+        console.error(`❌ Pachetul ${packageId} nu mai are sesiuni disponibile în tranzacție (${currentUsedSessions}/${currentPackage.totalSessions})`);
+        throw new Error('Pachetul nu mai are sesiuni disponibile');
+      }
+
+      // Calculează numărul sesiunii în pachet
+      const sessionNumber = currentUsedSessions + 1;
+
+      console.log(`📝 Creez sesiunea #${sessionNumber} din pachetul ${userPackage.providerPackage?.service}`);
+
+      // Creează sesiunea de consultanță cu toate detaliile
+      const sessionRecord = await tx.consultingSession.create({
+        data: {
+          id: sessionId,
+          providerId: provider.id,
+          clientId: clientUser.id,
+          specialityId: provider.mainSpeciality.id,
+          
+          // 🆕 Detalii pachete
+          packageId: packageId,
+          wasPackageSession: true,
+          packageSessionNumber: sessionNumber,
+          
+          // Daily.co details
+          dailyRoomName: dailyRoom.roomName,
+          dailyRoomUrl: dailyRoom.roomUrl,
+          dailyRoomId: dailyRoom.roomId,
+          dailyDomainName: dailyRoom.domainName,
+          dailyCreatedAt: new Date(),
+          
+          // Session details
+          startDate: startTime,
+          endDate: endTime,
+          duration: estimatedDuration,
+          calendlyEventUri: scheduledEventUri,
+          scheduledAt: new Date(),
+          status: 'SCHEDULED',
+          
+          totalPrice: Math.round(provider.mainSpeciality.price * 100), // în bani
+          notes: `Sesiune #${sessionNumber} din pachetul ${userPackage.providerPackage?.service}. Programată prin Calendly pentru ${clientUser.name || clientUser.email}. Calendly client: ${clientName} (${clientEmail})`,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        }
+      });
+
+      // 🆕 INCREMENTEAZĂ SESIUNILE FOLOSITE ÎN PACHET
+      const updatedPackage = await tx.userProviderPackage.update({
+        where: { id: packageId },
+        data: {
+          usedSessions: { increment: 1 }
+        }
+      });
+
+      console.log(`📊 Incrementat usedSessions pentru pachetul ${packageId}: ${currentPackage.usedSessions} → ${updatedPackage.usedSessions}`);
+
+      return {
+        session: sessionRecord,
+        packageInfo: {
+          sessionNumber,
+          remainingSessions: remainingSessions - 1,
+          totalSessions: userPackage.totalSessions,
+          packageName: userPackage.providerPackage?.service,
+          packageId: packageId,
+          usedSessions: updatedPackage.usedSessions,
+          oldUsedSessions: currentPackage.usedSessions
+        }
+      };
     });
 
-    console.log(`✅ Ședință salvată cu succes:`);
+    console.log(`✅ Ședință salvată cu succes din pachet:`);
     console.log(`   - ID: ${sessionId}`);
     console.log(`   - Client: ${clientUser.name || clientUser.email} (${clientUser.id})`);
     console.log(`   - Provider: ${provider.user.name || provider.user.email} (${provider.id})`);
     console.log(`   - Specialitate: ${provider.mainSpeciality.name}`);
     console.log(`   - Camera Daily.co: ${dailyRoom.roomUrl}`);
     console.log(`   - Timp: ${startTime.toISOString()}`);
+    console.log(`   - 🆕 Pachet: ${result.packageInfo.packageName} (sesiunea #${result.packageInfo.sessionNumber})`);
+    console.log(`   - 🆕 Sesiuni folosite: ${result.packageInfo.oldUsedSessions} → ${result.packageInfo.usedSessions}`);
+    console.log(`   - 🆕 Sesiuni rămase: ${result.packageInfo.remainingSessions}`);
 
     return NextResponse.json({
       success: true,
-      sessionId: sessionRecord.id,
-      roomUrl: sessionRecord.dailyRoomUrl,
-      joinUrl: `/servicii/video/sessions/${sessionRecord.id}`,
-      message: 'Ședința a fost programată cu succes din Calendly',
+      sessionId: result.session.id,
+      roomUrl: result.session.dailyRoomUrl,
+      joinUrl: `/servicii/video/sessions/${result.session.id}`,
+      message: `Sesiunea #${result.packageInfo.sessionNumber} a fost programată cu succes din pachetul ${result.packageInfo.packageName}!`,
       details: {
-        sessionId: sessionRecord.id,
-        startDate: sessionRecord.startDate?.toISOString(),
-        endDate: sessionRecord.endDate?.toISOString(),
-        duration: sessionRecord.duration,
+        sessionId: result.session.id,
+        startDate: result.session.startDate?.toISOString(),
+        endDate: result.session.endDate?.toISOString(),
+        duration: result.session.duration,
         speciality: provider.mainSpeciality.name,
+        
+        // 🆕 Informații pachete
+        packageInfo: result.packageInfo,
+        
         client: {
           id: clientUser.id,
           name: clientUser.name || clientUser.email,
@@ -414,15 +582,39 @@ export async function POST(request: Request) {
 
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error('❌ Eroare la salvarea ședinței din Calendly:', message);
+    console.error('❌ Eroare la salvarea ședinței din Calendly cu pachete:', message);
     console.error('Stack trace:', err instanceof Error ? err.stack : 'N/A');
+    
+    // 🆕 Returnează erori specifice pentru pachete
+    if (message.includes('Pachetul nu mai are sesiuni') || message.includes('nu aparține')) {
+      return NextResponse.json(
+        { 
+          error: 'Package validation failed',
+          message: message,
+          code: 'PACKAGE_ERROR'
+        },
+        { status: 409 }
+      );
+    }
+
+    if (message.includes('expirat')) {
+      return NextResponse.json(
+        { 
+          error: 'Package expired',
+          message: message,
+          code: 'PACKAGE_EXPIRED'
+        },
+        { status: 410 }
+      );
+    }
     
     // Returnează erori mai specifice bazate pe tipul erorii
     if (message.includes('Daily.co') || message.includes('DAILY_API_KEY')) {
       return NextResponse.json(
         { 
           error: 'Video room creation failed',
-          message: 'Unable to create video room. Please try again later.'
+          message: 'Unable to create video room. Please try again later.',
+          code: 'DAILY_ERROR'
         },
         { status: 503 }
       );
@@ -432,7 +624,8 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { 
           error: 'Calendly integration error',
-          message: 'Unable to fetch event details from Calendly. Please check provider Calendly configuration.'
+          message: 'Unable to fetch event details from Calendly. Please check provider Calendly configuration.',
+          code: 'CALENDLY_ERROR'
         },
         { status: 502 }
       );
@@ -442,6 +635,7 @@ export async function POST(request: Request) {
       { 
         error: 'Session creation failed',
         message: 'An unexpected error occurred while creating your session.',
+        code: 'UNKNOWN_ERROR',
         details: process.env.NODE_ENV === 'development' ? message : undefined
       },
       { status: 500 }

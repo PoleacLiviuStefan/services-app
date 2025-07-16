@@ -204,6 +204,11 @@ model UserProviderPackage {
   providerPackage  ProviderPackage         @relation("ProviderPackageUsers", fields: [packageId], references: [id], onDelete: Cascade)
   sessions         ConsultingSession[]     @relation("SessionUserPackage")
   invoices         Invoice[]               @relation("PackageInvoices")
+
+  // 🆕 Index-uri optimizate pentru căutarea pachetelor disponibile
+  @@index([userId, providerId, usedSessions, expiresAt])  // pentru getAvailablePackages()
+  @@index([usedSessions, totalSessions])                  // pentru filtrarea rapidă
+  @@index([expiresAt])                                    // pentru găsirea celor care expiră
 }
 
 model Invoice {
@@ -287,14 +292,18 @@ model ConsultingSession {
   feedback         String?                 // feedback text
 
   // Recording management
-  recordingStarted     Boolean   @default(false)  // 🆕 dacă înregistrarea e activă
-  recordingStartedAt   DateTime?                  // 🆕 când a început înregistrarea
-  recordingStoppedAt   DateTime?                  // 🆕 când s-a oprit înregistrarea
-  hasRecording         Boolean   @default(false)  // 🆕 dacă sesiunea are înregistrare
-  recordingDuration    Int?                       // 🆕 durata înregistrării în minute
-  recordingFileSize    BigInt?                    // 🆕 mărimea fișierului în bytes
-  recordingStatus      String?                    // 🆕 statusul procesării ("PROCESSING", "READY", etc.)
-  endedBy              String?                    // 🆕 ID-ul user-ului care a închis sesiunea
+  recordingStarted     Boolean   @default(false)  // dacă înregistrarea e activă
+  recordingStartedAt   DateTime?                  // când a început înregistrarea
+  recordingStoppedAt   DateTime?                  // când s-a oprit înregistrarea
+  hasRecording         Boolean   @default(false)  // dacă sesiunea are înregistrare
+  recordingDuration    Int?                       // durata înregistrării în minute
+  recordingFileSize    BigInt?                    // mărimea fișierului în bytes
+  recordingStatus      String?                    // statusul procesării ("PROCESSING", "READY", etc.)
+  endedBy              String?                    // ID-ul user-ului care a închis sesiunea
+
+  // 🆕 Câmpuri noi pentru tracking pachete
+  wasPackageSession    Boolean   @default(false)  // dacă sesiunea a fost plătită prin pachet
+  packageSessionNumber Int?                       // numărul sesiunii din pachet (1, 2, 3...)
 
   // Relații
   provider         Provider                @relation("ProviderSessions", fields: [providerId], references: [id], onDelete: Cascade)
@@ -314,10 +323,15 @@ model ConsultingSession {
   createdAt        DateTime                @default(now())
   updatedAt        DateTime                @default(now()) @updatedAt
 
+  // Index-uri optimizate
   @@index([status])
   @@index([startDate])
   @@index([providerId, clientId])
   @@index([dailyRoomName])
+  @@index([packageId, status])           // 🆕 pentru căutări rapide după pachet și status
+  @@index([wasPackageSession])           // 🆕 pentru filtrarea sesiunilor din pachete
+  @@index([scheduledAt])                 // 🆕 pentru sortarea cronologică
+
   @@map("ConsultingSession")
 }
 

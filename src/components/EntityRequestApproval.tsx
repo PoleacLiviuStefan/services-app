@@ -49,19 +49,19 @@ const EntityRequestApproval: React.FC<EntityRequestApprovalProps> = ({
               className="bg-green-400 text-white px-3 py-1 rounded hover:bg-green-500"
               onClick={onApprove}
             >
-              Approve
+              Aproba
             </Button>
             <Button
               className="bg-red-400 text-white px-3 py-1 rounded hover:bg-red-500"
               onClick={onReject}
             >
-              Reject
+              Respinge
             </Button>
           </>
         ) : status === 'APPROVED' ? (
-          <span className="text-green-600 font-medium">Approved</span>
+          <span className="text-green-600 font-medium">Aprobat</span>
         ) : (
-          <span className="text-red-600 font-medium">Rejected</span>
+          <span className="text-red-600 font-medium">Respins</span>
         )}
       </div>
     </div>
