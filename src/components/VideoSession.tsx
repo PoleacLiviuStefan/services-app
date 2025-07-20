@@ -232,7 +232,7 @@ export default function VideoSession() {
             credentials: 'include'
           });
         }
-        router.push(`/servicii/video/sessions/${sessionId}/recenzie`);
+        router.push(`/profil`);
       };
 
       frameRef.current.on('participant-left', (event: any) => {
