@@ -528,7 +528,7 @@ providerSessions = await prisma.consultingSession.findMany({
 
           // Timezone metadata
           timezone: {
-            dbTimezone: process.env.NODE_ENV === 'production' ? 'UTC+3' : 'UTC',
+            dbTimezone: 'UTC',
             serverTimezone: 'UTC',
             environment: process.env.NODE_ENV,
             needsConversion: false,
@@ -735,7 +735,7 @@ providerSessions = await prisma.consultingSession.findMany({
         serverTimeUTC: nowUTC.toISOString(),
         adjustedTime: nowAdjusted.toISOString(),
         environment: process.env.NODE_ENV,
-        dbTimezone: isProduction ? 'UTC+3 (România/Calendly)' : 'UTC (Development)',
+        dbTimezone:  'UTC (Development)',
         serverTimezone: 'UTC',
         offsetHours: ROMANIA_OFFSET / (60 * 60 * 1000),
         offsetApplied: isProduction,
