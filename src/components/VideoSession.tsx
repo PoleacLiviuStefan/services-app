@@ -20,7 +20,7 @@ export default function VideoSession() {
   const [sessionData, setSessionData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [isIntentionalLeave, setIsIntentionalLeave] = useState(false);
-
+  const initialized = useRef(false);
   // Verifică dacă user-ul curent este provider pentru această sesiune
   useEffect(() => {
     if (sessionId && session?.user?.id) {
@@ -78,9 +78,10 @@ export default function VideoSession() {
       status !== 'authenticated' ||
       !roomUrl ||
       !containerRef.current ||
-      loading
+      loading || 
+      initialized.current
     ) return;
-    if (frameRef.current) return;
+    
 
     (async () => {
       const { default: Daily } = await import('@daily-co/daily-js');
@@ -88,7 +89,7 @@ export default function VideoSession() {
         showLeaveButton: true,
         showFullscreenButton: false,
       });
-      
+      initialized.current = true;
       await frameRef.current.join({
         url: roomUrl,
         userName: session.user?.name || 'Guest',

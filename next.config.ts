@@ -43,20 +43,20 @@ const nextConfig = {
           { key: 'Permissions-Policy', value: 'camera=(self), microphone=(self), display-capture=(self)' },
 
           // CSP so that Daily.co and your bucket are allowed
-          { 
-            key: 'Content-Security-Policy', 
+          {
+            key: 'Content-Security-Policy',
             value: [
               "default-src 'self' mysticgold.app",
-              "img-src 'self' https://bucket-production-71d6.up.railway.app https://lh3.googleusercontent.com data:",
-              "script-src 'self' https://mysticgold.daily.co",
+              "img-src     'self' https://bucket-production-71d6.up.railway.app https://lh3.googleusercontent.com data:",
+              "script-src  'self' https://mysticgold.daily.co",
               "connect-src 'self' https://api.daily.co https://mysticgold.daily.co",
-              "frame-src 'self' https://mysticgold.daily.co",
-              "media-src 'self' https://mysticgold.daily.co",
+              "frame-src   'self' https://mysticgold.daily.co",
+              "media-src   'self' https://mysticgold.daily.co",
             ].join('; ')
           }
-        ],
-      },
-    ]
+        ]
+      }
+    ];
   },
   webpack: (config, { isServer }) => {
     if (!isServer) {
