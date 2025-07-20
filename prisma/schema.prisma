@@ -249,9 +249,6 @@ model Tool {
   mainForProviders Provider[] @relation("ProviderMainTool")
 }
 
-// Doar partea ConsultingSession actualizată din schema.prisma
-// Înlocuiește modelul ConsultingSession existent cu această versiune
-
 model ConsultingSession {
   id               String                  @id @default(uuid())
   providerId       String
@@ -311,6 +308,9 @@ model ConsultingSession {
   sessionAccount   Account?                @relation("SessionAccount", fields: [accountId], references: [id], onDelete: SetNull)
   speciality       Speciality              @relation("SpecialitySessions", fields: [specialityId], references: [id], onDelete: Cascade)
   userPackage      UserProviderPackage?    @relation("SessionUserPackage", fields: [packageId], references: [id])
+  
+  // 🆕 Relație cu recenziile (o sesiune poate avea o recenzie)
+  review           Review?                 @relation("SessionReview")
 
   // Legacy fields pentru compatibilitate (pot fi eliminate după migrare)
   accountId        Int?
@@ -335,6 +335,7 @@ model ConsultingSession {
   @@map("ConsultingSession")
 }
 
+// 🔧 MODEL REVIEW ACTUALIZAT CU LEGĂTURA DIRECTĂ LA SESIUNE
 model Review {
   id           String    @id @default(uuid())
   comment      String?
@@ -342,10 +343,21 @@ model Review {
   rating       Float
   service      Service   @default(MEET)
 
+  // Legăturile existente
   fromUserId   String
   fromUser     User      @relation("ReviewFromUser", fields: [fromUserId], references: [id], onDelete: Cascade)
   providerId   String
   provider     Provider  @relation("ReviewForProvider", fields: [providerId], references: [id], onDelete: Cascade)
+  
+  // 🆕 LEGĂTURA DIRECTĂ CU SESIUNEA
+  sessionId    String    @unique  // O sesiune = o recenzie maximă
+  session      ConsultingSession @relation("SessionReview", fields: [sessionId], references: [id], onDelete: Cascade)
+
+  // 🆕 Index pentru căutări rapide
+  @@index([fromUserId, providerId])      // căutare după client și provider
+  @@index([providerId, rating])          // pentru statistici provider
+  @@index([sessionId])                   // căutare după sesiune (deja unique)
+  @@index([date])                        // sortare cronologică
 }
 
 model Account {

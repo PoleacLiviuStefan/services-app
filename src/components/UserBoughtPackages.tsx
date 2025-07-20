@@ -174,11 +174,7 @@ export default function UserBoughtPackages({ isProvider }: UserBoughtPackagesPro
             {viewMode === 'client' ? '🛍️' : '💰'}
           </div>
           <p className="text-gray-500 text-lg">{noItemsMessage}</p>
-          {isProvider && viewMode === 'client' && (
-            <p className="text-sm text-gray-400 mt-2">
-              Poți cumpăra pachete de la alți furnizori pentru a-ți îmbunătăți serviciile.
-            </p>
-          )}
+
         </div>
       </div>
     );

@@ -93,6 +93,7 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
   const [selectedPackages, setSelectedPackages] = useState<string[]>(
     provider.providerPackages.map((p) => p.id)
   );
+  const [loading,setLoading]=useState<boolean>(false);
 
   const [newSpecialityName, setNewSpecialityName] = useState("");
   const [newToolName, setNewToolName] = useState("");

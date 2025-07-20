@@ -1,4 +1,4 @@
-// /api/calendly/event-scheduled/route.ts - FINAL VERSION
+// /api/calendly/event-scheduled/route.ts - VERSIUNE FINALĂ CU EXTENSIE 5 MIN ȘI FIX RECORDING
 export const runtime = "nodejs";
 
 import { NextResponse } from 'next/server';
@@ -15,6 +15,8 @@ async function createDailyRoom(
   roomName: string;
   roomId: string;
   domainName: string;
+  originalEndTime: Date;
+  extendedEndTime: Date;
 }> {
   if (!process.env.DAILY_API_KEY) {
     throw new Error('DAILY_API_KEY is required');
@@ -22,10 +24,14 @@ async function createDailyRoom(
   const dailyApiKey = process.env.DAILY_API_KEY;
   const dailyDomain = process.env.DAILY_DOMAIN ?? 'mysticgold.daily.co';
 
-  // 1. calulează timestamp-ul de expirare
-  const exp = Math.floor(endTime.getTime() / 1000);
+  // 1. 🆕 EXTINDE DURATA CU 5 MINUTE PENTRU BUFFER
+  const extendedEndTime = new Date(endTime.getTime() + 5 * 60 * 1000); // +5 minute
+  const exp = Math.floor(extendedEndTime.getTime() / 1000);
+  
+  console.log(`⏰ Timp original (Calendly): ${endTime.toISOString()}`);
+  console.log(`⏰ Timp extins (+5 min buffer): ${extendedEndTime.toISOString()}`);
 
-  // 2. configurarea camerei (fără recording_layout)
+  // 2. configurarea camerei
   const roomProperties = {
     enable_recording: 'cloud',
     max_participants: 10,
@@ -66,19 +72,25 @@ async function createDailyRoom(
     properties: roomProperties,
   });
 
-  // 4. creare token cu înregistrare automată și layout
+  // 4. 🔧 FIX RECORDING ERROR: Folosește layout suportat pentru cloud recording
   const { token } = await apiPost('meeting-tokens', {
     properties: {
       room_name: room.name,
-      exp: Math.floor(Date.now() / 1000) + 24 * 3600,
+      exp: Math.floor(Date.now() / 1000) + 24 * 3600, // ⏰ TOKEN EXPIRĂ DUPĂ 24 ORE
       eject_at_token_exp: true,
       enable_recording: 'cloud',
       start_cloud_recording: true,
       start_cloud_recording_opts: {
-        layout: { preset: 'active-speaker' },
+        layout: { preset: 'grid' }, // 🔧 FIX: Schimbat din 'active-speaker' în 'grid' (suportat pentru cloud recording)
       },
     },
   });
+
+  console.log(`🎥 Cameră Daily.co creată cu succes:`);
+  console.log(`   - Room: ${room.name}`);
+  console.log(`   - Expiry: ${extendedEndTime.toISOString()} (+5 min buffer)`);
+  console.log(`   - Token expiră: ${new Date((Math.floor(Date.now() / 1000) + 24 * 3600) * 1000).toISOString()} (24h de la crearea token-ului)`);
+  console.log(`   - Recording layout: grid (fix pentru active-speaker error)`);
 
   // 5. returnează URL-ul cu token
   return {
@@ -86,6 +98,8 @@ async function createDailyRoom(
     roomName: room.name,
     roomId: room.id,
     domainName: room.domain_name ?? dailyDomain,
+    originalEndTime: endTime,
+    extendedEndTime: extendedEndTime,
   };
 }
 
@@ -163,7 +177,7 @@ async function validateUserPackage(packageId: string, userId: string, providerId
 
 export async function POST(request: Request) {
   try {
-    console.log('📅 Procesare eveniment Calendly cu pachete');
+    console.log('📅 Procesare eveniment Calendly cu pachete și extensie 5 minute');
 
     // AUTENTIFICARE OBLIGATORIE - ia utilizatorul curent
     const session = await getServerSession(authOptions);
@@ -377,14 +391,16 @@ export async function POST(request: Request) {
     const eventDetails = await response.json();
     const eventData = eventDetails.resource;
 
-    // Extrage informațiile necesare
-    const startTime = new Date(eventData.start_time);
-    const endTime = new Date(eventData.end_time);
+    // 🔧 EXTRAGE INFORMAȚIILE DE TIMP (RĂMÂN UTC+3 CA ÎN CALENDLY)
+    // Calendly trimite datele în ISO format, probabil deja în timezone-ul configurat
+    const startTime = new Date(eventData.start_time); // Păstrează așa cum vine din Calendly
+    const originalEndTime = new Date(eventData.end_time);     // Păstrează așa cum vine din Calendly
     const clientEmail = eventData.event_memberships?.[0]?.user_email;
     const clientName = eventData.event_memberships?.[0]?.user_name;
 
-    console.log(`⏰ Timp programat: ${startTime.toISOString()} - ${endTime.toISOString()}`);
+    console.log(`⏰ Timp programat (din Calendly): ${startTime.toISOString()} - ${originalEndTime.toISOString()}`);
     console.log(`📧 Client din Calendly: ${clientName} (${clientEmail})`);
+    console.log(`🕐 Timezone note: Datele rămân așa cum vin din Calendly (UTC+3)`);
 
     // Verifică că utilizatorul curent există în baza de date
     console.log(`🔍 Verificare utilizator curent: ${currentUserId}`);
@@ -423,13 +439,13 @@ export async function POST(request: Request) {
     const sessionId = `calendly_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     console.log(`🆔 ID sesiune generat: ${sessionId}`);
 
-    // Creează camera Daily.co
-    console.log('🎥 Creare cameră Daily.co...');
-    const dailyRoom = await createDailyRoom(sessionId, endTime);
+    // 🆕 Creează camera Daily.co cu extensie de 5 minute
+    console.log('🎥 Creare cameră Daily.co cu buffer de 5 minute...');
+    const dailyRoom = await createDailyRoom(sessionId, originalEndTime);
 
-    // Calculează durata estimată (în minute)
+    // Calculează durata estimată (în minute) - bazată pe timpul original
     const estimatedDuration = Math.round(
-      (endTime.getTime() - startTime.getTime()) / (1000 * 60)
+      (originalEndTime.getTime() - startTime.getTime()) / (1000 * 60)
     );
 
     // 🆕 CREEAZĂ SESIUNEA ÎN TRANZACȚIE CU PACHETE ȘI INCREMENTAREA SESIUNILOR FOLOSITE
@@ -469,7 +485,8 @@ export async function POST(request: Request) {
 
       console.log(`📝 Creez sesiunea #${sessionNumber} din pachetul ${userPackage.providerPackage?.service}`);
 
-      // Creează sesiunea de consultanță cu toate detaliile
+      // 🔧 CREEAZĂ SESIUNEA CU DATELE DIN CALENDLY (UTC+3)
+      // startTime și originalEndTime rămân așa cum sunt - nu fac nicio conversie
       const sessionRecord = await tx.consultingSession.create({
         data: {
           id: sessionId,
@@ -489,18 +506,18 @@ export async function POST(request: Request) {
           dailyDomainName: dailyRoom.domainName,
           dailyCreatedAt: new Date(),
           
-          // Session details
-          startDate: startTime,
-          endDate: endTime,
+          // 🔧 Session details - DATELE RĂMÂN CA ÎN CALENDLY (UTC+3)
+          startDate: startTime,     // Nu convertesc - păstrez ca vine din Calendly
+          endDate: originalEndTime, // 🆕 Păstrează timpul original în DB
           duration: estimatedDuration,
           calendlyEventUri: scheduledEventUri,
-          scheduledAt: new Date(),
+          scheduledAt: new Date(),  // Timestamp server pentru metadata
           status: 'SCHEDULED',
           
           totalPrice: Math.round(provider.mainSpeciality.price * 100), // în bani
-          notes: `Sesiune #${sessionNumber} din pachetul ${userPackage.providerPackage?.service}. Programată prin Calendly pentru ${clientUser.name || clientUser.email}. Calendly client: ${clientName} (${clientEmail})`,
-          createdAt: new Date(),
-          updatedAt: new Date(),
+          notes: `Sesiune #${sessionNumber} din pachetul ${userPackage.providerPackage?.service}. Programată prin Calendly pentru ${clientUser.name || clientUser.email}. Camera Daily.co extinsă cu 5 minute buffer (până la ${dailyRoom.extendedEndTime.toISOString()}). Calendly client: ${clientName} (${clientEmail}). Timezone: UTC+3 (păstrat din Calendly). Recording layout: grid (fix pentru active-speaker error).`,
+          createdAt: new Date(),    // Timestamp server
+          updatedAt: new Date(),    // Timestamp server
         }
       });
 
@@ -534,17 +551,19 @@ export async function POST(request: Request) {
     console.log(`   - Provider: ${provider.user.name || provider.user.email} (${provider.id})`);
     console.log(`   - Specialitate: ${provider.mainSpeciality.name}`);
     console.log(`   - Camera Daily.co: ${dailyRoom.roomUrl}`);
-    console.log(`   - Timp: ${startTime.toISOString()}`);
+    console.log(`   - 🔧 Timp (UTC+3 din Calendly): ${startTime.toISOString()} - ${originalEndTime.toISOString()}`);
+    console.log(`   - 🆕 Timp extins Daily.co: ${dailyRoom.extendedEndTime.toISOString()} (+5 min buffer)`);
     console.log(`   - 🆕 Pachet: ${result.packageInfo.packageName} (sesiunea #${result.packageInfo.sessionNumber})`);
     console.log(`   - 🆕 Sesiuni folosite: ${result.packageInfo.oldUsedSessions} → ${result.packageInfo.usedSessions}`);
     console.log(`   - 🆕 Sesiuni rămase: ${result.packageInfo.remainingSessions}`);
+    console.log(`   - 🔧 Recording fix: layout 'grid' (nu mai e active-speaker error)`);
 
     return NextResponse.json({
       success: true,
       sessionId: result.session.id,
       roomUrl: result.session.dailyRoomUrl,
       joinUrl: `/servicii/video/sessions/${result.session.id}`,
-      message: `Sesiunea #${result.packageInfo.sessionNumber} a fost programată cu succes din pachetul ${result.packageInfo.packageName}!`,
+      message: `Sesiunea #${result.packageInfo.sessionNumber} a fost programată cu succes din pachetul ${result.packageInfo.packageName}! Camera are 5 minute buffer și recording cu layout grid.`,
       details: {
         sessionId: result.session.id,
         startDate: result.session.startDate?.toISOString(),
@@ -554,6 +573,34 @@ export async function POST(request: Request) {
         
         // 🆕 Informații pachete
         packageInfo: result.packageInfo,
+        
+        // 🆕 Informații despre extensie și fix-uri
+        timeInfo: {
+          scheduledStart: result.session.startDate?.toISOString(),
+          scheduledEnd: result.session.endDate?.toISOString(),
+          dailyRoomExpiresAt: dailyRoom.extendedEndTime.toISOString(),
+          bufferMinutes: 5,
+          note: 'Camera Daily.co are 5 minute buffer față de timpul programat în Calendly',
+          dbTimezone: 'UTC+3',
+          calendlyTimezone: 'UTC+3 (România)',
+          serverTimezone: 'UTC'
+        },
+        
+        // 🆕 Informații token expiry
+        tokenInfo: {
+          dailyTokenExpiresAt: new Date((Math.floor(Date.now() / 1000) + 24 * 3600) * 1000).toISOString(),
+          dailyTokenValidFor: '24 ore de la crearea token-ului',
+          roomExpiresAt: dailyRoom.extendedEndTime.toISOString(),
+          note: 'Token-ul Daily.co expiră după 24h, camera expiră după timpul programat + 5 min'
+        },
+        
+        // 🆕 Informații fix recording
+        recordingInfo: {
+          layout: 'grid',
+          cloudRecording: true,
+          autoStart: true,
+          note: 'Layout schimbat din active-speaker în grid pentru compatibilitate cu cloud recording'
+        },
         
         client: {
           id: clientUser.id,
@@ -570,7 +617,9 @@ export async function POST(request: Request) {
           roomName: dailyRoom.roomName,
           roomUrl: dailyRoom.roomUrl,
           roomId: dailyRoom.roomId,
-          domainName: dailyRoom.domainName
+          domainName: dailyRoom.domainName,
+          originalEndTime: dailyRoom.originalEndTime.toISOString(),
+          extendedEndTime: dailyRoom.extendedEndTime.toISOString()
         },
         calendlyEvent: {
           uri: scheduledEventUri,

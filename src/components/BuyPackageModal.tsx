@@ -86,32 +86,73 @@ const BuyPackageModal: FC<BuyPackageModalProps> = ({
     }
   };
 
-  const handlePaymentSuccess = async (paymentIntentId: string) => {
-    try {
-      // Activăm pachetul în baza de date citeturn0search7
-      const respPurchase = await fetch("/api/purchase", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: session?.user?.id,
-          providerId,
-          packageId: selectedPackageId,
-          paymentIntentId,
-        }),
-      });
-      const jsonPurchase = await respPurchase.json();
-      if (!respPurchase.ok) {
-        throw new Error(jsonPurchase.error || "Eroare la activarea pachetului.");
-      }
+const handlePaymentSuccess = async (paymentIntentId: string) => {
+  setProcessing(true);
+  setError(null);
 
-      setPaymentSuccess(true);
-      onClose();
-    } catch (err: any) {
-      setError(err.message || "Eroare la finalizarea comenzii.");
-    } finally {
-      setProcessing(false);
+  try {
+    // 1. Activezi pachetul în baza de date
+    const respPurchase = await fetch("/api/purchase", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userId: session?.user?.id,
+        providerId,
+        packageId: selectedPackageId,
+        paymentIntentId,
+      }),
+    });
+    if (!respPurchase.ok) {
+      const err = await respPurchase.json();
+      throw new Error(err.error || "Eroare la activarea pachetului.");
     }
-  };
+
+    // 2. Construiești array-ul de produse pentru factură
+    const pkg = packages.find((p) => p.id === selectedPackageId)!;
+    const today = new Date();
+    const due = new Date(today);
+    due.setDate(due.getDate() + 15); // termen plată 15 zile
+
+    const invoiceBody = {
+      packageId: selectedPackageId,
+      products: [
+        {
+          name: pkg.service,
+          description: pkg.description || pkg.service,
+          quantity: 1,
+          price: pkg.price,
+        },
+      ],
+      issueDate: today.toISOString().slice(0, 10),  // "YYYY-MM-DD"
+      dueDate: due.toISOString().slice(0, 10),
+    };
+
+    // 3. Apelezi endpoint-ul de creare factură
+    const respInvoice = await fetch("/api/oblio/create-invoice", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(invoiceBody),
+    });
+    const jsonInvoice = await respInvoice.json();
+    if (!respInvoice.ok) {
+      throw new Error(jsonInvoice.error || "Eroare la emiterea facturii.");
+    }
+
+    // 4. Preiei link-ul și numărul facturii
+    const { oblio, invoice } = jsonInvoice;
+    // de ex. oblio.link, oblio.number
+
+    setPaymentSuccess(true);
+    onClose();
+
+
+  } catch (err: any) {
+    setError(err.message);
+  } finally {
+    setProcessing(false);
+  }
+};
+
 
   const handlePaymentError = (msg: string) => {
     setError(msg);

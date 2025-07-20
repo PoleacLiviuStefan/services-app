@@ -19,6 +19,7 @@ export default function VideoSession() {
   const [sessionEnded, setSessionEnded] = useState(false);
   const [sessionData, setSessionData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [isIntentionalLeave, setIsIntentionalLeave] = useState(false);
 
   // Verifică dacă user-ul curent este provider pentru această sesiune
   useEffect(() => {
@@ -45,6 +46,32 @@ export default function VideoSession() {
     }
   }, [sessionId, session?.user?.id, router]);
 
+  // Page Visibility API pentru a detecta schimbarea tab-ului
+  useEffect(() => {
+    let leftMeetingTimeout: NodeJS.Timeout | null = null;
+
+    const handleVisibilityChange = () => {
+      const isTabVisible = !document.hidden;
+      console.log('Tab visibility changed:', isTabVisible ? 'visible' : 'hidden');
+      
+      // Dacă tab-ul devine vizibil din nou, anulează timeout-ul de redirect
+      if (isTabVisible && leftMeetingTimeout) {
+        console.log('Tab became visible again, canceling delayed redirect');
+        clearTimeout(leftMeetingTimeout);
+        leftMeetingTimeout = null;
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (leftMeetingTimeout) {
+        clearTimeout(leftMeetingTimeout);
+      }
+    };
+  }, []);
+
   // Inițializează Daily iframe și intră în sesiune
   useEffect(() => {
     if (
@@ -60,13 +87,23 @@ export default function VideoSession() {
       frameRef.current = Daily.createFrame(containerRef.current, {
         showLeaveButton: true,
         showFullscreenButton: false,
-        // Recording-ul pornește automat, nu mai trebuie controale manuale
       });
       
       await frameRef.current.join({
         url: roomUrl,
         userName: session.user?.name || 'Guest',
       });
+
+      // Pornește înregistrarea automat dacă ești provider
+      if (isProvider) {
+        try {
+          console.log('🎥 Starting automatic recording...');
+          await frameRef.current.startRecording();
+          console.log('✅ Recording started successfully');
+        } catch (error) {
+          console.error('❌ Failed to start recording:', error);
+        }
+      }
 
       // Actualizează sesiunea că utilizatorul s-a alăturat
       if (sessionId) {
@@ -81,7 +118,7 @@ export default function VideoSession() {
         });
       }
 
-      // Event listeners pentru recording (AUTOMAT)
+      // Event listeners pentru recording
       frameRef.current.on('recording-started', async () => {
         setIsRecording(true);
         console.log('✅ Recording started automatically');
@@ -134,12 +171,55 @@ export default function VideoSession() {
 
       frameRef.current.on('recording-error', (event: any) => {
         console.error('❌ Recording error:', event);
-        // Nu mai afișăm alert pentru că recording-ul este automat
       });
 
-      // Ascultă când utilizatorii părăsesc
-      frameRef.current.on('left-meeting', () => {
-        console.log('User left the meeting');
+      // Ascultă când utilizatorii părăsesc - cu protecție pentru schimbarea tab-ului
+      frameRef.current.on('left-meeting', async () => {
+        console.log('User left the meeting, intentional:', isIntentionalLeave, 'tab hidden:', document.hidden);
+        
+        // Dacă este o ieșire intenționată (buton apăsat), redirecționează imediat
+        if (isIntentionalLeave) {
+          handleActualLeave();
+          return;
+        }
+        
+        // Dacă tab-ul nu este vizibil, poate fi doar o schimbare de tab
+        if (document.hidden) {
+          console.log('Tab is hidden, delaying redirect to check if user returns...');
+          
+          // Așteaptă 3 secunde să vezi dacă utilizatorul se întoarce
+          setTimeout(async () => {
+            // Verifică din nou dacă utilizatorul este încă în întâlnire
+            if (frameRef.current) {
+              const meetingState = frameRef.current.meetingState();
+              console.log('Meeting state after delay:', meetingState);
+              
+              // Dacă încă nu este conectat și tab-ul încă nu e vizibil, redirecționează
+              if (meetingState !== 'joined' && document.hidden) {
+                console.log('User still not in meeting and tab still hidden, redirecting...');
+                handleActualLeave();
+              }
+            }
+          }, 3000);
+          return;
+        }
+        
+        // Dacă tab-ul este vizibil, verifică statusul înainte de redirecționare
+        setTimeout(() => {
+          if (frameRef.current) {
+            const meetingState = frameRef.current.meetingState();
+            console.log('Meeting state after brief delay:', meetingState);
+            
+            if (meetingState !== 'joined' && meetingState !== 'joining') {
+              handleActualLeave();
+            }
+          }
+        }, 1000);
+      });
+
+      const handleActualLeave = () => {
+        console.log('User actually left the meeting');
+        
         // Actualizează sesiunea că utilizatorul a părăsit
         if (sessionId) {
           fetch(`/api/video/session/${sessionId}/end`, {
@@ -152,7 +232,7 @@ export default function VideoSession() {
           });
         }
         router.push(`/servicii/video/sessions/${sessionId}/recenzie`);
-      });
+      };
 
       frameRef.current.on('participant-left', (event: any) => {
         console.log('Participant left:', event);
@@ -180,7 +260,7 @@ export default function VideoSession() {
       frameRef.current?.destroy();
       frameRef.current = null;
     };
-  }, [status, session?.user, roomUrl, router, isProvider, loading, sessionId]);
+  }, [status, session?.user, roomUrl, router, isProvider, loading, sessionId, isIntentionalLeave]);
 
   // Timer de countdown până la endDate inclus în URL
   useEffect(() => {
@@ -203,9 +283,10 @@ export default function VideoSession() {
 
   // Funcție pentru leave manual
   const handleLeave = async () => {
+    setIsIntentionalLeave(true); // Marchează că este o ieșire intenționată
     if (frameRef.current) {
       await frameRef.current.leave();
-      router.push('/profil');
+      router.push('/profil?tab=sessions');
     }
   };
 
@@ -218,7 +299,7 @@ export default function VideoSession() {
     }
 
     try {
-      // Recording-ul se oprește automat când sesiunea se închide
+      setIsIntentionalLeave(true); // Marchează că este o închidere intenționată
       
       // Calculează durata actuală
       const durationParam = params.get('duration');
@@ -282,14 +363,6 @@ export default function VideoSession() {
         </div>
       )}
 
-      {/* Informații sesiune */}
-      {/* {sessionData && (
-        <div className="absolute top-4 right-4 mr-32 p-2 bg-gray-800 bg-opacity-75 rounded-lg text-white text-sm">
-          <div>Camera: {sessionData.roomName}</div>
-          <div>Status: {sessionData.status}</div>
-        </div>
-      )} */}
-
       {/* Controale pentru Provider */}
       {isProvider && (
         <div className="absolute top-8 left-4 space-y-2">
@@ -321,7 +394,7 @@ export default function VideoSession() {
       {!isProvider && (
         <button
           onClick={handleLeave}
-          className="absolute top-4 left-4 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-colors duration-200 flex items-center gap-2"
+          className="absolute top-8 left-4 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-colors duration-200 flex items-center gap-2"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
@@ -329,14 +402,6 @@ export default function VideoSession() {
           Părăsește sesiunea
         </button>
       )}
-
-      {/* Indicator de înregistrare */}
-      {/* {isRecording && (
-        <div className="absolute bottom-12 left-1/2 transform -translate-x-1/2 px-4 py-2 bg-red-600 text-white rounded-lg font-medium flex items-center gap-2 animate-pulse">
-          <div className="w-3 h-3 bg-white rounded-full animate-ping"></div>
-          ÎNREGISTRARE ÎN CURS
-        </div>
-      )} */}
     </div>
   );
 }
