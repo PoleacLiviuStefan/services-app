@@ -612,7 +612,7 @@ export default function UserSessions() {
           const remaining = date && isValid(date) ? renderTimeRemaining(date) : "";
 
           const canJoin = sess.joinUrl && 
-                         (sess.status === 'SCHEDULED' || sess.status === 'IN_PROGRESS') &&
+                         (sess.status === 'IN_PROGRESS') &&
                          !sess.isFinished;
 
           const isCompleted = sess.status === 'COMPLETED' || sess.isFinished;
