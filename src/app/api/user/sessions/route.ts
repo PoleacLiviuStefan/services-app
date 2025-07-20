@@ -776,14 +776,14 @@ function checkAndUpdateSessionStatus(session: any): {
   newIsFinished: boolean;
   reason: string;
 } {
-  const nowUTC = new Date();
-  
-  // Aplicare offset doar în production
-  const isProduction = process.env.NODE_ENV === 'production';
-  const ROMANIA_OFFSET = isProduction ? 3 * 60 * 60 * 1000 : 0;
-  const nowAdjusted = new Date(nowUTC.getTime() + ROMANIA_OFFSET);
-  
-  // Dacă sesiunea este deja finalizată manual, nu o mai modifică
+  const now = new Date();  // momentul curent (UTC)
+
+  // Parsează datele din sesiune (sunt deja stocate în UTC)
+  const startDate   = session.startDate   ? new Date(session.startDate)   : null;
+  const endDate     = session.endDate     ? new Date(session.endDate)     : null;
+  const scheduledAt = session.scheduledAt ? new Date(session.scheduledAt) : null;
+
+  // Dacă a fost finalizată manual (COMPLETED sau CANCELLED), nu o modificăm
   if (session.isFinished && ['COMPLETED', 'CANCELLED'].includes(session.status)) {
     return {
       needsUpdate: false,
@@ -793,44 +793,41 @@ function checkAndUpdateSessionStatus(session: any): {
     };
   }
 
-  const startDate = session.startDate ? new Date(session.startDate) : null;
-  const endDate = session.endDate ? new Date(session.endDate) : null;
-  const scheduledAt = session.scheduledAt ? new Date(session.scheduledAt) : null;
-
-  // CAZ 1: Sesiunea ar trebui să fie COMPLETATĂ (timpul a trecut)
-  if (endDate && nowAdjusted > endDate) {
+  // CAZ 1: Timpul sesiunii a expirat -> COMPLETED
+  if (endDate && now > endDate) {
     return {
       needsUpdate: session.status !== 'COMPLETED' || !session.isFinished,
       newStatus: 'COMPLETED',
       newIsFinished: true,
-      reason: 'Timpul sesiunii a expirat - marcată ca COMPLETATĂ'
+      reason: 'Timpul sesiunii a trecut - marcată ca COMPLETATĂ'
     };
   }
 
-  // CAZ 2: Sesiunea ar trebui să fie ÎN PROGRES (între start și end)
-  if (startDate && endDate && nowAdjusted >= startDate && nowAdjusted <= endDate) {
+  // CAZ 2: Între start și end -> IN_PROGRESS
+  if (startDate && endDate && now >= startDate && now <= endDate) {
     return {
       needsUpdate: session.status !== 'IN_PROGRESS',
       newStatus: 'IN_PROGRESS',
       newIsFinished: false,
-      reason: 'Sesiunea este în intervalul de timp programat'
+      reason: 'Sesiunea este în desfășurare'
     };
   }
 
-  // CAZ 3: Sesiunea a trecut cu mult timp și nu a fost completată (NO_SHOW)
-  const bufferTime = 2 * 60 * 60 * 1000; // 2 ore buffer
-  
-  if (endDate && nowAdjusted > new Date(endDate.getTime() + bufferTime) && session.status === 'SCHEDULED') {
+  // Buffer de „no‑show” de 2 ore
+  const bufferTime = 2 * 60 * 60 * 1000;
+
+  // CAZ 3: După end + buffer și încă SCHEDULED -> NO_SHOW
+  if (endDate && now > new Date(endDate.getTime() + bufferTime) && session.status === 'SCHEDULED') {
     return {
       needsUpdate: true,
       newStatus: 'NO_SHOW',
       newIsFinished: true,
-      reason: 'Sesiunea a expirat cu buffer de 2 ore - marcată ca NO_SHOW'
+      reason: 'Sesiunea nu a fost începută sau finalizată în buffer - marcată ca NO_SHOW'
     };
   }
 
-  // CAZ 4: Sesiunea programată a trecut de timpul de start dar nu e în progres (NO_SHOW)
-  if (startDate && nowAdjusted > new Date(startDate.getTime() + bufferTime) && session.status === 'SCHEDULED') {
+  // CAZ 4: După start + buffer și încă SCHEDULED -> NO_SHOW
+  if (startDate && now > new Date(startDate.getTime() + bufferTime) && session.status === 'SCHEDULED') {
     return {
       needsUpdate: true,
       newStatus: 'NO_SHOW',
@@ -839,8 +836,10 @@ function checkAndUpdateSessionStatus(session: any): {
     };
   }
 
-  // CAZ 5: Verificare prin scheduledAt dacă nu avem startDate/endDate
-  if (!startDate && !endDate && scheduledAt && nowAdjusted > new Date(scheduledAt.getTime() + bufferTime) && session.status === 'SCHEDULED') {
+  // CAZ 5: Fără start/end, dar după scheduledAt + buffer și încă SCHEDULED -> NO_SHOW
+  if (!startDate && !endDate && scheduledAt &&
+      now > new Date(scheduledAt.getTime() + bufferTime) &&
+      session.status === 'SCHEDULED') {
     return {
       needsUpdate: true,
       newStatus: 'NO_SHOW',
