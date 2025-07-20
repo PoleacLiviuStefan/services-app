@@ -2,7 +2,6 @@
 const nextConfig = {
   experimental: {
     runtime: 'nodejs',
-    // Removed esmExternals for Turbopack compatibility
   },
   typescript: {
     ignoreBuildErrors: true,
@@ -20,7 +19,7 @@ const nextConfig = {
     domains: [
       "mysticgold.app",
       "bucket-production-71d6.up.railway.app",
-      "lh3.googleusercontent.com"
+      "lh3.googleusercontent.com",
     ],
     remotePatterns: [
       {
@@ -30,27 +29,36 @@ const nextConfig = {
       },
     ],
   },
-
-  // Headers pentru Zoom Video SDK
   async headers() {
     return [
       {
         source: '/servicii/video/sessions/:sessionid*',
         headers: [
+          // enable COEP/COOP so you can embed cross-origin Daily.co
           { key: 'Cross-Origin-Opener-Policy',   value: 'same-origin' },
           { key: 'Cross-Origin-Embedder-Policy', value: 'require-corp' },
           { key: 'Cross-Origin-Resource-Policy', value: 'cross-origin' },
-          { key: 'Permissions-Policy', value: 'camera=*, microphone=*, display-capture=*' },
-          // Additional headers pentru media access
-          { key: 'Feature-Policy', value: 'camera *; microphone *; display-capture *' },
+
+          // allow camera/mic/display-capture
+          { key: 'Permissions-Policy', value: 'camera=(self), microphone=(self), display-capture=(self)' },
+
+          // CSP so that Daily.co and your bucket are allowed
+          { 
+            key: 'Content-Security-Policy', 
+            value: [
+              "default-src 'self' mysticgold.app",
+              "img-src 'self' https://bucket-production-71d6.up.railway.app https://lh3.googleusercontent.com data:",
+              "script-src 'self' https://mysticgold.daily.co",
+              "connect-src 'self' https://api.daily.co https://mysticgold.daily.co",
+              "frame-src 'self' https://mysticgold.daily.co",
+              "media-src 'self' https://mysticgold.daily.co",
+            ].join('; ')
+          }
         ],
       },
-    ];
+    ]
   },
-
-  // Simplified webpack config pentru Turbopack compatibility
   webpack: (config, { isServer }) => {
-    // Only apply fallbacks for client-side
     if (!isServer) {
       config.resolve.fallback = {
         ...config.resolve.fallback,
@@ -69,7 +77,6 @@ const nextConfig = {
       };
     }
 
-    // Basic handling for Zoom SDK modules
     config.module.rules.push({
       test: /\.js$/,
       include: /node_modules\/@zoom/,
@@ -78,12 +85,8 @@ const nextConfig = {
 
     return config;
   },
-
-  // Basic optimizations that work with Turbopack
   swcMinify: true,
   compress: true,
-  
-  // Production optimizations
   ...(process.env.NODE_ENV === 'production' && {
     poweredByHeader: false,
     generateEtags: false,
