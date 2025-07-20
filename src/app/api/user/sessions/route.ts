@@ -33,6 +33,7 @@ async function getProviderReviewStats(providerId: string) {
 }
 
 export async function GET(): Promise<NextResponse> {
+   console.log(`⏰ Server time: ${new Date().toISOString()}`);
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
