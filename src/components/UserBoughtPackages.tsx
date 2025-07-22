@@ -137,7 +137,7 @@ export default function UserBoughtPackages({ isProvider }: UserBoughtPackagesPro
       noItemsMessage = "Nu ai cumpărat niciun pachet.";
     } else {
       noItemsMessage = viewMode === 'client' 
-        ? "Nu ai cumpărat niciun pachet ca client."
+        ? "Nu ai cumpărat niciun pachet ca si client."
         : "Nicio vânzare încă ca furnizor.";
     }
     
@@ -154,7 +154,7 @@ export default function UserBoughtPackages({ isProvider }: UserBoughtPackagesPro
                   : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
               }`}
             >
-              📦 Ca Client
+              📦 Client
             </button>
             <button
               onClick={() => changeViewMode('provider')}
@@ -194,7 +194,7 @@ export default function UserBoughtPackages({ isProvider }: UserBoughtPackagesPro
                 : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
             }`}
           >
-            📦 Ca Client
+            📦 Client
             {bought.length > 0 && (
               <span className="ml-2 bg-blue-600 text-white text-xs px-2 py-1 rounded-full">
                 {bought.length}
@@ -224,7 +224,7 @@ export default function UserBoughtPackages({ isProvider }: UserBoughtPackagesPro
         {!isProvider 
           ? "Pachetele tale cumpărate" 
           : viewMode === 'client' 
-            ? "Pachetele cumpărate (ca client)"
+            ? "Pachetele cumpărate (ca si client)"
             : "Pachetele vândute (ca furnizor)"
         }
       </h3>
