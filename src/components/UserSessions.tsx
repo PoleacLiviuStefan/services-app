@@ -1,4 +1,4 @@
-// File: components/UserSessions.tsx - VERSIUNE ACTUALIZATĂ CU STELE VIZIBILE ȘI RECENZII PENTRU FURNIZOR
+// File: components/UserSessions.tsx - VERSIUNE ACTUALIZATĂ CU STELE VIZIBILE ȘI BUTOANE CENTRATE PE MOBIL
 
 "use client";
 
@@ -699,14 +699,14 @@ export default function UserSessions() {
                       {humanDate}
                     </p>
                     
-                    {remaining && sess.status === 'SCHEDULED' && (
+                    {/* {remaining && sess.status === 'SCHEDULED' && (
                       <p className="text-blue-600">
                         <span className="font-medium">Timp rămas:</span> {remaining}
                         <span className="ml-2 text-xs text-gray-400" title="Actualizare automată">
                           🔄
                         </span>
                       </p>
-                    )}
+                    )} */}
 
                     {sess.rating && (
                       <p>
@@ -757,104 +757,101 @@ export default function UserSessions() {
                       </p>
                     )}
 
-                    {sess.totalPrice && (
-                      <p className="text-xs text-green-600">
-                        <span className="font-medium">Preț:</span> {formatPrice(sess.totalPrice)}
-                      </p>
-                    )}
                   </div>
                 </div>
 
-                {/* Acțiuni */}
-                <div className="flex flex-col items-center w-full lg:w-auto space-y-2">
-                  {/* Buton principal - Join/Recording/Status */}
-                  {canJoin ? (
-                    <Link
-                      href={{
-                        pathname: '/servicii/video/sessions',
-                        query: { 
-                          url: sess.joinUrl, 
-                          sessionId: sess.id,
-                          end: sess.endDate,
-                          duration: sess.duration 
-                        },
-                      }}
-                      className="px-4 py-2 bg-primaryColor text-white rounded hover:bg-secondaryColor text-center transition-colors w-full"
-                    >
-                      {sess.status === 'IN_PROGRESS' ? 'Reintră în sesiune' : 'Intră în sesiune'}
-                    </Link>
-                  ) : isCompleted && hasRecordingAvailable ? (
-                    <button
-                      onClick={() => openModal(sess.recordingUrl!)}
-                      className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 text-center transition-colors w-full flex items-center gap-2 justify-center"
-                    >
-                      📹 Vezi înregistrarea
-                    </button>
-                  ) : isCompleted && hasRecordingProcessing ? (
-                    <div className="px-4 py-2 bg-orange-100 text-orange-800 rounded text-center text-sm w-full">
-                      ⏳ Înregistrare în procesare
-                    </div>
-                  ) : isCompleted && hasAnyRecording ? (
-                    <button
-                      onClick={() => handleGetRecording(sess.id)}
-                      disabled={loadingRecording === sess.id}
-                      className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 text-center transition-colors disabled:opacity-50 flex items-center gap-2 justify-center w-full"
-                    >
-                      {loadingRecording === sess.id ? (
-                        <>
-                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                          Se încarcă...
-                        </>
-                      ) : (
-                        <>
-                          🔍 Verifică înregistrarea
-                        </>
-                      )}
-                    </button>
-                  ) : (
-                    <div className="px-4 py-2 bg-gray-100 text-gray-600 rounded text-center text-sm w-full">
-                      {sess.status === 'CANCELLED' ? 'Sesiune anulată' : 
-                       isCompleted && !hasAnyRecording ? 'Fără înregistrare' : 'Indisponibilă'}
-                    </div>
-                  )}
+                {/* 🔧 FIX: Acțiuni - Container îmbunătățit pentru centrarea pe mobil */}
+                <div className="flex justify-start w-full lg:w-auto">
+                  <div className="flex flex-col items-center justify-center space-y-2">
+                    {/* Buton principal - Join/Recording/Status */}
+                    {canJoin ? (
+                      <Link
+                        href={{
+                          pathname: '/servicii/video/sessions',
+                          query: { 
+                            url: sess.joinUrl, 
+                            sessionId: sess.id,
+                            end: sess.endDate,
+                            duration: sess.duration 
+                          },
+                        }}
+                        className="block w-full px-4 py-2 bg-primaryColor text-white rounded hover:bg-secondaryColor text-center transition-colors"
+                      >
+                        {sess.status === 'IN_PROGRESS' ? 'Reintră în sesiune' : 'Intră în sesiune'}
+                      </Link>
+                    ) : isCompleted && hasRecordingAvailable ? (
+                      <button
+                        onClick={() => openModal(sess.recordingUrl!)}
+                        className="w-full px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 text-center transition-colors flex items-center gap-2 justify-center"
+                      >
+                        📹 Vezi înregistrarea
+                      </button>
+                    ) : isCompleted && hasRecordingProcessing ? (
+                      <div className="w-full px-4 py-2 bg-orange-100 text-orange-800 rounded text-center text-sm">
+                        ⏳ Înregistrare în procesare
+                      </div>
+                    ) : isCompleted && hasAnyRecording ? (
+                      <button
+                        onClick={() => handleGetRecording(sess.id)}
+                        disabled={loadingRecording === sess.id}
+                        className="w-full px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 text-center transition-colors disabled:opacity-50 flex items-center gap-2 justify-center"
+                      >
+                        {loadingRecording === sess.id ? (
+                          <>
+                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                            Se încarcă...
+                          </>
+                        ) : (
+                          <>
+                            🔍 Verifică înregistrarea
+                          </>
+                        )}
+                      </button>
+                    ) : (
+                      <div className="w-full px-4 py-2 bg-gray-100 text-gray-600 rounded text-center text-sm">
+                        {sess.status === 'CANCELLED' ? 'Sesiune anulată' : 
+                         isCompleted && !hasAnyRecording ? 'Fără înregistrare' : (remaining && sess.status === 'SCHEDULED' && remaining)}
+                      </div>
+                    )}
 
-                  {/* Buton pentru recenzie (pentru fiecare sesiune completată ca client) */}
-                  {canReview && (
-                    <button
-                      onClick={() => openReviewModal(sess.id, sess.counterpart, sess.providerId!, sess.myReview)}
-                      className={`px-4 py-2 text-white rounded text-center transition-colors flex items-center gap-2 justify-center w-full ${
-                        hasReview 
-                          ? 'bg-orange-500 hover:bg-orange-600' 
-                          : 'bg-yellow-500 hover:bg-yellow-600'
-                      }`}
-                    >
-                      {hasReview ? (
-                        <>⭐ Editează recenzia</>
-                      ) : (
-                        <>⭐ Adaugă recenzie</>
-                      )}
-                    </button>
-                  )}
+                    {/* Buton pentru recenzie (pentru fiecare sesiune completată ca client) */}
+                    {canReview && (
+                      <button
+                        onClick={() => openReviewModal(sess.id, sess.counterpart, sess.providerId!, sess.myReview)}
+                        className={`w-full px-4 py-2 text-white rounded text-center transition-colors flex items-center gap-2 justify-center ${
+                          hasReview 
+                            ? 'bg-orange-500 hover:bg-orange-600' 
+                            : 'bg-yellow-500 hover:bg-yellow-600'
+                        }`}
+                      >
+                        {hasReview ? (
+                          <>⭐ Editează recenzia</>
+                        ) : (
+                          <>⭐ Adaugă recenzie</>
+                        )}
+                      </button>
+                    )}
 
-                  {/* Butoane specifice pentru provider */}
-                  {role === 'provider' && isProvider && sess.status === 'SCHEDULED' && 
-                   date && isValid(date) && date > currentTime && (
-                    <button
-                      onClick={() => handleCancelSession(sess.id)}
-                      className="px-3 py-1 bg-red-500 text-white rounded text-sm hover:bg-red-600 transition-colors w-full"
-                    >
-                      Anulează
-                    </button>
-                  )}
+                    {/* Butoane specifice pentru provider */}
+                    {role === 'provider' && isProvider && sess.status === 'SCHEDULED' && 
+                     date && isValid(date) && date > currentTime && (
+                      <button
+                        onClick={() => handleCancelSession(sess.id)}
+                        className="w-full px-3 py-1 bg-red-500 text-white rounded text-sm hover:bg-red-600 transition-colors"
+                      >
+                        Anulează
+                      </button>
+                    )}
 
-                  {role === 'provider' && isProvider && sess.status === 'IN_PROGRESS' && (
-                    <button
-                      onClick={() => handleForceEndSession(sess.id)}
-                      className="px-3 py-1 bg-orange-500 text-white rounded text-sm hover:bg-orange-600 transition-colors w-full"
-                    >
-                      Închide sesiunea
-                    </button>
-                  )}
+                    {role === 'provider' && isProvider && sess.status === 'IN_PROGRESS' && (
+                      <button
+                        onClick={() => handleForceEndSession(sess.id)}
+                        className="w-full px-3 py-1 bg-orange-500 text-white rounded text-sm hover:bg-orange-600 transition-colors"
+                      >
+                        Închide sesiunea
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             </li>
@@ -872,7 +869,7 @@ export default function UserSessions() {
           <h2 className="text-xl lg:text-2xl font-bold">Sesiunile tale</h2>
           <div className="text-sm text-gray-600 mt-1">
             Total: {providerSessions.length + clientSessions.length} sesiuni
-            {stats?.client?.totalReviews && (
+            {stats?.client?.totalReviews && stats?.client?.totalReviews>0  && (
               <span className="ml-2 text-yellow-600">
                 • {stats.client.totalReviews} recenzii date
               </span>
@@ -944,7 +941,7 @@ export default function UserSessions() {
               }`}
             >
               Ca Client ({clientSessions.length})
-              {stats?.client?.totalReviews && (
+              {stats?.client?.totalReviews && stats?.client?.totalReviews>0  && (
                 <span className="ml-1 text-xs text-yellow-600">
                   ({stats.client.totalReviews} recenzii date)
                 </span>

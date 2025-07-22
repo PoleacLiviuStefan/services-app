@@ -93,7 +93,13 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
   const [selectedPackages, setSelectedPackages] = useState<string[]>(
     provider.providerPackages.map((p) => p.id)
   );
-  const [loading,setLoading]=useState<boolean>(false);
+  
+  // 🆕 Loading states pentru diferite operații
+  const [loading, setLoading] = useState<boolean>(false);
+  const [loadingStripe, setLoadingStripe] = useState<boolean>(false);
+  const [loadingCalendly, setLoadingCalendly] = useState<boolean>(false);
+  const [savingMapping, setSavingMapping] = useState<boolean>(false);
+  const [deletingPackage, setDeletingPackage] = useState<string | null>(null); // ID-ul pachetului care se șterge
 
   const [newSpecialityName, setNewSpecialityName] = useState("");
   const [newToolName, setNewToolName] = useState("");
@@ -104,8 +110,6 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
   const [newPackageExpiresAt, setNewPackageExpiresAt] = useState("");
   const [calendlyEvents, setCalendlyEvents] = useState<CalendlyEventType[]>([]);
   const [mapping, setMapping] = useState<Mapping>({});
-  const [loadingCalendly, setLoadingCalendly] = useState(false);
-  const [savingMapping, setSavingMapping] = useState(false);
   const [newPackageEventUri, setNewPackageEventUri] = useState<string>("");
   const [editingPkgId, setEditingPkgId] = useState<string | null>(null);
   const [attemptedSave, setAttemptedSave] = useState(false);
@@ -124,7 +128,6 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
     setMainToolId(provider.mainTool?.id || "");
     setSelectedSpecialities(provider.specialities.map((s) => s.name));
     setSelectedTools(provider.tools.map((t) => t.name));
-    // setSelectedPackages(provider.providerPackages.map((p) => p.id));
 
     const initMap: Mapping = {};
     provider.providerPackages.forEach((pkg) => {
@@ -143,11 +146,6 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
         prev.includes(val) ? prev.filter((v) => v !== val) : [...prev, val]
       );
     }
-    // } else if (key === "Packages") {
-    //   setSelectedPackages((prev) =>
-    //     prev.includes(val) ? prev.filter((v) => v !== val) : [...prev, val]
-    //   );
-    // }
   };
 
   useEffect(() => {
@@ -202,139 +200,150 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
   }, [mapping]);
 
   const handleAddRequest = async (type: EditModalType) => {
-    let url = "";
-    let body: any = {};
-    if (type === "Specialities") {
-      url = "/api/requests/speciality";
-      body = { name: newSpecialityName.trim() };
-    } else if (type === "Tools") {
-      url = "/api/requests/tool";
-      body = { name: newToolName.trim() };
-    } else if (type === "Reading") {
-      url = "/api/requests/reading";
-      body = { name: newReadingName.trim() };
-    }
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    if (res.ok) {
-      alert("Cerere trimisă pentru aprobare.");
-      if (type === "Specialities") setNewSpecialityName("");
-      if (type === "Tools") setNewToolName("");
-      if (type === "Reading") setNewReadingName("");
-    } else {
-      console.error(await res.text());
-      alert("Eroare la trimiterea cererii.");
+    setLoading(true); // 🆕 Loading pentru cereri noi
+    try {
+      let url = "";
+      let body: any = {};
+      if (type === "Specialities") {
+        url = "/api/requests/speciality";
+        body = { name: newSpecialityName.trim() };
+      } else if (type === "Tools") {
+        url = "/api/requests/tool";
+        body = { name: newToolName.trim() };
+      } else if (type === "Reading") {
+        url = "/api/requests/reading";
+        body = { name: newReadingName.trim() };
+      }
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (res.ok) {
+        alert("Cerere trimisă pentru aprobare.");
+        if (type === "Specialities") setNewSpecialityName("");
+        if (type === "Tools") setNewToolName("");
+        if (type === "Reading") setNewReadingName("");
+      } else {
+        console.error(await res.text());
+        alert("Eroare la trimiterea cererii.");
+      }
+    } finally {
+      setLoading(false); // 🆕
     }
   };
 
   const handleSaveChanges = async (type: EditModalType) => {
-    let url = `/api/provider/${localProvider.id}`;
-    let body: any = {};
+    setLoading(true); // 🆕 Loading pentru salvare modificări
+    try {
+      let url = `/api/provider/${localProvider.id}`;
+      let body: any = {};
 
-    switch (type) {
-      case "Description":
-        url += "/description";
-        body = { description };
-        break;
-      case "Status":
-        url += "/status";
-        body = { online: status };
-        break;
-      case "VideoUrl":
-        url += "/video-url";
-        body = { videoUrl };
-        break;
-      case "ScheduleLink":
-        url += "/schedule-link";
-        body = { scheduleLink };
-        break;
-      case "Reading":
-        url += "/reading";
-        body = { readingId };
-        break;
-      case "MainSpeciality":
-        url += "/main-speciality";
-        body = { mainSpecialityId };
-        break;
-      case "MainTool":
-        url += "/main-tool";
-        body = { mainToolId };
-        break;
-      case "Specialities":
-        url += "/specialities";
-        body = { specialities: selectedSpecialities };
-        break;
-      case "Tools":
-        url += "/tools";
-        body = { tools: selectedTools };
-        break;
-      case "Packages":
-        url += "/packages";
-        body = { packages: selectedPackages };
-        break;
-      default:
-        return;
-    }
-
-    const res = await fetch(url, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) return;
-
-    setLocalProvider((prev) => {
-      const copy = { ...prev } as any;
       switch (type) {
         case "Description":
-          copy.description = description;
+          url += "/description";
+          body = { description };
           break;
         case "Status":
-          copy.online = status;
+          url += "/status";
+          body = { online: status };
           break;
         case "VideoUrl":
-          copy.videoUrl = videoUrl;
+          url += "/video-url";
+          body = { videoUrl };
           break;
         case "ScheduleLink":
-          copy.scheduleLink = scheduleLink;
+          url += "/schedule-link";
+          body = { scheduleLink };
           break;
         case "Reading":
-          copy.reading = readingsStore.find((r) => r.id === readingId) || null;
+          url += "/reading";
+          body = { readingId };
           break;
         case "MainSpeciality":
-          copy.mainSpeciality =
-            specialitiesStore.find((s) => s.id === mainSpecialityId) || null;
+          url += "/main-speciality";
+          body = { mainSpecialityId };
           break;
         case "MainTool":
-          copy.mainTool = toolsStore.find((t) => t.id === mainToolId) || null;
+          url += "/main-tool";
+          body = { mainToolId };
           break;
         case "Specialities":
-          copy.specialities = selectedSpecialities.map((name) => ({
-            id: specialitiesStore.find((s) => s.name === name)!.id,
-            name,
-          }));
+          url += "/specialities";
+          body = { specialities: selectedSpecialities };
           break;
         case "Tools":
-          copy.tools = selectedTools.map((name) => ({
-            id: toolsStore.find((t) => t.name === name)!.id,
-            name,
-          }));
+          url += "/tools";
+          body = { tools: selectedTools };
           break;
         case "Packages":
-          copy.providerPackages = prev.providerPackages.filter((p) =>
-            selectedPackages.includes(p.id)
-          );
+          url += "/packages";
+          body = { packages: selectedPackages };
           break;
+        default:
+          return;
       }
-      return copy;
-    });
 
-    setShowEditModal("");
+      const res = await fetch(url, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) return;
+
+      setLocalProvider((prev) => {
+        const copy = { ...prev } as any;
+        switch (type) {
+          case "Description":
+            copy.description = description;
+            break;
+          case "Status":
+            copy.online = status;
+            break;
+          case "VideoUrl":
+            copy.videoUrl = videoUrl;
+            break;
+          case "ScheduleLink":
+            copy.scheduleLink = scheduleLink;
+            break;
+          case "Reading":
+            copy.reading = readingsStore.find((r) => r.id === readingId) || null;
+            break;
+          case "MainSpeciality":
+            copy.mainSpeciality =
+              specialitiesStore.find((s) => s.id === mainSpecialityId) || null;
+            break;
+          case "MainTool":
+            copy.mainTool = toolsStore.find((t) => t.id === mainToolId) || null;
+            break;
+          case "Specialities":
+            copy.specialities = selectedSpecialities.map((name) => ({
+              id: specialitiesStore.find((s) => s.name === name)!.id,
+              name,
+            }));
+            break;
+          case "Tools":
+            copy.tools = selectedTools.map((name) => ({
+              id: toolsStore.find((t) => t.name === name)!.id,
+              name,
+            }));
+            break;
+          case "Packages":
+            copy.providerPackages = prev.providerPackages.filter((p) =>
+              selectedPackages.includes(p.id)
+            );
+            break;
+        }
+        return copy;
+      });
+
+      setShowEditModal("");
+    } finally {
+      setLoading(false); // 🆕
+    }
   };
-  //eit package
+
+  //edit package
   const handleEditClick = (pkg: typeof provider.providerPackages[0]) => {
     setEditingPkgId(pkg.id);
     setNewPackageService(pkg.service);
@@ -361,65 +370,138 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
 
   // ================= CALENDLY CONNECT (cu PKCE) =====================
   const handleCalendlyConnect = async () => {
-    const resp = await fetch("/api/calendly/oauth/start", {
-      credentials: "include",
-    });
-    if (!resp.ok) {
-      console.error("Nu am putut iniția PKCE:", await resp.text());
-      return;
+    setLoadingCalendly(true); // 🆕 Loading pentru Calendly
+    try {
+      const resp = await fetch("/api/calendly/oauth/start", {
+        credentials: "include",
+      });
+      if (!resp.ok) {
+        console.error("Nu am putut iniția PKCE:", await resp.text());
+        return;
+      }
+      const { codeChallenge } = await resp.json();
+      
+      const clientId = process.env.NEXT_PUBLIC_CALENDLY_CLIENT_ID!;
+      console.log("clientId:", clientId);
+      const redirectUri = `${process.env.NEXT_PUBLIC_BASE_URL}/api/calendly/oauth/callback`;
+      const params = new URLSearchParams({
+        response_type: "code",
+        client_id: clientId,
+        redirect_uri: redirectUri,
+        state: `calendly:${localProvider.id}`,
+        code_challenge: codeChallenge,
+        code_challenge_method: "S256",
+      });
+      const authorizeUrl = `https://auth.calendly.com/oauth/authorize?${params.toString()}`;
+      window.location.href = authorizeUrl;
+    } finally {
+      setLoadingCalendly(false); // 🆕
     }
-    const { codeChallenge } = await resp.json();
-    
-    const clientId = process.env.NEXT_PUBLIC_CALENDLY_CLIENT_ID!;
-    console.log("clientId:", clientId);
-    const redirectUri = `${process.env.NEXT_PUBLIC_BASE_URL}/api/calendly/oauth/callback`;
-    const params = new URLSearchParams({
-      response_type: "code",
-      client_id: clientId,
-      redirect_uri: redirectUri,
-      state: `calendly:${localProvider.id}`,
-      code_challenge: codeChallenge,
-      code_challenge_method: "S256",
-    });
-    const authorizeUrl = `https://auth.calendly.com/oauth/authorize?${params.toString()}`;
-    window.location.href = authorizeUrl;
   };
 
+  const savePackages = async () => {
+    setLoading(true); // 🆕 Loading pentru salvare pachete
+    try {
+      // Ensure calendlyEventTypeUri selected
+      if (!newPackageEventUri) {
+        alert("Trebuie să selectezi tipul de ședință din Calendly.");
+        return;
+      }
+      // Build packages array
+      const allPackages = editingPkgId
+        ? localProvider.providerPackages.map(p =>
+            p.id === editingPkgId
+              ? { ...p, service: newPackageService.trim(), totalSessions: +newPackageSessions, price: +newPackagePrice, calendlyEventTypeUri: newPackageEventUri }
+              : p
+          )
+        : [
+            ...localProvider.providerPackages,
+            { id: '', service: newPackageService.trim(), totalSessions: +newPackageSessions, price: +newPackagePrice, calendlyEventTypeUri: newPackageEventUri }
+          ];
 
-    const savePackages = async () => {
-    // Ensure calendlyEventTypeUri selected
-    if (!newPackageEventUri) {
-      alert("Trebuie să selectezi tipul de ședință din Calendly.");
-      return;
+      const res = await fetch(`/api/provider/${provider.id}/packages`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ packages: allPackages }),
+      });
+      if (!res.ok) {
+        console.error(await res.text());
+        return;
+      }
+      const { packages: updated } = await res.json();
+      setLocalProvider(prev => ({ ...prev, providerPackages: updated }));
+      // reset
+      setShowEditModal(""); setEditingPkgId(null);
+      setNewPackageService(""); setNewPackageSessions(""); setNewPackagePrice(""); setNewPackageEventUri("");
+    } finally {
+      setLoading(false); // 🆕
     }
-    // Build packages array
-    const allPackages = editingPkgId
-      ? localProvider.providerPackages.map(p =>
-          p.id === editingPkgId
-            ? { ...p, service: newPackageService.trim(), totalSessions: +newPackageSessions, price: +newPackagePrice, calendlyEventTypeUri: newPackageEventUri }
-            : p
-        )
-      : [
-          ...localProvider.providerPackages,
-          { id: '', service: newPackageService.trim(), totalSessions: +newPackageSessions, price: +newPackagePrice, calendlyEventTypeUri: newPackageEventUri }
-        ];
-
-    const res = await fetch(`/api/provider/${provider.id}/packages`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ packages: allPackages }),
-    });
-    if (!res.ok) {
-      console.error(await res.text());
-      return;
-    }
-    const { packages: updated } = await res.json();
-    setLocalProvider(prev => ({ ...prev, providerPackages: updated }));
-    // reset
-    setShowEditModal(""); setEditingPkgId(null);
-    setNewPackageService(""); setNewPackageSessions(""); setNewPackagePrice(""); setNewPackageEventUri("");
   };
 
+  // 🆕 Handle pentru ștergerea pachetelor cu loading individual
+  const handleDeletePackage = async (pkgId: string) => {
+    setDeletingPackage(pkgId); // 🆕 Loading pentru pachetul specific
+    try {
+      const res = await fetch(
+        `/api/provider/${provider.id}/packages/${pkgId}`,
+        { method: "DELETE" }
+      );
+      if (!res.ok) {
+        console.error("Eroare la ștergere pachet:", await res.text());
+        return;
+      }
+      const { packages: remaining } = await res.json();
+      setLocalProvider(prev => ({ ...prev, providerPackages: remaining }));
+    } finally {
+      setDeletingPackage(null); // 🆕
+    }
+  };
+
+  // 🆕 Handle pentru Stripe disconnect cu loading
+  const handleStripeDisconnect = async () => {
+    setLoadingStripe(true);
+    try {
+      const res = await fetch(
+        `/api/provider/${localProvider.id}/stripe-account`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ stripeAccountId: null }),
+        }
+      );
+      if (res.ok) {
+        setLocalProvider((prev) => ({
+          ...prev,
+          stripeAccountId: null,
+        }));
+      }
+    } finally {
+      setLoadingStripe(false);
+    }
+  };
+
+  // 🆕 Handle pentru Calendly disconnect cu loading
+  const handleCalendlyDisconnect = async () => {
+    setLoadingCalendly(true);
+    try {
+      const res = await fetch(
+        `/api/provider/${localProvider.id}/calendly-account`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ calendlyCalendarUri: null }),
+        }
+      );
+      if (res.ok) {
+        setLocalProvider((prev) => ({
+          ...prev,
+          calendlyCalendarUri: null,
+        }));
+      }
+    } finally {
+      setLoadingCalendly(false);
+    }
+  };
 
   // Render Stripe & Calendly connect sections
   const renderIntegrationSections = () => (
@@ -429,10 +511,7 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
         <div>
           <strong>Cont Stripe:</strong>{" "}
           {localProvider.stripeAccountId ? (
-            <span className="text-green-700">
-              Conectat
-              {/* ({localProvider.stripeAccountId}) */}
-            </span>
+            <span className="text-green-700">Conectat</span>
           ) : (
             <span className="text-red-600">Nu ești conectat</span>
           )}
@@ -448,25 +527,11 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
           </Button>
         ) : (
           <Button
-            onClick={async () => {
-              const res = await fetch(
-                `/api/provider/${localProvider.id}/stripe-account`,
-                {
-                  method: "PUT",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ stripeAccountId: null }),
-                }
-              );
-              if (res.ok) {
-                setLocalProvider((prev) => ({
-                  ...prev,
-                  stripeAccountId: null,
-                }));
-              }
-            }}
-            className="mt-2 px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
+            onClick={handleStripeDisconnect}
+            disabled={loadingStripe} // 🆕
+            className="mt-2 px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 disabled:opacity-50"
           >
-            Deconectează Stripe
+            {loadingStripe ? "Se deconectează..." : "Deconectează Stripe"} {/* 🆕 */}
           </Button>
         )}
       </div>
@@ -484,31 +549,18 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
         {!localProvider.isCalendlyConnected ? (
           <Button
             onClick={handleCalendlyConnect}
-            className="mt-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+            disabled={loadingCalendly} // 🆕
+            className="mt-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
           >
-            Conectează-te cu Calendly
+            {loadingCalendly ? "Se conectează..." : "Conectează-te cu Calendly"} {/* 🆕 */}
           </Button>
         ) : (
           <Button
-            onClick={async () => {
-              const res = await fetch(
-                `/api/provider/${localProvider.id}/calendly-account`,
-                {
-                  method: "PUT",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ calendlyCalendarUri: null }),
-                }
-              );
-              if (res.ok) {
-                setLocalProvider((prev) => ({
-                  ...prev,
-                  calendlyCalendarUri: null,
-                }));
-              }
-            }}
-            className="mt-2 px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
+            onClick={handleCalendlyDisconnect}
+            disabled={loadingCalendly} // 🆕
+            className="mt-2 px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 disabled:opacity-50"
           >
-            Deconectare Calendly
+            {loadingCalendly ? "Se deconectează..." : "Deconectare Calendly"} {/* 🆕 */}
           </Button>
         )}
       </div>
@@ -528,12 +580,14 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
             value={videoUrl}
             onChange={(e) => setVideoUrl(e.target.value)}
             className="w-full p-2 border rounded"
+            disabled={loading} // 🆕
           />
           <Button
             onClick={() => handleSaveChanges("VideoUrl")}
-            className="mt-4 py-3 w-full bg-primaryColor text-white hover:bg-secondaryColor"
+            disabled={loading} // 🆕
+            className="mt-4 py-3 w-full bg-primaryColor text-white hover:bg-secondaryColor disabled:opacity-50"
           >
-            Salvează
+            {loading ? "Se salvează..." : "Salvează"} {/* 🆕 */}
           </Button>
         </Modal>
       )}
@@ -548,12 +602,14 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
             value={scheduleLink}
             onChange={(e) => setScheduleLink(e.target.value)}
             className="w-full p-2 border rounded"
+            disabled={loading} // 🆕
           />
           <Button
             onClick={() => handleSaveChanges("ScheduleLink")}
-            className="mt-4 py-3 w-full bg-primaryColor text-white hover:bg-secondaryColor"
+            disabled={loading} // 🆕
+            className="mt-4 py-3 w-full bg-primaryColor text-white hover:bg-secondaryColor disabled:opacity-50"
           >
-            Salvează
+            {loading ? "Se salvează..." : "Salvează"} {/* 🆕 */}
           </Button>
         </Modal>
       )}
@@ -570,14 +626,16 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
                 title={spec.name}
                 selected={mainSpecialityId === spec.id}
                 setSelect={() => setMainSpecialityId(spec.id)}
+                disabled={loading} // 🆕
               />
             ))}
           </div>
           <Button
             onClick={() => handleSaveChanges("MainSpeciality")}
-            className="mt-4 py-3 w-full bg-primaryColor text-white hover:bg-secondaryColor"
+            disabled={loading} // 🆕
+            className="mt-4 py-3 w-full bg-primaryColor text-white hover:bg-secondaryColor disabled:opacity-50"
           >
-            Salvează
+            {loading ? "Se salvează..." : "Salvează"} {/* 🆕 */}
           </Button>
         </Modal>
       )}
@@ -594,14 +652,16 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
                 title={tool.name}
                 selected={mainToolId === tool.id}
                 setSelect={() => setMainToolId(tool.id)}
+                disabled={loading} // 🆕
               />
             ))}
           </div>
           <Button
             onClick={() => handleSaveChanges("MainTool")}
-            className="mt-4 py-3 w-full bg-primaryColor text-white hover:bg-secondaryColor"
+            disabled={loading} // 🆕
+            className="mt-4 py-3 w-full bg-primaryColor text-white hover:bg-secondaryColor disabled:opacity-50"
           >
-            Salvează
+            {loading ? "Se salvează..." : "Salvează"} {/* 🆕 */}
           </Button>
         </Modal>
       )}
@@ -615,12 +675,14 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             className="w-full p-2 border rounded h-32"
+            disabled={loading} // 🆕
           />
           <Button
             onClick={() => handleSaveChanges("Description")}
-            className="mt-4 py-3 w-full bg-primaryColor text-white hover:bg-secondaryColor"
+            disabled={loading} // 🆕
+            className="mt-4 py-3 w-full bg-primaryColor text-white hover:bg-secondaryColor disabled:opacity-50"
           >
-            Salvează
+            {loading ? "Se salvează..." : "Salvează"} {/* 🆕 */}
           </Button>
         </Modal>
       )}
@@ -632,14 +694,16 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
               type="checkbox"
               checked={status}
               onChange={(e) => setStatus(e.target.checked)}
+              disabled={loading} // 🆕
             />
             <span>Online</span>
           </label>
           <Button
             onClick={() => handleSaveChanges("Status")}
-            className="mt-4 py-3 w-full bg-primaryColor text-white hover:bg-secondaryColor"
+            disabled={loading} // 🆕
+            className="mt-4 py-3 w-full bg-primaryColor text-white hover:bg-secondaryColor disabled:opacity-50"
           >
-            Salvează
+            {loading ? "Se salvează..." : "Salvează"} {/* 🆕 */}
           </Button>
         </Modal>
       )}
@@ -656,13 +720,14 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
               onChange={(e) => setNewSpecialityName(e.target.value)}
               placeholder="Adaugă specialitate nouă"
               className="flex-1 p-2 border rounded"
+              disabled={loading} // 🆕
             />
             <Button
-              className="py-3 w-full bg-primaryColor text-white hover:bg-secondaryColor"
-              disabled={!newSpecialityName.trim()}
+              className="py-3 w-full bg-primaryColor text-white hover:bg-secondaryColor disabled:opacity-50"
+              disabled={!newSpecialityName.trim() || loading} // 🆕
               onClick={() => handleAddRequest("Specialities")}
             >
-              Adaugă
+              {loading ? "Se adaugă..." : "Adaugă"} {/* 🆕 */}
             </Button>
           </div>
           <div className="space-y-2 max-h-[60vh] overflow-auto">
@@ -672,14 +737,16 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
                 title={spec.name}
                 selected={selectedSpecialities.includes(spec.name)}
                 setSelect={() => toggleMulti(spec.name, "Specialities")}
+                disabled={loading} // 🆕
               />
             ))}
           </div>
           <Button
             onClick={() => handleSaveChanges("Specialities")}
-            className="mt-4 py-3 w-full bg-primaryColor text-white hover:bg-secondaryColor"
+            disabled={loading} // 🆕
+            className="mt-4 py-3 w-full bg-primaryColor text-white hover:bg-secondaryColor disabled:opacity-50"
           >
-            Salvează
+            {loading ? "Se salvează..." : "Salvează"} {/* 🆕 */}
           </Button>
         </Modal>
       )}
@@ -696,13 +763,14 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
               onChange={(e) => setNewToolName(e.target.value)}
               placeholder="Adaugă unealtă nouă"
               className="flex-1 p-2 border rounded"
+              disabled={loading} // 🆕
             />
             <Button
-              className="py-3 w-full bg-primaryColor text-white hover:bg-secondaryColor"
-              disabled={!newToolName.trim()}
+              className="py-3 w-full bg-primaryColor text-white hover:bg-secondaryColor disabled:opacity-50"
+              disabled={!newToolName.trim() || loading} // 🆕
               onClick={() => handleAddRequest("Tools")}
             >
-              Adaugă
+              {loading ? "Se adaugă..." : "Adaugă"} {/* 🆕 */}
             </Button>
           </div>
           <div className="space-y-2 max-h-[60vh] overflow-auto">
@@ -712,14 +780,16 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
                 title={tool.name}
                 selected={selectedTools.includes(tool.name)}
                 setSelect={() => toggleMulti(tool.name, "Tools")}
+                disabled={loading} // 🆕
               />
             ))}
           </div>
           <Button
             onClick={() => handleSaveChanges("Tools")}
-            className=" py-3 w-full bg-primaryColor text-white hover:bg-secondaryColor"
+            disabled={loading} // 🆕
+            className="py-3 w-full bg-primaryColor text-white hover:bg-secondaryColor disabled:opacity-50"
           >
-            Salvează
+            {loading ? "Se salvează..." : "Salvează"} {/* 🆕 */}
           </Button>
         </Modal>
       )}
@@ -733,13 +803,14 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
               onChange={(e) => setNewReadingName(e.target.value)}
               placeholder="Adaugă reading nou"
               className="flex-1 p-2 border rounded"
+              disabled={loading} // 🆕
             />
             <Button
-              className="py-3 w-full bg-primaryColor text-white hover:bg-secondaryColor"
-              disabled={!newReadingName.trim()}
+              className="py-3 w-full bg-primaryColor text-white hover:bg-secondaryColor disabled:opacity-50"
+              disabled={!newReadingName.trim() || loading} // 🆕
               onClick={() => handleAddRequest("Reading")}
             >
-              Adaugă
+              {loading ? "Se adaugă..." : "Adaugă"} {/* 🆕 */}
             </Button>
           </div>
           <div className="space-y-2 max-h-[60vh] overflow-auto">
@@ -749,14 +820,16 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
                 title={r.name}
                 selected={readingId === r.id}
                 setSelect={() => setReadingId(r.id)}
+                disabled={loading} // 🆕
               />
             ))}
           </div>
           <Button
             onClick={() => handleSaveChanges("Reading")}
-            className="mt-4 py-3 w-full bg-primaryColor text-white hover:bg-secondaryColor"
+            disabled={loading} // 🆕
+            className="mt-4 py-3 w-full bg-primaryColor text-white hover:bg-secondaryColor disabled:opacity-50"
           >
-            Salvează
+            {loading ? "Se salvează..." : "Salvează"} {/* 🆕 */}
           </Button>
         </Modal>
       )}
@@ -783,6 +856,7 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
               className="w-full p-2 border rounded"
               value={newPackageEventUri}
               onChange={e => {setNewPackageEventUri(e.target.value);setAttemptedSave(false);}}
+              disabled={loading} // 🆕
             >
               <option value="">— Alege din Calendly —</option>
               {calendlyEvents?.map(et => (
@@ -790,88 +864,95 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
               ))}
             </select>
             { !newPackageEventUri && attemptedSave && (
-  <p className="text-red-500 text-sm mt-1">
-    Trebuie să selectezi tipul de ședință.
-  </p>
-)}
+              <p className="text-red-500 text-sm mt-1">
+                Trebuie să selectezi tipul de ședință.
+              </p>
+            )}
           </div>
 
           {/* 2. Formular pachet nou sau editare */}
-<div className="mb-4 space-y-2">
-  {/* Serviciu */}
-  <div>
-    <input
-      type="text"
-      value={newPackageService}
-      onChange={e => { setNewPackageService(e.target.value); setAttemptedSave(false); }}
-      placeholder="Serviciu"
-      className={`w-full p-2 border rounded ${
-        !newPackageService.trim() && attemptedSave ? 'border-red-500' : ''
-      }`}
-    />
-    { !newPackageService.trim() && attemptedSave && (
-      <p className="text-red-500 text-sm mt-1">
-        Trebuie să introduci un nume de serviciu.
-      </p>
-    )}
-  </div>
+          <div className="mb-4 space-y-2">
+            {/* Serviciu */}
+            <div>
+              <input
+                type="text"
+                value={newPackageService}
+                onChange={e => { setNewPackageService(e.target.value); setAttemptedSave(false); }}
+                placeholder="Serviciu"
+                className={`w-full p-2 border rounded ${
+                  !newPackageService.trim() && attemptedSave ? 'border-red-500' : ''
+                }`}
+                disabled={loading} // 🆕
+              />
+              { !newPackageService.trim() && attemptedSave && (
+                <p className="text-red-500 text-sm mt-1">
+                  Trebuie să introduci un nume de serviciu.
+                </p>
+              )}
+            </div>
 
-  {/* Număr sesiuni */}
-  <div>
-    <input
-      type="number"
-      value={newPackageSessions}
-      onChange={e => { setNewPackageSessions(e.target.value); setAttemptedSave(false); }}
-      placeholder="Număr sesiuni"
-      className={`w-full p-2 border rounded ${
-        (!newPackageSessions || Number(newPackageSessions) <= 0) && attemptedSave
-          ? 'border-red-500'
-          : ''
-      }`}
-    />
-    { (!newPackageSessions || Number(newPackageSessions) <= 0) && attemptedSave && (
-      <p className="text-red-500 text-sm mt-1">
-        Trebuie să introduci un număr de sesiuni valid (>= 2).
-      </p>
-    )}
-  </div>
+            {/* Număr sesiuni */}
+            <div>
+              <input
+                type="number"
+                value={newPackageSessions}
+                onChange={e => { setNewPackageSessions(e.target.value); setAttemptedSave(false); }}
+                placeholder="Număr sesiuni"
+                className={`w-full p-2 border rounded ${
+                  (!newPackageSessions || Number(newPackageSessions) <= 0) && attemptedSave
+                    ? 'border-red-500'
+                    : ''
+                }`}
+                disabled={loading} // 🆕
+              />
+              { (!newPackageSessions || Number(newPackageSessions) <= 0) && attemptedSave && (
+                <p className="text-red-500 text-sm mt-1">
+                  Trebuie să introduci un număr de sesiuni valid (>= 2).
+                </p>
+              )}
+            </div>
 
-  {/* Preț */}
-  <div>
-    <input
-      type="number"
-      value={newPackagePrice}
-      onChange={e => { setNewPackagePrice(e.target.value); setAttemptedSave(false); }}
-      placeholder="Preț (RON)"
-      className={`w-full p-2 border rounded ${
-        (!newPackagePrice || Number(newPackagePrice) <= 0) && attemptedSave
-          ? 'border-red-500'
-          : ''
-      }`}
-    />
-    { (!newPackagePrice || Number(newPackagePrice) <= 0) && attemptedSave && (
-      <p className="text-red-500 text-sm mt-1">
-        Trebuie să introduci un preț valid (>= 1 RON).
-      </p>
-    )}
-  </div>
-</div>
+            {/* Preț */}
+            <div>
+              <input
+                type="number"
+                value={newPackagePrice}
+                onChange={e => { setNewPackagePrice(e.target.value); setAttemptedSave(false); }}
+                placeholder="Preț (RON)"
+                className={`w-full p-2 border rounded ${
+                  (!newPackagePrice || Number(newPackagePrice) <= 0) && attemptedSave
+                    ? 'border-red-500'
+                    : ''
+                }`}
+                disabled={loading} // 🆕
+              />
+              { (!newPackagePrice || Number(newPackagePrice) <= 0) && attemptedSave && (
+                <p className="text-red-500 text-sm mt-1">
+                  Trebuie să introduci un preț valid (>= 1 RON).
+                </p>
+              )}
+            </div>
+          </div>
 
-                    {/* 4. Buton adaugă / salvează */}
+          {/* 4. Buton adaugă / salvează */}
           <Button
             className="py-3 w-full bg-primaryColor text-white hover:bg-secondaryColor disabled:opacity-50"
             onClick={() => {
-  setAttemptedSave(true);
-  savePackages();
-}}
+              setAttemptedSave(true);
+              savePackages();
+            }}
             disabled={
               !newPackageEventUri ||
               !newPackageService.trim() ||
               !newPackageSessions ||
-              !newPackagePrice
+              !newPackagePrice ||
+              loading // 🆕
             }
           >
-            {editingPkgId ? "Salvează modificări" : "Adaugă pachet nou"}
+            {loading 
+              ? (editingPkgId ? "Se salvează modificările..." : "Se adaugă pachetul...") // 🆕
+              : (editingPkgId ? "Salvează modificări" : "Adaugă pachet nou")
+            }
           </Button>
 
           {/* 3. Listare pachete existente */}
@@ -886,29 +967,17 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
                   <div className="space-x-2">
                     <Button
                       onClick={() => handleEditClick(pkg)}
-                      className="text-blue-600 hover:underline"
+                      disabled={loading || deletingPackage === pkg.id} // 🆕
+                      className="text-blue-600 hover:underline disabled:opacity-50"
                     >
                       Editează
                     </Button>
                     <Button
-                      onClick={async () => {
-                        const res = await fetch(
-                          `/api/provider/${provider.id}/packages/${pkg.id}`,
-                          { method: "DELETE" }
-                        );
-                        if (!res.ok) {
-                          console.error(
-                            "Eroare la ștergere pachet:",
-                            await res.text()
-                          );
-                          return;
-                        }
-                        const { packages: remaining } = await res.json();
-                        setLocalProvider(prev => ({ ...prev, providerPackages: remaining }));
-                      }}
-                      className="text-red-600 hover:underline"
+                      onClick={() => handleDeletePackage(pkg.id)} // 🆕
+                      disabled={loading || deletingPackage === pkg.id} // 🆕
+                      className="text-red-600 hover:underline disabled:opacity-50"
                     >
-                      Șterge
+                      {deletingPackage === pkg.id ? "Se șterge..." : "Șterge"} {/* 🆕 */}
                     </Button>
                   </div>
                 </li>
@@ -916,10 +985,8 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
             </ul>
           </div>
 
-
         </Modal>
       )}
-
 
       {/* =================== Detalii Furnizor =================== */}
       <div className="max-w-3xl mx-auto bg-white shadow rounded p-6">
@@ -952,17 +1019,6 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
             </div>
             <EditButton showEditModal={() => setShowEditModal("VideoUrl")} />
           </div>
-
-          {/* Link Programări */}
-          {/* <div className="h-full flex flex-col justify-between bg-gray-50 p-4 rounded">
-            <div>
-              <strong>Link Programări:</strong>{" "}
-              {localProvider.scheduleLink || "—"}
-            </div>
-            <EditButton
-              showEditModal={() => setShowEditModal("ScheduleLink")}
-            />
-          </div> */}
 
           {/* Reading */}
           <div className="h-full flex flex-col justify-between bg-gray-50 p-4 rounded">

@@ -114,7 +114,7 @@ const AdminPsychics: React.FC<AdminPsychicsProps> = ({ physics }) => {
   const startIndex = currentIndex * itemsPerPage;
   const currentUsers = filteredUsers.slice(startIndex, startIndex + itemsPerPage);
   const currentCatalogItems = filteredCatalogItems.slice(startIndex, startIndex + itemsPerPage);
-
+  console.log("currentUsers: ",currentUsers);
   const goToPrevious = () => setCurrentIndex(prev => prev > 0 ? prev - 1 : totalPages - 1);
   const goToNext = () => setCurrentIndex(prev => prev < totalPages - 1 ? prev + 1 : 0);
 
@@ -261,7 +261,7 @@ const AdminPsychics: React.FC<AdminPsychicsProps> = ({ physics }) => {
               className="w-1/2 p-2 border rounded"
             />
           </div>
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 place-items-center">
             {currentUsers.map(physic => (
               <div key={physic.id} className="relative">
                 <ProviderCard
@@ -274,9 +274,10 @@ const AdminPsychics: React.FC<AdminPsychicsProps> = ({ physics }) => {
                   online={physic.provider?.online}
                   rating={physic.provider?.rating || 0}
                   description="Lorem ipsum dolor sit amet"
-                  reviews={physics.provider?.reviewsCount || 0}
+                  reviews={physic.provider?.reviewsCount || 0}
                   speciality="Speciality"
                   openDeleteUserModal={()=>openDeleteUserModal(physic)}
+                  grossVolume={physic.provider?.grossVolume || 0}
                 />
                 {/* Butoane de acțiune */}
     

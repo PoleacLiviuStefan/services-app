@@ -266,13 +266,6 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!provider.mainSpeciality) {
-      console.error(`❌ Provider-ul ${providerId} nu are specialitate principală configurată`);
-      return NextResponse.json(
-        { error: 'Provider-ul nu are o specialitate principală configurată' },
-        { status: 400 }
-      );
-    }
 
     // Verifică că provider-ul are token-uri Calendly
     let {
@@ -290,7 +283,6 @@ export async function POST(request: Request) {
     }
 
     console.log(`✅ Provider găsit: ${provider.user.name || provider.user.email} (${provider.id})`);
-    console.log(`✅ Specialitate: ${provider.mainSpeciality.name}`);
 
     // 🆕 VALIDEAZĂ PACHETUL ÎNAINTE DE CALENDLY
     console.log('🔍 Validare pachet...');
@@ -492,7 +484,6 @@ export async function POST(request: Request) {
           id: sessionId,
           providerId: provider.id,
           clientId: clientUser.id,
-          specialityId: provider.mainSpeciality.id,
           
           // 🆕 Detalii pachete
           packageId: packageId,
@@ -514,7 +505,7 @@ export async function POST(request: Request) {
           scheduledAt: new Date(),  // Timestamp server pentru metadata
           status: 'SCHEDULED',
           
-          totalPrice: Math.round(provider.mainSpeciality.price * 100), // în bani
+          
           notes: `Sesiune #${sessionNumber} din pachetul ${userPackage.providerPackage?.service}. Programată prin Calendly pentru ${clientUser.name || clientUser.email}. Camera Daily.co extinsă cu 5 minute buffer (până la ${dailyRoom.extendedEndTime.toISOString()}). Calendly client: ${clientName} (${clientEmail}). Timezone: UTC+3 (păstrat din Calendly). Recording layout: grid (fix pentru active-speaker error).`,
           createdAt: new Date(),    // Timestamp server
           updatedAt: new Date(),    // Timestamp server
@@ -549,7 +540,6 @@ export async function POST(request: Request) {
     console.log(`   - ID: ${sessionId}`);
     console.log(`   - Client: ${clientUser.name || clientUser.email} (${clientUser.id})`);
     console.log(`   - Provider: ${provider.user.name || provider.user.email} (${provider.id})`);
-    console.log(`   - Specialitate: ${provider.mainSpeciality.name}`);
     console.log(`   - Camera Daily.co: ${dailyRoom.roomUrl}`);
     console.log(`   - 🔧 Timp (UTC+3 din Calendly): ${startTime.toISOString()} - ${originalEndTime.toISOString()}`);
     console.log(`   - 🆕 Timp extins Daily.co: ${dailyRoom.extendedEndTime.toISOString()} (+5 min buffer)`);
@@ -569,7 +559,6 @@ export async function POST(request: Request) {
         startDate: result.session.startDate?.toISOString(),
         endDate: result.session.endDate?.toISOString(),
         duration: result.session.duration,
-        speciality: provider.mainSpeciality.name,
         
         // 🆕 Informații pachete
         packageInfo: result.packageInfo,

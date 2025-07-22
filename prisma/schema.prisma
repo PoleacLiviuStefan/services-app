@@ -237,7 +237,7 @@ model Speciality {
 
   providers   Provider[]           @relation("ProviderSpecialities")
   mainFor     Provider[]           @relation("ProviderMainSpeciality")
-  sessions    ConsultingSession[]  @relation("SpecialitySessions")
+  // 🗑️ ELIMINAT: sessions    ConsultingSession[]  @relation("SpecialitySessions")
 }
 
 model Tool {
@@ -253,7 +253,7 @@ model ConsultingSession {
   id               String                  @id @default(uuid())
   providerId       String
   clientId         String
-  specialityId     String
+  // 🗑️ ELIMINAT: specialityId     String
   packageId        String?
   duration         Int?
 
@@ -306,7 +306,7 @@ model ConsultingSession {
   provider         Provider                @relation("ProviderSessions", fields: [providerId], references: [id], onDelete: Cascade)
   client           User                    @relation("ClientSessions", fields: [clientId], references: [id], onDelete: Cascade)
   sessionAccount   Account?                @relation("SessionAccount", fields: [accountId], references: [id], onDelete: SetNull)
-  speciality       Speciality              @relation("SpecialitySessions", fields: [specialityId], references: [id], onDelete: Cascade)
+  // 🗑️ ELIMINAT: speciality       Speciality              @relation("SpecialitySessions", fields: [specialityId], references: [id], onDelete: Cascade)
   userPackage      UserProviderPackage?    @relation("SessionUserPackage", fields: [packageId], references: [id])
   
   // 🆕 Relație cu recenziile (o sesiune poate avea o recenzie)

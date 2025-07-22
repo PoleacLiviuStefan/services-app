@@ -15,6 +15,7 @@ import defaultAvatar from "../../public/default-avatar.webp";
 
 interface ProviderCardProp extends ProviderInterface {
   forAdmin?: boolean;
+  grossVolume?: number | null; // 🆕 Adăugat pentru afișarea sumei încasate
   highlightedCategory?: {
     type: "speciality" | "tool" | "reading" | undefined;
     name: string;
@@ -30,6 +31,7 @@ const ProviderCard: React.FC<ProviderCardProp> = ({
   reviews,
   speciality,
   forAdmin = false,
+  grossVolume, // 🆕 Destructurat din props
   role,
   email,
   isProvider = false,
@@ -37,7 +39,9 @@ const ProviderCard: React.FC<ProviderCardProp> = ({
   highlightedCategory,
   openDeleteUserModal = {},
 }) => {
+  
   console.log("numele este: ", name);
+  console.log("grossVolume este: ", grossVolume);
   const { data: session } = useSession();
   const user = session?.user;
   const [showSettingModal, setShowSettingModal] = useState(false);
@@ -93,10 +97,16 @@ const ProviderCard: React.FC<ProviderCardProp> = ({
     }
   };
 
+  // 🆕 Funcție pentru formatarea sumei
+  const formatGrossVolume = (amount: number | null) => {
+    if (amount === null || amount === undefined) return "0.00";
+    return amount.toFixed(2);
+  };
+
   return (
     <div
       className={`relative ${
-        forAdmin ? "h-[650px]" : "h-card"
+        forAdmin ? "h-[750px]" : "h-card"
       } w-card border-8 border-primaryColor/10 rounded-lg hover:shadow-lg shadow-primaryColor transition duration-300 ease-in-out cursor-pointer bg-white text-black`}
     >
       <Link href={`/profil/${formatForUrl(name)}`}>
@@ -148,6 +158,17 @@ const ProviderCard: React.FC<ProviderCardProp> = ({
         <span className="text-sm lg:text-md border-2 px-2 py-1 rounded-xl text-primaryColor">
           {reviews} Recenzii
         </span>
+        
+        {/* 🆕 AFIȘEAZĂ SUMA ÎNCASATĂ DOAR ÎN ADMIN ȘI DOAR PENTRU PROVIDERI */}
+        {forAdmin && isProvider && (
+          <div className="w-full bg-green-100 border-2 border-green-500 rounded-lg p-2 text-center">
+            <span className="text-xs font-semibold text-green-800">VENITURI TOTALE</span>
+            <div className="text-lg font-bold text-green-700">
+              {formatGrossVolume(grossVolume)} RON
+            </div>
+          </div>
+        )}
+
         <span className="font-bold mt-2 text-secondaryColor text-sm lg:text-sm">
           Specialitate Principala
         </span>

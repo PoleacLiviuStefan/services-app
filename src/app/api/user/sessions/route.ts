@@ -1,4 +1,4 @@
-// /api/user/sessions/route.ts - API CU LEGĂTURĂ DIRECTĂ RECENZII
+// /api/user/sessions/route.ts - API FĂRĂ SPECIALITY ID (CORECTAT)
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
@@ -60,34 +60,49 @@ export async function GET(): Promise<NextResponse> {
       console.log(`🔍 Căutare sesiuni ca PROVIDER pentru providerId: ${provider.id}`);
       
       try {
-        // 🔧 QUERY DEFENSIV CU TRY-CATCH PENTRU REVIEW INCLUDE
-providerSessions = await prisma.consultingSession.findMany({
-  where: { providerId: provider.id },
-  include: {
-    client: {
-      select: { id: true, name: true, email: true, image: true }
-    },
-    speciality: {
-      select: { id: true, name: true, description: true, price: true }
-    },
-    userPackage: {
-      select: { 
-        id: true, 
-        totalSessions: true, 
-        usedSessions: true,
-        expiresAt: true
-      }
-    },
-    review: {
-      include: {
-        fromUser: {
-          select: { id: true, name: true, email: true, image: true }
-        }
-      }
-    }
-  },
-  orderBy: { startDate: 'desc' }
-});
+        // 🔧 QUERY FĂRĂ SPECIALITY - iau specialitatea de la provider
+        providerSessions = await prisma.consultingSession.findMany({
+          where: { providerId: provider.id },
+          include: {
+            client: {
+              select: { id: true, name: true, email: true, image: true }
+            },
+            // 🗑️ ELIMINAT: speciality (nu mai există relația)
+            provider: {
+              select: {
+                id: true,
+                mainSpeciality: {
+                  select: { id: true, name: true, description: true, price: true }
+                },
+                user: {
+                  select: { id: true, name: true, email: true, image: true }
+                }
+              }
+            },
+            userPackage: {
+              select: { 
+                id: true, 
+                totalSessions: true, 
+                usedSessions: true,
+                expiresAt: true,
+                providerPackage: {
+                  select: {
+                    service: true,
+                    price: true
+                  }
+                }
+              }
+            },
+            review: {
+              include: {
+                fromUser: {
+                  select: { id: true, name: true, email: true, image: true }
+                }
+              }
+            }
+          },
+          orderBy: { startDate: 'desc' }
+        });
 
         
         console.log(`✅ Găsite ${providerSessions.length} sesiuni ca PROVIDER`);
@@ -143,36 +158,43 @@ providerSessions = await prisma.consultingSession.findMany({
         console.log(`✅ Strategia 1 - folosesc clientId din model client: ${clientRecord.id}`);
         
         clientSessions = await prisma.consultingSession.findMany({
-  where: { clientId: clientRecord.id },
-  include: {
-    provider: {
-      include: {
-        user: {
-          select: { id: true, name: true, email: true, image: true }
-        }
-      }
-    },
-    speciality: {
-      select: { id: true, name: true, description: true, price: true }
-    },
-    userPackage: {
-      select: { 
-        id: true, 
-        totalSessions: true, 
-        usedSessions: true,
-        expiresAt: true
-      }
-    },
-    review: {
-      include: {
-        fromUser: {
-          select: { id: true, name: true, email: true, image: true }
-        }
-      }
-    }
-  },
-  orderBy: { startDate: 'desc' }
-});
+          where: { clientId: clientRecord.id },
+          include: {
+            provider: {
+              include: {
+                mainSpeciality: {
+                  select: { id: true, name: true, description: true, price: true }
+                },
+                user: {
+                  select: { id: true, name: true, email: true, image: true }
+                }
+              }
+            },
+            // 🗑️ ELIMINAT: speciality (nu mai există relația)
+            userPackage: {
+              select: { 
+                id: true, 
+                totalSessions: true, 
+                usedSessions: true,
+                expiresAt: true,
+                providerPackage: {
+                  select: {
+                    service: true,
+                    price: true
+                  }
+                }
+              }
+            },
+            review: {
+              include: {
+                fromUser: {
+                  select: { id: true, name: true, email: true, image: true }
+                }
+              }
+            }
+          },
+          orderBy: { startDate: 'desc' }
+        });
 
         
         console.log(`✅ Găsite ${clientSessions.length} sesiuni ca CLIENT (strategia 1)`);
@@ -212,36 +234,43 @@ providerSessions = await prisma.consultingSession.findMany({
       
       try {
        clientSessions = await prisma.consultingSession.findMany({
-  where: { clientId: userId },
-  include: {
-    provider: {
-      include: {
-        user: {
-          select: { id: true, name: true, email: true, image: true }
-        }
-      }
-    },
-    speciality: {
-      select: { id: true, name: true, description: true, price: true }
-    },
-    userPackage: {
-      select: { 
-        id: true, 
-        totalSessions: true, 
-        usedSessions: true,
-        expiresAt: true
-      }
-    },
-    review: {
-      include: {
-        fromUser: {
-          select: { id: true, name: true, email: true, image: true }
-        }
-      }
-    }
-  },
-  orderBy: { startDate: 'desc' }
-});
+          where: { clientId: userId },
+          include: {
+            provider: {
+              include: {
+                mainSpeciality: {
+                  select: { id: true, name: true, description: true, price: true }
+                },
+                user: {
+                  select: { id: true, name: true, email: true, image: true }
+                }
+              }
+            },
+            // 🗑️ ELIMINAT: speciality (nu mai există relația)
+            userPackage: {
+              select: { 
+                id: true, 
+                totalSessions: true, 
+                usedSessions: true,
+                expiresAt: true,
+                providerPackage: {
+                  select: {
+                    service: true,
+                    price: true
+                  }
+                }
+              }
+            },
+            review: {
+              include: {
+                fromUser: {
+                  select: { id: true, name: true, email: true, image: true }
+                }
+              }
+            }
+          },
+          orderBy: { startDate: 'desc' }
+        });
 
         
         console.log(`✅ Găsite ${clientSessions.length} sesiuni ca CLIENT (strategia 2)`);
@@ -379,7 +408,7 @@ providerSessions = await prisma.consultingSession.findMany({
       }
     }
 
-    // === MAPAREA DATELOR (SIMPLIFICATĂ CU LEGĂTURA DIRECTĂ) ===
+    // === MAPAREA DATELOR (ACTUALIZATĂ FĂRĂ SPECIALITY) ===
     const mapSessionToResponse = (sess: any, userRole: 'provider' | 'client') => {
       try {
         let counterpart, counterpartEmail, counterpartImage, clientId = null;
@@ -401,6 +430,43 @@ providerSessions = await prisma.consultingSession.findMany({
           counterpart = sess.provider.user.name || sess.provider.user.email || 'Provider necunoscut';
           counterpartEmail = sess.provider.user.email || null;
           counterpartImage = sess.provider.user.image || null;
+        }
+
+        // 🔧 OBȚINE SPECIALITATEA DE LA PROVIDER (NU DE LA SESIUNE)
+        let specialityInfo = {
+          name: 'Serviciu necunoscut',
+          id: null,
+          price: 0
+        };
+
+        try {
+          // Pentru provider sessions, iau de la provider direct
+          if (userRole === 'provider' && sess.provider?.mainSpeciality) {
+            specialityInfo = {
+              name: sess.provider.mainSpeciality.name || 'Serviciu necunoscut',
+              id: sess.provider.mainSpeciality.id || null,
+              price: sess.provider.mainSpeciality.price || 0
+            };
+          }
+          // Pentru client sessions, iau de la provider
+          else if (userRole === 'client' && sess.provider?.mainSpeciality) {
+            specialityInfo = {
+              name: sess.provider.mainSpeciality.name || 'Serviciu necunoscut',
+              id: sess.provider.mainSpeciality.id || null,
+              price: sess.provider.mainSpeciality.price || 0
+            };
+          }
+          // Fallback la informații din pachet
+          else if (sess.userPackage?.providerPackage?.service) {
+            specialityInfo = {
+              name: sess.userPackage.providerPackage.service,
+              id: null,
+              price: sess.userPackage.providerPackage.price || 0
+            };
+          }
+        } catch (specialityError) {
+          console.error(`❌ Eroare la obținerea specialității pentru sesiunea ${sess.id}:`, specialityError);
+          // Păstrează valorile default
         }
 
         // 🆕 EXTRAGE RECENZIA DIRECT DIN SESIUNE (DEFENSIV)
@@ -471,8 +537,9 @@ providerSessions = await prisma.consultingSession.findMany({
           counterpart,
           counterpartEmail,
           counterpartImage,
-          speciality: sess.speciality?.name || 'Serviciu necunoscut',
-          specialityId: sess.speciality?.id || null,
+          // 🔧 FOLOSEȘTE SPECIALITATEA DE LA PROVIDER
+          speciality: specialityInfo.name,
+          specialityId: specialityInfo.id,
           status: sess.status,
           duration: sess.duration,
           actualDuration: sess.actualDuration,
@@ -506,15 +573,15 @@ providerSessions = await prisma.consultingSession.findMany({
           dailyDomainName: sess.dailyDomainName,
           dailyCreatedAt: sess.dailyCreatedAt?.toISOString() || null,
           
-          // Package information
+          // 🔧 PACKAGE INFORMATION (ACTUALIZAT)
           packageInfo: sess.userPackage ? {
             id: sess.userPackage.id,
-            service: sess.speciality?.name || 'Serviciu necunoscut',
+            service: sess.userPackage.providerPackage?.service || specialityInfo.name,
             totalSessions: sess.userPackage.totalSessions,
             usedSessions: sess.userPackage.usedSessions,
             remainingSessions: sess.userPackage.totalSessions - sess.userPackage.usedSessions,
             expiresAt: sess.userPackage.expiresAt?.toISOString() || null,
-            price: sess.speciality?.price || 0
+            price: sess.userPackage.providerPackage?.price || specialityInfo.price
           } : null,
 
           calendlyEventUri: sess.calendlyEventUri,
@@ -693,7 +760,8 @@ providerSessions = await prisma.consultingSession.findMany({
       serverTimeUTC: nowUTC.toISOString(),
       adjustedTime: nowAdjusted.toISOString(),
       offsetApplied: `${ROMANIA_OFFSET / (60 * 60 * 1000)} hours`,
-      reviewsIncluded: 'Direct from session relations'
+      reviewsIncluded: 'Direct from session relations',
+      schemaNote: 'SpecialityId eliminat - folosim provider.mainSpeciality'
     });
 
     console.log(`📈 Statistici DUAL pentru user ${userId}:`, {
@@ -813,7 +881,7 @@ function checkAndUpdateSessionStatus(session: any): {
     };
   }
 
-  // Buffer de „no‑show” de 2 ore
+  // Buffer de „no‑show" de 2 ore
   const bufferTime = 2 * 60 * 60 * 1000;
 
   // CAZ 3: După end + buffer și încă SCHEDULED -> NO_SHOW

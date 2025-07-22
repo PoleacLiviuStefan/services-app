@@ -1,4 +1,4 @@
-// File: src/app/api/purchase/route.ts
+// File: src/app/api/purchase/route.ts - CU ACTUALIZAREA GROSS VOLUME
 
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
@@ -46,7 +46,7 @@ export async function POST(req: Request) {
     );
   }
 
-  // 4. Obține detaliile pachetului din baza de date
+  // 4. Obține detaliile pachetului din baza de date (INCLUSIV PREȚUL)
   let pkg;
   try {
     pkg = await prisma.providerPackage.findUnique({
@@ -54,10 +54,11 @@ export async function POST(req: Request) {
       select: {
         totalSessions: true,
         providerId: true,
+        price: true, // 🆕 Adăugat pentru gross volume
+        service: true, // 🆕 Pentru logging
       },
     });
   } catch (err: any) {
-    // În loc de console.error(err), logăm doar stack-ul
     console.error("[/api/purchase] Eroare la citirea pachetului:", err.stack);
     return NextResponse.json(
       {
@@ -76,8 +77,10 @@ export async function POST(req: Request) {
     );
   }
 
-  // 5. Preia providerId-ul care deține pachetul
-  const { providerId: providerIdOfPackage, totalSessions } = pkg;
+  // 5. Preia providerId-ul care deține pachetul și prețul
+  const { providerId: providerIdOfPackage, totalSessions, price: packagePrice, service: packageService } = pkg;
+
+  console.log(`💰 Pachet găsit: ${packageService} - ${packagePrice}€ - ${totalSessions} sesiuni`);
 
   // 6. Verifică dacă utilizatorul curent este un provider și obține providerId-ul său
   let myProvider;
@@ -89,7 +92,6 @@ export async function POST(req: Request) {
   } catch (err: any) {
     console.error(
       "[/api/purchase] Eroare la citirea provider-ului curent:",
-      // Logăm doar stack-ul
       err.stack
     );
     return NextResponse.json(
@@ -109,31 +111,104 @@ export async function POST(req: Request) {
     );
   }
 
-  // 8. Creează UserProviderPackage (clientul cumpără pachetul)
+  // 8. 🆕 CREEAZĂ UserProviderPackage ȘI ACTUALIZEAZĂ GROSS VOLUME ÎN TRANZACȚIE
   try {
-    const newUserPkg = await prisma.userProviderPackage.create({
-      data: {
-        userId: currentUserId,           // ID-ul user-ului care cumpără
-        providerId: providerIdOfPackage, // ID-ul provider-ului care deține pachetul
-        packageId,                       // ID-ul pachetului
-        totalSessions,                   // totalSessions din pachet
-        usedSessions: 0,
-      },
+    const result = await prisma.$transaction(async (tx) => {
+      // Creează UserProviderPackage (clientul cumpără pachetul)
+      const newUserPkg = await tx.userProviderPackage.create({
+        data: {
+          userId: currentUserId,           // ID-ul user-ului care cumpără
+          providerId: providerIdOfPackage, // ID-ul provider-ului care deține pachetul
+          packageId,                       // ID-ul pachetului
+          totalSessions,                   // totalSessions din pachet
+          usedSessions: 0,
+        },
+      });
+
+      // 🆕 ACTUALIZEAZĂ GROSS VOLUME PE PROVIDER
+      const updatedProvider = await tx.provider.update({
+        where: { id: providerIdOfPackage },
+        data: {
+          grossVolume: {
+            increment: packagePrice // Adaugă prețul pachetului la gross volume
+          }
+        },
+        select: {
+          grossVolume: true,
+          user: {
+            select: {
+              name: true,
+              email: true
+            }
+          }
+        }
+      });
+
+      console.log(`💰 GrossVolume actualizat pentru provider ${providerIdOfPackage}: +${packagePrice}€ → ${updatedProvider.grossVolume}€`);
+
+      return {
+        userPackage: newUserPkg,
+        providerInfo: {
+          newGrossVolume: updatedProvider.grossVolume,
+          grossVolumeIncrease: packagePrice,
+          providerName: updatedProvider.user.name || updatedProvider.user.email
+        }
+      };
     });
-    console.log("[/api/purchase] UserProviderPackage creat:", newUserPkg);
+
+    console.log("[/api/purchase] ✅ Cumpărare completă cu succes:");
+    console.log(`   - UserProviderPackage creat: ${result.userPackage.id}`);
+    console.log(`   - Client: ${currentUserId}`);
+    console.log(`   - Pachet: ${packageService} (${totalSessions} sesiuni)`);
+    console.log(`   - Preț: ${packagePrice}€`);
+    console.log(`   - Provider gross volume: ${result.providerInfo.newGrossVolume}€ (+${result.providerInfo.grossVolumeIncrease}€)`);
+    console.log(`   - Provider: ${result.providerInfo.providerName}`);
+
     return NextResponse.json(
-      { ok: true, data: newUserPkg },
+      { 
+        ok: true, 
+        data: result.userPackage,
+        // 🆕 Informații suplimentare despre actualizarea gross volume
+        grossVolumeInfo: {
+          packagePrice: packagePrice,
+          providerGrossVolume: result.providerInfo.newGrossVolume,
+          grossVolumeIncrease: result.providerInfo.grossVolumeIncrease,
+          providerName: result.providerInfo.providerName
+        },
+        message: `Pachetul ${packageService} a fost cumpărat cu succes! Provider-ul a fost creditat cu ${packagePrice}€.`
+      },
       { status: 201 }
     );
   } catch (err: any) {
     console.error(
-      "[/api/purchase] Eroare la crearea UserProviderPackage:",
-      // Iar aici, pentru a evita bug-ul din Next 15, afișăm doar stack-ul
+      "[/api/purchase] Eroare la crearea UserProviderPackage și actualizarea gross volume:",
       err.stack
     );
+
+    // 🆕 Verifică tipuri de erori specifice
+    if (err.code === 'P2002') {
+      return NextResponse.json(
+        {
+          error: "Ai deja acest pachet cumpărat.",
+          details: "Duplicate purchase detected"
+        },
+        { status: 409 }
+      );
+    }
+
+    if (err.code === 'P2025') {
+      return NextResponse.json(
+        {
+          error: "Provider-ul sau pachetul nu mai există.",
+          details: "Record not found"
+        },
+        { status: 404 }
+      );
+    }
+
     return NextResponse.json(
       {
-        error: "Eroare internă la crearea UserProviderPackage.",
+        error: "Eroare internă la procesarea cumpărăturii.",
         details: err.message ?? "Unknown error"
       },
       { status: 500 }

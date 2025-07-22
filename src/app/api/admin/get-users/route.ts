@@ -31,7 +31,7 @@ export async function GET() {
       return new Response(JSON.stringify({error: "Nu ai permisiunea de a accesa această resursă."}), { status: 403 });
     }
 
-    // Selectăm doar utilizatorii care NU sunt ADMIN
+    // 🆕 QUERY MODIFICAT pentru a include rating și reviewsCount
     const users = await prisma.user.findMany({
       where: {},
       select: {
@@ -46,6 +46,7 @@ export async function GET() {
             id: true,
             online: true,
             description: true,
+            grossVolume: true, // ✅ Deja inclus pentru venituri
             tools: {
               select: {
                 id: true,
@@ -58,25 +59,68 @@ export async function GET() {
                 name: true,
                 description: true
               }
+            },
+            // 🆕 ADĂUGAT: Reviews pentru calculul rating-ului
+            reviews: {
+              select: {
+                rating: true
+              }
+            },
+            // 🆕 ADĂUGAT: Count pentru numărul total de recenzii
+            _count: {
+              select: {
+                reviews: true
+              }
             }
           }
         }
       }
     });
-    
-    
 
-    console.log("Users:", users); // ✅ Debugging
+    console.log("Users raw:", users); // ✅ Debugging
 
-    if (!users || users.length === 0) { // ❗️Verificare dacă `users` este null sau un array gol
+    if (!users || users.length === 0) {
       return new Response(JSON.stringify({ error: "Nu s-au găsit utilizatori." }), { status: 404 });
     }
 
-    return new Response(JSON.stringify({ users }), { 
+    // 🆕 PROCESEAZĂ datele pentru a calcula rating-ul mediu și adăuga reviewsCount
+    const processedUsers = users.map(user => {
+      if (!user.provider) {
+        return user; // Dacă nu e provider, returnează user-ul ca atare
+      }
+
+      // Calculează rating-ul mediu din recenzii
+      const reviews = user.provider.reviews;
+      let averageRating = 0;
+      const reviewsCount = user.provider._count.reviews;
+
+      if (reviews.length > 0) {
+        const totalRating = reviews.reduce((sum, review) => sum + review.rating, 0);
+        averageRating = Number((totalRating / reviews.length).toFixed(1));
+      }
+
+      return {
+        ...user,
+        provider: {
+          ...user.provider,
+          // 🆕 Adaugă rating-ul calculat
+          rating: averageRating,
+          // 🆕 Adaugă numărul de recenzii
+          reviewsCount: reviewsCount,
+          // Elimină datele procesate pentru a nu polua răspunsul
+          reviews: undefined,
+          _count: undefined
+        }
+      };
+    });
+
+    console.log("Users processed:", processedUsers); // ✅ Debugging pentru datele procesate
+
+    return new Response(JSON.stringify({ users: processedUsers }), { 
       status: 200,
       headers: { "Content-Type": "application/json" } 
     });
-  } catch (error: unknown) { // 🔍️ Adaugăm tipul `any` pentru eroare
+  } catch (error: unknown) {
     const message = isError(error) ? error.message : String(error);
 
     console.error('Eroare la obținerea providerilor:', message);
