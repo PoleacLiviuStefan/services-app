@@ -9,6 +9,7 @@ import Image from 'next/image';
 // import { useCatalogStore } from '@/store/catalog';
 import { displayedServices } from '@/lib/constants';
 import handleLogout from '@/lib/api/logout/logout';
+import { useRouter } from 'next/navigation';
 
 const NavbarMobile = () => {
   const { data: session, status } = useSession();
@@ -25,6 +26,37 @@ const NavbarMobile = () => {
   const slug = encodeURIComponent(
     rawName.trim().split(/\s+/).join("-")
   )
+    const router = useRouter();
+
+  const handleDespreNoiClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    
+    // Verifică dacă suntem pe homepage
+    if (window.location.pathname === "/") {
+      // Scrollează direct către secțiune
+      const element = document.getElementById("despre-noi");
+      if (element) {
+        element.scrollIntoView({ 
+          behavior: "smooth", 
+          block: "start" 
+        });
+      }
+    } else {
+      // Mergi la homepage și apoi scrollează
+      router.push("/");
+      setTimeout(() => {
+        const element = document.getElementById("despre-noi");
+        if (element) {
+          element.scrollIntoView({ 
+            behavior: "smooth", 
+            block: "start" 
+          });
+        }
+      }, 100); // Mic delay pentru a permite încărcarea paginii
+    }
+  };
+
+
   return (
     <nav className="lg:hidden fixed top-0 left-0 w-full h-[50px] z-50 bg-primaryColor">
       <div className="flex items-center justify-between px-4 h-full z-50">
@@ -115,7 +147,7 @@ const NavbarMobile = () => {
           </li>
 
           <li onClick={() => setIsOpen(false)}>
-            <Link href="/">DESPRE NOI</Link>
+            <Button onClick={handleDespreNoiClick}>DESPRE NOI</Button>
           </li>
           {/* <li onClick={() => setIsOpen(false)}>
             <Link href="/">ARTICOLE</Link>

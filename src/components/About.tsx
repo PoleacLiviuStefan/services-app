@@ -3,7 +3,7 @@ import SectionTitle from "./ui/sectionTitle";
 
 const About = () => {
   return (
-    <div className="flex flex-col items-start text-white space-y-12 p-4 border-primaryColor border-2 rounded-lg w-full h-full">
+    <div id="despre-noi" className="flex flex-col items-start text-white space-y-12 p-4 border-primaryColor border-2 rounded-lg w-full h-full">
       <SectionTitle>Despre noi</SectionTitle>
       <div className="flex flex-col lg:grid lg:grid-cols-2 items-center gap-2 text-primaryColor px-3 lg:p-0">
         <div className="flex flex-col">

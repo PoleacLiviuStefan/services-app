@@ -17,6 +17,113 @@ enum SortOrder {
 // 🆕 Tip pentru vizualizare
 type ViewMode = 'client' | 'provider';
 
+// 🆕 Componenta Skeleton Loading
+const PackagesSkeleton = ({ isProvider }: { isProvider: boolean }) => {
+  return (
+    <div className="space-y-4 max-w-2xl mx-auto animate-pulse">
+      {/* Skeleton pentru butoanele de mod (doar pentru provideri) */}
+      {isProvider && (
+        <div className="flex justify-center space-x-2 mb-6">
+          <div className="h-10 w-24 bg-gray-300 rounded-lg"></div>
+          <div className="h-10 w-32 bg-gray-300 rounded-lg"></div>
+        </div>
+      )}
+
+      {/* Skeleton pentru titlu */}
+      <div className="h-6 w-64 bg-gray-300 rounded mb-4"></div>
+
+      {/* Skeleton pentru statistici */}
+      <div className="bg-gray-100 rounded-lg p-4 mb-4">
+        <div className="grid grid-cols-3 gap-4 text-center">
+          <div className="space-y-2">
+            <div className="h-8 w-12 bg-gray-300 rounded mx-auto"></div>
+            <div className="h-4 w-16 bg-gray-300 rounded mx-auto"></div>
+          </div>
+          <div className="space-y-2">
+            <div className="h-8 w-12 bg-gray-300 rounded mx-auto"></div>
+            <div className="h-4 w-16 bg-gray-300 rounded mx-auto"></div>
+          </div>
+          <div className="space-y-2">
+            <div className="h-8 w-12 bg-gray-300 rounded mx-auto"></div>
+            <div className="h-4 w-20 bg-gray-300 rounded mx-auto"></div>
+          </div>
+        </div>
+      </div>
+
+      {/* Skeleton pentru tabs */}
+      <div className="flex space-x-2 mb-4">
+        <div className="h-8 w-20 bg-gray-300 rounded"></div>
+        <div className="h-8 w-24 bg-gray-300 rounded"></div>
+        <div className="h-8 w-28 bg-gray-300 rounded"></div>
+      </div>
+
+      {/* Skeleton pentru filtre */}
+      <div className="flex flex-wrap gap-3 mb-4">
+        <div className="flex-1 h-10 bg-gray-300 rounded min-w-48"></div>
+        <div className="h-10 w-32 bg-gray-300 rounded"></div>
+        <div className="h-10 w-32 bg-gray-300 rounded"></div>
+        <div className="h-10 w-24 bg-gray-300 rounded"></div>
+      </div>
+
+      {/* Skeleton pentru lista de pachete */}
+      <div className="space-y-4">
+        {[1, 2, 3, 4, 5].map((index) => (
+          <div key={index} className="border rounded-lg p-4 bg-white shadow-sm">
+            <div className="flex justify-between items-start mb-3">
+              <div className="space-y-2">
+                <div className="h-5 w-48 bg-gray-300 rounded"></div>
+                <div className="h-4 w-32 bg-gray-300 rounded"></div>
+              </div>
+              <div className="h-6 w-16 bg-gray-300 rounded"></div>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4 mb-3">
+              <div className="space-y-1">
+                <div className="h-3 w-20 bg-gray-300 rounded"></div>
+                <div className="h-4 w-24 bg-gray-300 rounded"></div>
+              </div>
+              <div className="space-y-1">
+                <div className="h-3 w-24 bg-gray-300 rounded"></div>
+                <div className="h-4 w-20 bg-gray-300 rounded"></div>
+              </div>
+            </div>
+
+            {/* Progress bar skeleton */}
+            <div className="space-y-1 mb-3">
+              <div className="h-3 w-32 bg-gray-300 rounded"></div>
+              <div className="h-2 w-full bg-gray-200 rounded">
+                <div className="h-2 w-1/3 bg-gray-300 rounded"></div>
+              </div>
+            </div>
+
+            {/* Butoane skeleton */}
+            <div className="flex gap-2">
+              <div className="h-8 w-24 bg-gray-300 rounded"></div>
+              <div className="h-8 w-20 bg-gray-300 rounded"></div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Skeleton pentru paginare */}
+      <div className="flex justify-center items-center space-x-4 mt-6">
+        <div className="h-8 w-20 bg-gray-300 rounded"></div>
+        <div className="flex space-x-1">
+          {[1, 2, 3].map(page => (
+            <div key={page} className="h-8 w-8 bg-gray-300 rounded"></div>
+          ))}
+        </div>
+        <div className="h-8 w-20 bg-gray-300 rounded"></div>
+      </div>
+
+      {/* Skeleton pentru footer info */}
+      <div className="text-center mt-6 p-4 bg-gray-100 rounded-lg">
+        <div className="h-4 w-64 bg-gray-300 rounded mx-auto"></div>
+      </div>
+    </div>
+  );
+};
+
 export default function UserBoughtPackages({ isProvider }: UserBoughtPackagesProps) {
   // 1. State hooks
   const [bought, setBought] = useState<BoughtPackage[]>([]);
@@ -125,8 +232,11 @@ export default function UserBoughtPackages({ isProvider }: UserBoughtPackagesPro
     resetPage();
   };
 
-  // 5. Conditional UI
-  if (loading) return <p className="text-center text-gray-500 w-full">Se încarcă datele…</p>;
+  // 5. Conditional UI - 🔧 ACTUALIZAT să folosească skeleton
+  if (loading) {
+    return <PackagesSkeleton isProvider={isProvider} />;
+  }
+  
   if (error) return <p className="text-red-500">Eroare: {error}</p>;
 
   // 🆕 Verifică dacă utilizatorul nu are pachete în modul curent
@@ -174,7 +284,6 @@ export default function UserBoughtPackages({ isProvider }: UserBoughtPackagesPro
             {viewMode === 'client' ? '🛍️' : '💰'}
           </div>
           <p className="text-gray-500 text-lg">{noItemsMessage}</p>
-
         </div>
       </div>
     );

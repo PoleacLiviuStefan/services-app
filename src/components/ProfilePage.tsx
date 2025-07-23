@@ -58,6 +58,252 @@ interface ProviderProfile {
 
 type Tab = "packages" | "sessions" | "billing" | "conversatii";
 
+// 🆕 Skeleton Components
+const ProfileCardSkeleton = () => (
+  <div className="max-w-md mx-auto bg-white shadow rounded p-6 text-center animate-pulse">
+    {/* Avatar skeleton */}
+    <div className="w-24 h-24 mx-auto bg-gray-300 rounded-full"></div>
+    
+    {/* Name skeleton */}
+    <div className="mt-4 space-y-2">
+      <div className="h-6 w-32 bg-gray-300 rounded mx-auto"></div>
+      <div className="h-4 w-24 bg-gray-300 rounded mx-auto"></div>
+    </div>
+    
+    {/* Email skeleton */}
+    <div className="h-4 w-48 bg-gray-300 rounded mx-auto mt-2"></div>
+    
+    {/* Buttons skeleton */}
+    <div className="flex justify-center space-x-4 mt-4">
+      <div className="h-10 w-32 bg-gray-300 rounded"></div>
+      <div className="h-10 w-24 bg-gray-300 rounded"></div>
+    </div>
+  </div>
+);
+
+const TabsSkeleton = () => (
+  <div className="w-full lg:max-w-4xl mx-auto animate-pulse">
+    <nav className="mb-8">
+      <div className="flex justify-center">
+        <div className="grid grid-cols-2 lg:inline-flex bg-gray-100 rounded-2xl p-2">
+          {[1, 2, 3, 4].map((index) => (
+            <div key={index} className="px-6 py-3 rounded-xl flex items-center gap-2.5 min-w-[130px] justify-center">
+              <div className="w-8 h-8 rounded-full bg-gray-300"></div>
+              <div className="h-4 w-16 bg-gray-300 rounded"></div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </nav>
+  </div>
+);
+
+const TabContentSkeleton = ({ activeTab }: { activeTab: Tab }) => {
+  if (activeTab === "packages") {
+    return (
+      <div className="space-y-4 max-w-2xl mx-auto animate-pulse">
+        {/* Header skeleton similar to UserBoughtPackages */}
+        <div className="h-6 w-64 bg-gray-300 rounded mb-4"></div>
+        
+        {/* Stats skeleton */}
+        <div className="bg-gray-100 rounded-lg p-4 mb-4">
+          <div className="grid grid-cols-3 gap-4 text-center">
+            {[1, 2, 3].map(i => (
+              <div key={i} className="space-y-2">
+                <div className="h-8 w-12 bg-gray-300 rounded mx-auto"></div>
+                <div className="h-4 w-16 bg-gray-300 rounded mx-auto"></div>
+              </div>
+            ))}
+          </div>
+        </div>
+        
+        {/* Tabs skeleton */}
+        <div className="flex space-x-2 mb-4">
+          {[1, 2, 3].map(i => (
+            <div key={i} className="h-8 w-20 bg-gray-300 rounded"></div>
+          ))}
+        </div>
+        
+        {/* Content skeleton */}
+        <div className="space-y-4">
+          {[1, 2, 3].map(i => (
+            <div key={i} className="border rounded-lg p-4 bg-white">
+              <div className="h-5 w-48 bg-gray-300 rounded mb-2"></div>
+              <div className="h-4 w-32 bg-gray-300 rounded mb-3"></div>
+              <div className="h-2 w-full bg-gray-200 rounded"></div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (activeTab === "sessions") {
+    return (
+      <div className="space-y-4 max-w-4xl mx-auto animate-pulse">
+        {/* Filters skeleton */}
+        <div className="flex flex-wrap gap-3 mb-4">
+          <div className="h-10 flex-1 bg-gray-300 rounded min-w-48"></div>
+          <div className="h-10 w-32 bg-gray-300 rounded"></div>
+          <div className="h-10 w-24 bg-gray-300 rounded"></div>
+        </div>
+        
+        {/* Sessions list skeleton */}
+        <div className="space-y-4">
+          {[1, 2, 3, 4].map(i => (
+            <div key={i} className="border rounded-lg p-4 bg-white">
+              <div className="flex justify-between items-start mb-3">
+                <div className="space-y-2">
+                  <div className="h-5 w-40 bg-gray-300 rounded"></div>
+                  <div className="h-4 w-32 bg-gray-300 rounded"></div>
+                </div>
+                <div className="h-6 w-20 bg-gray-300 rounded"></div>
+              </div>
+              <div className="flex gap-2">
+                <div className="h-8 w-24 bg-gray-300 rounded"></div>
+                <div className="h-8 w-20 bg-gray-300 rounded"></div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (activeTab === "conversatii") {
+    return (
+      <div className="space-y-4 max-w-2xl mx-auto animate-pulse">
+        {/* Search skeleton */}
+        <div className="h-10 w-full bg-gray-300 rounded mb-4"></div>
+        
+        {/* Conversations list skeleton */}
+        <div className="space-y-3">
+          {[1, 2, 3, 4, 5].map(i => (
+            <div key={i} className="flex items-center space-x-3 p-3 border rounded-lg">
+              <div className="w-10 h-10 bg-gray-300 rounded-full"></div>
+              <div className="flex-1 space-y-2">
+                <div className="h-4 w-32 bg-gray-300 rounded"></div>
+                <div className="h-3 w-48 bg-gray-300 rounded"></div>
+              </div>
+              <div className="h-3 w-12 bg-gray-300 rounded"></div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (activeTab === "billing") {
+    return (
+      <div className="space-y-6 max-w-2xl mx-auto animate-pulse">
+        {/* Form skeleton */}
+        <div className="bg-white rounded-lg border p-6 space-y-4">
+          <div className="h-6 w-48 bg-gray-300 rounded mb-4"></div>
+          
+          {/* Form fields */}
+          {[1, 2, 3, 4, 5].map(i => (
+            <div key={i} className="space-y-2">
+              <div className="h-4 w-24 bg-gray-300 rounded"></div>
+              <div className="h-10 w-full bg-gray-300 rounded"></div>
+            </div>
+          ))}
+          
+          {/* Button */}
+          <div className="h-10 w-32 bg-gray-300 rounded"></div>
+        </div>
+      </div>
+    );
+  }
+
+  return null;
+};
+
+const ProviderDetailsSkeleton = () => (
+  <div className="max-w-4xl mx-auto mt-10 space-y-6 animate-pulse">
+    {/* Header */}
+    <div className="h-8 w-48 bg-gray-300 rounded"></div>
+    
+    {/* Provider info card */}
+    <div className="bg-white rounded-lg border p-6 space-y-4">
+      <div className="flex items-start space-x-4">
+        <div className="w-16 h-16 bg-gray-300 rounded-full"></div>
+        <div className="flex-1 space-y-2">
+          <div className="h-6 w-40 bg-gray-300 rounded"></div>
+          <div className="h-4 w-32 bg-gray-300 rounded"></div>
+          <div className="h-4 w-56 bg-gray-300 rounded"></div>
+        </div>
+        <div className="h-6 w-20 bg-gray-300 rounded"></div>
+      </div>
+    </div>
+    
+    {/* Stats cards */}
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      {[1, 2, 3].map(i => (
+        <div key={i} className="bg-white rounded-lg border p-4 space-y-3">
+          <div className="h-5 w-24 bg-gray-300 rounded"></div>
+          <div className="h-8 w-16 bg-gray-300 rounded"></div>
+          <div className="h-4 w-32 bg-gray-300 rounded"></div>
+        </div>
+      ))}
+    </div>
+    
+    {/* Packages */}
+    <div className="bg-white rounded-lg border p-6 space-y-4">
+      <div className="h-6 w-32 bg-gray-300 rounded"></div>
+      <div className="space-y-3">
+        {[1, 2].map(i => (
+          <div key={i} className="border rounded p-3 space-y-2">
+            <div className="h-5 w-40 bg-gray-300 rounded"></div>
+            <div className="h-4 w-24 bg-gray-300 rounded"></div>
+          </div>
+        ))}
+      </div>
+    </div>
+  </div>
+);
+
+const AdminSkeleton = () => (
+  <div className="max-w-3xl mx-auto mt-10 animate-pulse">
+    <div className="h-6 w-48 bg-gray-300 rounded mb-4"></div>
+    
+    {/* Admin table skeleton */}
+    <div className="bg-white rounded-lg border overflow-hidden">
+      <div className="p-4 border-b bg-gray-50">
+        <div className="h-10 w-64 bg-gray-300 rounded"></div>
+      </div>
+      
+      <div className="divide-y">
+        {[1, 2, 3, 4, 5].map(i => (
+          <div key={i} className="p-4 flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <div className="w-10 h-10 bg-gray-300 rounded-full"></div>
+              <div className="space-y-1">
+                <div className="h-4 w-32 bg-gray-300 rounded"></div>
+                <div className="h-3 w-48 bg-gray-300 rounded"></div>
+              </div>
+            </div>
+            <div className="flex space-x-2">
+              <div className="h-8 w-16 bg-gray-300 rounded"></div>
+              <div className="h-8 w-20 bg-gray-300 rounded"></div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  </div>
+);
+
+// 🆕 Main ProfilePage Skeleton
+const ProfilePageSkeleton = ({ showProvider = false, showAdmin = false, activeTab = "packages" }) => (
+  <div className="flex flex-col space-y-10 p-6">
+    <ProfileCardSkeleton />
+    <TabsSkeleton />
+    <TabContentSkeleton activeTab={activeTab} />
+    {showProvider && <ProviderDetailsSkeleton />}
+    {showAdmin && <AdminSkeleton />}
+  </div>
+);
+
 const ProfilePage: React.FC = () => {
   const { data: session, status, update: refreshSession } = useSession();
   const router = useRouter();
@@ -401,9 +647,23 @@ const ProfilePage: React.FC = () => {
     </div>
   );
 
-  if (status === "loading")
-    return <p className="text-center mt-20">Se încarcă...</p>;
+  // 🔧 LOADING STATES - Folosesc skeleton-uri în loc de text simplu
+  if (status === "loading") {
+    return <ProfilePageSkeleton activeTab={activeTab} />;
+  }
+  
   if (!session?.user) return null;
+
+  // 🔧 Provider loading state
+  if (loadingProvider) {
+    return (
+      <ProfilePageSkeleton 
+        activeTab={activeTab} 
+        showProvider={true} 
+        showAdmin={session.user.role === "ADMIN"} 
+      />
+    );
+  }
 
   const { name, email: sessionEmail } = session.user;
   const isProviderMode = Boolean(provider);

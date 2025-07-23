@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> } // 🔧 FIX: Adaugă Promise<>
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     // Verifică autentificarea și rolul de admin
@@ -31,7 +31,6 @@ export async function DELETE(
       );
     }
 
-    // 🔧 FIX: Await params înainte de utilizare
     const { id: userId } = await params;
 
     console.log(`🗑️ Admin ${session.user.id} încearcă să șteargă utilizatorul ${userId}`);
@@ -45,7 +44,7 @@ export async function DELETE(
             _count: {
               select: {
                 sessions: true,
-                userProviderPackages: true, // 🔧 FIX: userPackages → userProviderPackages
+                userProviderPackages: true,
                 providerPackages: true
               }
             }
@@ -54,7 +53,7 @@ export async function DELETE(
         _count: {
           select: {
             sessions: true,
-            providerPackages: true // 🔧 FIX: userPackages → providerPackages
+            providerPackages: true
           }
         }
       }
@@ -87,13 +86,13 @@ export async function DELETE(
     console.log(`🔍 Statistici:`, {
       isProvider: !!userToDelete.provider,
       sessionsAsClient: userToDelete._count.sessions,
-      userPackagesPurchased: userToDelete._count.providerPackages, // 🔧 FIX: actualizat numele
+      userPackagesPurchased: userToDelete._count.providerPackages,
       providerSessions: userToDelete.provider?._count.sessions || 0,
-      userPackagesSold: userToDelete.provider?._count.userProviderPackages || 0, // 🔧 FIX: actualizat numele
+      userPackagesSold: userToDelete.provider?._count.userProviderPackages || 0,
       providerPackages: userToDelete.provider?._count.providerPackages || 0
     });
 
-    // Verifică dacă utilizatorul are sesiuni active (ca să prevină ștergerea accidentală)
+    // Verifică dacă utilizatorul are sesiuni active
     const activeSessions = await prisma.consultingSession.count({
       where: {
         OR: [
@@ -153,16 +152,24 @@ export async function DELETE(
         });
         deletionStats.packagesDeleted += providerPackages.count;
 
-        // Șterge relațiile many-to-many pentru provider (doar specialities și tools)
-        await tx.providerSpeciality.deleteMany({
-          where: { providerId: userToDelete.provider.id }
+        // ✅ FIX: Elimină relațiile many-to-many folosind disconnect
+        // Pentru specialities
+        await tx.provider.update({
+          where: { id: userToDelete.provider.id },
+          data: {
+            specialities: {
+              set: [] // elimină toate relațiile cu specialities
+            },
+            tools: {
+              set: [] // elimină toate relațiile cu tools
+            }
+          }
         });
 
-        await tx.providerTool.deleteMany({
+        // Șterge subscripțiile Calendly webhook
+        await tx.calendlyWebhookSubscription.deleteMany({
           where: { providerId: userToDelete.provider.id }
         });
-
-        // Nu trebuie să ștergem manual reading - se va seta NULL automat prin onDelete: SetNull
 
         // Șterge înregistrarea de provider
         await tx.provider.delete({
@@ -181,7 +188,22 @@ export async function DELETE(
         where: { userId: userId }
       });
 
-      // 6. În final, șterge utilizatorul
+      // 6. Șterge datele de facturare (dacă există)
+      await tx.billingDetails.deleteMany({
+        where: { userId: userId }
+      });
+
+      // 7. Șterge verificarea email (dacă există)
+      await tx.emailVerification.deleteMany({
+        where: { userId: userId }
+      });
+
+      // 8. Șterge resetările de parolă
+      await tx.passwordReset.deleteMany({
+        where: { userId: userId }
+      });
+
+      // 9. În final, șterge utilizatorul
       await tx.user.delete({
         where: { id: userId }
       });
@@ -207,7 +229,6 @@ export async function DELETE(
     });
 
   } catch (error) {
-    // 🔧 FIX: Safe error logging
     const errorMessage = error instanceof Error ? error.message : String(error || 'Unknown error');
     console.error("❌ Eroare la ștergerea utilizatorului:", errorMessage);
     
@@ -238,7 +259,7 @@ export async function DELETE(
 // Endpoint pentru a obține informații despre utilizator înainte de ștergere
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> } // 🔧 FIX: Adaugă Promise<>
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -255,7 +276,6 @@ export async function GET(
       return NextResponse.json({ error: "Acces interzis" }, { status: 403 });
     }
 
-    // 🔧 FIX: Await params înainte de utilizare
     const { id: userId } = await params;
     
     const user = await prisma.user.findUnique({
@@ -270,8 +290,8 @@ export async function GET(
                 providerPackages: true,
                 specialities: true,
                 tools: true,
-                reviews: true, // 🔧 FIX: Nu readings, ci reviews (relație validă)
-                calendlySubscriptions: true // 🔧 FIX: adăugat relația validă
+                reviews: true,
+                calendlySubscriptions: true
               }
             }
           }
@@ -279,7 +299,7 @@ export async function GET(
         _count: {
           select: {
             sessions: true,
-            providerPackages: true, // 🔧 FIX: userPackages → providerPackages  
+            providerPackages: true,
             accounts: true
           }
         }
@@ -313,7 +333,7 @@ export async function GET(
       },
       stats: {
         sessionsAsClient: user._count.sessions,
-        userPackagesPurchased: user._count.providerPackages, // 🔧 FIX: actualizat numele
+        userPackagesPurchased: user._count.providerPackages,
         oauthAccounts: user._count.accounts,
         activeSessions: activeSessions,
         provider: user.provider ? {
@@ -322,8 +342,8 @@ export async function GET(
           userPackagesSold: user.provider._count.userProviderPackages,
           specialitiesCount: user.provider._count.specialities,
           toolsCount: user.provider._count.tools,
-          reviewsCount: user.provider._count.reviews, // 🔧 FIX: readingsCount → reviewsCount
-          calendlySubscriptionsCount: user.provider._count.calendlySubscriptions // 🔧 FIX: adăugat
+          reviewsCount: user.provider._count.reviews,
+          calendlySubscriptionsCount: user.provider._count.calendlySubscriptions
         } : null
       },
       canDelete: activeSessions === 0 && user.role !== "ADMIN" && user.id !== session.user.id,
@@ -335,7 +355,6 @@ export async function GET(
     });
 
   } catch (error) {
-    // 🔧 FIX: Safe error logging
     const errorMessage = error instanceof Error ? error.message : String(error || 'Unknown error');
     console.error("❌ Eroare la obținerea informațiilor utilizatorului:", errorMessage);
     return NextResponse.json({ error: "Eroare internă" }, { status: 500 });
