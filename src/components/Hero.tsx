@@ -33,7 +33,7 @@ const Hero = () => {
             Ghidarea ta astrală, <span className='text-buttonSecondaryColor underline underline-offset-1 italic'>la un click distanță</span>
           </h1>
           <p className='font-semibold text-center lg:text-left text-sm lg:text-lg text-textPrimaryColor px-6 lg:px-0'>
-            Platformă online unde poți descoperi <br/>și consulta astrologi profesioniști pentru ghidare personalizată.
+            Platformă online unde poți descoperi <br/>și consulta persoane dedicate ezoterismului pentru ghidare personalizată.
           </p>
           <div className='flex space-x-2'>
             <Link href="/astrologi">
