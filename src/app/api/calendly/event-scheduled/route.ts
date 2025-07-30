@@ -593,7 +593,7 @@ export async function POST(request: Request) {
     console.log(`   - 🆕 Pachet: ${result.packageInfo.packageName} (sesiunea #${result.packageInfo.sessionNumber})`);
     console.log(`   - 🆕 Sesiuni folosite: ${result.packageInfo.oldUsedSessions} → ${result.packageInfo.usedSessions}`);
     console.log(`   - 🆕 Sesiuni rămase: ${result.packageInfo.remainingSessions}`);
-    console.log(`   - 📬 Reminder-uri: ${reminderResult.scheduledCount || 0} programate`);
+    // console.log(`   - 📬 Reminder-uri: ${reminderResult.scheduledCount || 0} programate`);
     // console.log(`   - 📧 Email confirmare: ${confirmationSent ? 'trimis' : 'eșuat'}`);
 
     return NextResponse.json({
@@ -601,7 +601,7 @@ export async function POST(request: Request) {
       sessionId: result.session.id,
       roomUrl: result.session.dailyRoomUrl,
       joinUrl: `/servicii/video/sessions/${result.session.id}`,
-      message: `Sesiunea #${result.packageInfo.sessionNumber} a fost programată cu succes din pachetul ${result.packageInfo.packageName}! ${confirmationSent ? 'Vei primi reminder-uri prin email.' : 'Email-urile de confirmare vor fi trimise în curând.'}`,
+      message: `Sesiunea #${result.packageInfo.sessionNumber} a fost programată cu succes din pachetul ${result.packageInfo.packageName}! `,
       details: {
         sessionId: result.session.id,
         startDate: result.session.startDate?.toISOString(),
@@ -612,27 +612,27 @@ export async function POST(request: Request) {
         packageInfo: result.packageInfo,
         
         // 🆕 Informații reminder-uri îmbunătățite
-        reminders: {
-          scheduled: reminderResult.success,
-          count: reminderResult.scheduledCount || 0,
-          jobIds: reminderResult.jobIds || [],
-          message: reminderResult.success ? 
-            `${reminderResult.scheduledCount} reminder-uri programate cu succes (24h, 1h, la timp)` : 
-            `Reminder-uri nu au putut fi programate: ${reminderResult.message}`,
-          details: reminderResult.success ? {
-            reminder24h: 'Programat cu 24h înainte',
-            reminder1h: 'Programat cu 1h înainte',
-            reminderAtTime: 'Programat cu 2 minute înainte'
-          } : null
-        },
+        // reminders: {
+        //   scheduled: reminderResult.success,
+        //   count: reminderResult.scheduledCount || 0,
+        //   jobIds: reminderResult.jobIds || [],
+        //   message: reminderResult.success ? 
+        //     `${reminderResult.scheduledCount} reminder-uri programate cu succes (24h, 1h, la timp)` : 
+        //     `Reminder-uri nu au putut fi programate: ${reminderResult.message}`,
+        //   details: reminderResult.success ? {
+        //     reminder24h: 'Programat cu 24h înainte',
+        //     reminder1h: 'Programat cu 1h înainte',
+        //     reminderAtTime: 'Programat cu 2 minute înainte'
+        //   } : null
+        // },
         
-        // 🆕 Informații email confirmare
-        confirmation: {
-          sent: confirmationSent,
-          message: confirmationSent ? 
-            'Email de confirmare trimis cu detalii pachet' : 
-            'Email de confirmare va fi retrimis automat'
-        },
+        // // 🆕 Informații email confirmare
+        // confirmation: {
+        //   sent: confirmationSent,
+        //   message: confirmationSent ? 
+        //     'Email de confirmare trimis cu detalii pachet' : 
+        //     'Email de confirmare va fi retrimis automat'
+        // },
         
         // Informații existente...
         timeInfo: {

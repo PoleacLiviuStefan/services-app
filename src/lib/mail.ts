@@ -14,7 +14,7 @@ interface ConsultationReminderData {
   timeUntilSession?: string;
 }
 
-const transporter = nodemailer.createTransporter({
+const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST,
   port: Number(process.env.SMTP_PORT),
   secure: false,
@@ -355,7 +355,7 @@ export async function sendConsultationRescheduleEmail(
 
   const oldSessionDate = `${dateFormatter.format(oldDate)}, ${timeFormatter.format(oldDate)}`;
   const newSessionDate = dateFormatter.format(newStartDate);
-  const newSessionTime = `${timeFormatter.format(newStartDate)} - ${timeFormatter.format(newEndDate)}`;
+  // const newSessionTime = `${timeFormatter.format(newStartDate)} - ${timeFormatter.format(newEndDate)}`;
   
   await transporter.sendMail({
     from: `"MysticGold" <${process.env.FROM_MAIL}>`,
