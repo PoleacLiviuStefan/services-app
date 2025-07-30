@@ -109,7 +109,7 @@ export async function initRedisClient() {
     }
     return redisClient;
   } catch (error) {
-    console.error('Failed to connect Redis client:', error.message);
+    console.error('Failed to connect Redis client:', error instanceof Error ? error.message : 'Unknown error');
     return null;
   }
 }
@@ -127,7 +127,7 @@ export async function initRedisSubscriber() {
     }
     return redisSubscriber;
   } catch (error) {
-    console.error('Failed to connect Redis subscriber:', error.message);
+    console.error('Failed to connect Redis subscriber:', error instanceof Error ? error.message : 'Unknown error');
     return null;
   }
 }
@@ -145,7 +145,7 @@ export async function initRedisPublisher() {
     }
     return redisPublisher;
   } catch (error) {
-    console.error('Failed to connect Redis publisher:', error.message);
+    console.error('Failed to connect Redis publisher:', error instanceof Error ? error.message : 'Unknown error');
     return null;
   }
 }
@@ -170,7 +170,7 @@ export async function closeRedisConnections() {
       console.log('All Redis connections closed');
     }
   } catch (error) {
-    console.error('Error closing Redis connections:', error.message);
+    console.error('Error closing Redis connections:', error instanceof Error ? error.message : 'Unknown error');
   }
 }
 
@@ -186,7 +186,7 @@ if (REDIS_URL && process.env.NODE_ENV === 'development') {
       }
     })
     .catch((error) => {
-      console.log('❌ Redis connection test error:', error.message);
+      console.log('❌ Redis connection test error:', error instanceof Error ? error.message : 'Unknown error');
     });
 }
 

@@ -1,3 +1,4 @@
+// ProviderCard.tsx actualizat cu suport pentru slug
 "use client";
 
 import React, { useState } from "react";
@@ -10,12 +11,13 @@ import Link from "next/link";
 import Button from "./atoms/button";
 import SettingsModal from "./ui/settingsModal";
 import { ProviderInterface } from "@/interfaces/ProviderInterface";
-import { formatForUrl, isError } from "@/utils/util";
+import { formatForUrl, isError } from "@/utils/helper";
 import defaultAvatar from "../../public/default-avatar.webp";
 
 interface ProviderCardProp extends ProviderInterface {
   forAdmin?: boolean;
-  grossVolume?: number | null; // 🆕 Adăugat pentru afișarea sumei încasate
+  grossVolume?: number | null;
+  slug?: string; // 🆕 ADAUGĂ CÂMPUL SLUG
   highlightedCategory?: {
     type: "speciality" | "tool" | "reading" | undefined;
     name: string;
@@ -31,28 +33,35 @@ const ProviderCard: React.FC<ProviderCardProp> = ({
   reviews,
   speciality,
   forAdmin = false,
-  grossVolume, // 🆕 Destructurat din props
+  grossVolume,
   role,
   email,
   isProvider = false,
   online,
+  slug, // 🆕 DESTRUCTUREAZĂ SLUG-UL
   highlightedCategory,
   openDeleteUserModal = {},
 }) => {
   
   console.log("numele este: ", name);
+  console.log("slug-ul este: ", slug);
   console.log("grossVolume este: ", grossVolume);
+  
   const { data: session } = useSession();
   const user = session?.user;
   const [showSettingModal, setShowSettingModal] = useState(false);
+  
+  // 🆕 GENEREAZĂ URL-ul profil folosind slug-ul sau fallback la formatForUrl
+  const profileUrl = slug || formatForUrl(name);
+  
   console.log("online", online);
+  console.log("profileUrl generat:", profileUrl);
 
   // 🔧 FIX: Handler pentru butonul de delete care previne propagarea
   const handleDeleteClick = (e: React.MouseEvent) => {
-    e.preventDefault(); // Previne comportamentul default
-    e.stopPropagation(); // Oprește propagarea evenimentului către Link
+    e.preventDefault();
+    e.stopPropagation();
     
-    // Verifică dacă openDeleteUserModal este o funcție
     if (typeof openDeleteUserModal === 'function') {
       openDeleteUserModal();
     }
@@ -73,7 +82,6 @@ const ProviderCard: React.FC<ProviderCardProp> = ({
       if (!res.ok) throw new Error("Ceva nu a mers bine!");
     } catch (error: unknown) {
       const message = isError(error) ? error.message : String(error);
-
       console.error("Eroare la obținerea providerilor:", message);
     }
   };
@@ -109,7 +117,8 @@ const ProviderCard: React.FC<ProviderCardProp> = ({
         forAdmin ? "h-[750px]" : "h-card"
       } w-card border-8 border-primaryColor/10 rounded-lg hover:shadow-lg shadow-primaryColor transition duration-300 ease-in-out cursor-pointer bg-white text-black`}
     >
-      <Link href={`/profil/${formatForUrl(name)}`}>
+      {/* 🆕 FOLOSEȘTE profileUrl în loc de formatForUrl(name) */}
+      <Link href={`/profil/${profileUrl}`}>
         {isProvider && (
           <span
             className={`absolute top-[5px] left-1 ${
@@ -123,11 +132,9 @@ const ProviderCard: React.FC<ProviderCardProp> = ({
           {rating}
           <FaStar />
         </span>
-
-        {/* 🔧 FIX: Mutat butonul de delete în afara Link-ului */}
       </Link>
 
-      {/* 🔧 FIX: Butonul de delete acum este în afara Link-ului și nu mai cauzează redirect */}
+      {/* Butonul de delete în afara Link-ului */}
       {forAdmin && (
         <div className="absolute top-7 right-1 flex space-x-1 z-10">
           <button
@@ -140,7 +147,8 @@ const ProviderCard: React.FC<ProviderCardProp> = ({
         </div>
       )}
 
-      <Link href={`/profil/${formatForUrl(name)}`}>
+      {/* 🆕 FOLOSEȘTE profileUrl și aici */}
+      <Link href={`/profil/${profileUrl}`}>
         <Image
           src={image ? image : defaultAvatar}
           width={230}
@@ -150,7 +158,7 @@ const ProviderCard: React.FC<ProviderCardProp> = ({
         />
 
         <div className="absolute flex justify-center items-center w-full -mt-[45px] h-[45px] bg-gradient-to-t from-[#000000]/70 to-transparent p-2 rounded-b-lg text-white">
-          <span className="font-bold">{name}</span>
+          <span className="font-bold text-center">{name}</span>
         </div>
       </Link>
       
@@ -197,23 +205,14 @@ const ProviderCard: React.FC<ProviderCardProp> = ({
             Programeaza o sedinta
           </p>
           <div className="flex items-center justify-center px-4 lg:px-8">
-            {/* <Link href={user ? '/servicii/apel' : '/autentificare'}>
-              <Icon>
-                <FaPhoneVolume />
-              </Icon>
-            </Link> */}
+            {/* 🆕 FOLOSEȘTE profileUrl și aici */}
             <Link
-              href={user ? `/profil/${formatForUrl(name)}` : "/autentificare"}
+              href={user ? `/profil/${profileUrl}` : "/autentificare"}
             >
               <Icon>
                 <FaVideo />
               </Icon>
             </Link>
-            {/* <Link href={user ? '/servicii/mesagerie' : '/autentificare'}>
-              <Icon>
-                <MdMessage />
-              </Icon>
-            </Link> */}
           </div>
         </div>
       </div>
@@ -261,3 +260,17 @@ const ProviderCard: React.FC<ProviderCardProp> = ({
 };
 
 export default ProviderCard;
+
+// 🆕 NOTĂ: Pentru ca acest cod să funcționeze complet, trebuie să actualizezi și locurile unde folosești ProviderCard
+// să incluzi slug-ul în props. Exemplu:
+
+/*
+// În componenta părinte care randează ProviderCard:
+<ProviderCard
+  name={provider.name}
+  slug={provider.slug}  // 🆕 ADAUGĂ SLUG-UL
+  image={provider.image}
+  rating={provider.rating}
+  // ... rest of props
+/>
+*/

@@ -7,7 +7,7 @@ import { useSession  } from 'next-auth/react';
 import mysticLogo from '../../public/mysticnoblack.svg';
 import Image from 'next/image';
 // import { useCatalogStore } from '@/store/catalog';
-import { displayedServices } from '@/lib/constants';
+import { displayedServices } from '@/utils/constants';
 import handleLogout from '@/lib/api/logout/logout';
 import { useRouter } from 'next/navigation';
 

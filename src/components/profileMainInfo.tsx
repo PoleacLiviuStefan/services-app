@@ -17,6 +17,7 @@ interface ProfileMainInfoProps {
 }
 
 const ProfileMainInfo: React.FC<ProfileMainInfoProps> = ({ provider }) => {
+  console.log("provider este: ",provider)
   const [showVideoModal, setShowVideoModal] = useState(false);
   const [showBuyPackageModal, setShowBuyPackageModal] = useState(false);
   const [selectedService, setSelectedService] = useState<string | null>(null);
@@ -106,7 +107,7 @@ const ProfileMainInfo: React.FC<ProfileMainInfoProps> = ({ provider }) => {
           {/* Butoane de acțiuni */}
           <div className="flex flex-wrap justify-center gap-4">
             {/* Buton Chat/Conversație - folosește URL-ul corect */}
-            <Link href={createConversationUrl(provider.name)}>
+            <Link href={createConversationUrl(provider.slug)}>
               <Button className="flex items-center gap-2 bg-primaryColor text-white px-6 py-5 rounded-md hover:bg-secondaryColor transition-colors">
                 <FaComments size={20} />
                 <span>Conversație</span>

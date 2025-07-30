@@ -11,72 +11,22 @@ type AsyncRouteContext = {
 };
 
 /**
- * Decodifică slug-ul din URL într-un string cu spații simple și lowercase,
- * păstrând diacriticele:
- * 1. Înlocuiește cratimele cu spațiu.
- * 2. Colapsează orice grup de spații multiple într-unul singur.
- * 3. Taie spațiile de la început și sfârșit.
- * 4. Transformă totul la lowercase (diacriticele rămân).
- *
- * Exemplu:
- *   "vatală-georgiana" → "vatală georgiana"
- */
-function decodeSlugToName(slug: string): string {
-  return slug
-    .replace(/-/g, " ") // toate cratimele devin spațiu
-    .replace(/\s+/g, " ") // collapse grupuri de spații multiple
-    .trim() // elimină spațiile de la margină
-    .toLowerCase(); // lowercase, dar diacriticele rămân
-}
-
-/**
- * Normalizează exact cum va fi comparat cu decodedSlugToName:
- * 1. Înlocuiește cratimele (dacă există) cu spațiu.
- * 2. Colapsează orice grup de spații multiple într-unul singur.
- * 3. Taie spațiile de la început și sfârșit.
- * 4. Transformă totul la lowercase (diacriticele rămân).
- *
- * Astfel, "Vatală  Georgiana" (cu două spații și diacritice) devine "vatală georgiana".
- */
-function normalizeDbName(dbName: string): string {
-  return dbName
-    .replace(/-/g, " ") // dacă există cratimă în DB, facem spațiu
-    .replace(/\s+/g, " ") // collapse spații multiple
-    .trim() // elimină spațiile de la margină
-    .toLowerCase(); // lowercase, dar diacriticele rămân
-}
-
-/**
- * Caută user-ul în baza de date într-un mod tolerant la spații multiple și păstrând diacritice:
- * 1. decodeSlugToName(slug) → decodedName (ex. "vatală georgiana").
- * 2. Împarte decodedName în cuvinte: ["vatală", "georgiana"].
- * 3. Rulează findMany cu AND: [
- *      { name contains "vatală" },
- *      { name contains "georgiana" }
- *    ] (toate căutările case-insensitive).
- * 4. Din candidați, normalizăm fiecare `u.name` cu normalizeDbName și comparăm EXACT cu decodedName.
- *    Dacă se potrivește, returnăm acel user.
- * 5. Dacă nimeni nu se potrivește, returnăm null.
+ * Caută user-ul în baza de date direct după slug.
+ * Acum că avem câmpul slug în DB, nu mai e nevoie de logica complexă de decodificare.
  */
 async function findUserBySlug(slug: string) {
-  const decodedName = decodeSlugToName(slug); // ex. "vatală georgiana"
-  console.log("Decoded name:", decodedName);
-  const words = decodedName.split(" "); // ex. ["vatală", "georgiana"]
-
-  if (words.length === 0) return null;
-
-  // Interogăm pe baza fiecărui cuvânt, case-insensitive:
-  const candidates = await prisma.user.findMany({
+  console.log("Căutare user după slug:", slug);
+  
+  const user = await prisma.user.findUnique({
     where: {
-      AND: words.map((w) => ({
-        name: { contains: w, mode: "insensitive" },
-      })),
+      slug: slug, // Căutare directă după slug
     },
     select: {
       id: true,
       name: true,
       email: true,
       image: true,
+      slug: true,
       provider: {
         select: {
           id: true,
@@ -85,7 +35,7 @@ async function findUserBySlug(slug: string) {
           videoUrl: true,
           grossVolume: true,
           calendlyCalendarUri: true,
-          isCalendlyConnected:true,
+          isCalendlyConnected: true,
           stripeAccountId: true,
           reading: { select: { id: true, name: true, description: true } },
           specialities: {
@@ -110,14 +60,7 @@ async function findUserBySlug(slug: string) {
     },
   });
 
-  // Filtrăm candidații: normalizăm u.name și comparăm exact cu decodedName
-  for (const u of candidates) {
-    if (normalizeDbName(u.name) === decodedName) {
-      return u;
-    }
-  }
-
-  return null;
+  return user;
 }
 
 /**
@@ -129,12 +72,15 @@ export async function GET(
   { params }: AsyncRouteContext
 ): Promise<NextResponse> {
   const { name: slug } = await params;
-  const user = await findUserBySlug(slug);
+  
+  // Decodează slug-ul dacă vine URL-encoded
+  const decodedSlug = decodeURIComponent(slug);
+  
+  const user = await findUserBySlug(decodedSlug);
 
   if (!user || !user.provider) {
-    const decoded = decodeSlugToName(slug);
     return NextResponse.json(
-      { error: `Providerul pentru '${decoded}' nu a fost găsit.` },
+      { error: `Providerul pentru slug '${decodedSlug}' nu a fost găsit.` },
       { status: 404 }
     );
   }
@@ -154,20 +100,21 @@ export async function GET(
       name: user.name!,
       email: user.email!,
       image: user.image || null,
+      slug: user.slug, // 🆕 Includă slug-ul în răspuns
     },
     online: p.online,
     description: p.description || "",
     videoUrl: p.videoUrl || null,
     grossVolume: p.grossVolume,
     scheduleLink: p.calendlyCalendarUri || null,
-    reading: p.reading || null, // OK
-    specialities: p.specialities, // OK
-    tools: p.tools, // OK
-    mainSpeciality: p.mainSpeciality, // OK
-    mainTool: p.mainTool, // OK
-    reviewsCount, // OK
-    averageRating, // OK
-    providerPackages: p.providerPackages, // OK
+    reading: p.reading || null,
+    specialities: p.specialities,
+    tools: p.tools,
+    mainSpeciality: p.mainSpeciality,
+    mainTool: p.mainTool,
+    reviewsCount,
+    averageRating,
+    providerPackages: p.providerPackages,
     stripeAccountId: p.stripeAccountId || null,
     isCalendlyConnected: p.isCalendlyConnected || false,
   };
@@ -204,7 +151,9 @@ export async function PATCH(
   }
 
   const { name: slug } = await params;
-  const user = await findUserBySlug(slug);
+  const decodedSlug = decodeURIComponent(slug);
+  
+  const user = await findUserBySlug(decodedSlug);
 
   if (!user) {
     return NextResponse.json(

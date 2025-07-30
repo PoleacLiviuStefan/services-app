@@ -3,7 +3,7 @@
 
 import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
-import { formatForUrl } from "@/utils/util";
+import { formatForUrl } from "@/utils/helper";
 import { ProviderInterface } from "@/interfaces/ProviderInterface";
 import ProfileMainInfo from "@/components/profileMainInfo";
 import ProviderProfileSection from "@/components/providerProfile/ProviderProfileSection";
@@ -55,6 +55,7 @@ export default function PsychicProfile() {
         const mapped: ProviderInterface = {
           id: p.user.id,
           name: p.user.name,
+          slug: p.user.slug,
           image: p.user.image,
           email: p.user.email,
           role: p.user.role,

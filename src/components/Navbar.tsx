@@ -6,7 +6,7 @@ import { FaUserAlt, FaChevronDown } from "react-icons/fa";
 import { useSession } from "next-auth/react";
 import mysticLogo from "../../public/mysticnoblack.svg";
 import Image from "next/image";
-import { displayedServices } from "@/lib/constants";
+import { displayedServices } from "@/utils/constants";
 import handleLogout from "@/lib/api/logout/logout";
 import { useRouter } from "next/navigation";
 

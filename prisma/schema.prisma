@@ -53,12 +53,17 @@ model Message {
   id           String      @id @default(uuid())
   content      String
   
-  // Pentru conversații private
-  fromUsername String?     // expeditorul mesajului
-  toUsername   String?     // destinatarul mesajului
+  // 🆕 Pentru conversații private - folosim slug-uri în loc de nume
+  fromUserSlug String?     // slug-ul expeditorului mesajului
+  toUserSlug   String?     // slug-ul destinatarului mesajului
   
-  // Pentru chat global (backwards compatibility)
-  username     String?     // pentru mesajele globale existente
+  // 🆕 Pentru chat global - folosim slug în loc de username
+  userSlug     String?     // slug-ul pentru mesajele globale
+  
+  // 🗑️ DEPRECATED - păstrate pentru backwards compatibility, vor fi eliminate
+  fromUsername String?     // DEPRECATED - va fi eliminat după migrație
+  toUsername   String?     // DEPRECATED - va fi eliminat după migrație  
+  username     String?     // DEPRECATED - va fi eliminat după migrație
   
   // Tip de mesaj pentru a face diferența
   messageType  MessageType @default(PRIVATE)
@@ -66,8 +71,14 @@ model Message {
   createdAt    DateTime    @default(now()) @map("created_at")
 
   @@map("messages")
-  @@index([fromUsername, toUsername])
+  
+  // 🆕 Index-uri actualizate pentru slug-uri
+  @@index([fromUserSlug, toUserSlug])
+  @@index([userSlug])
   @@index([messageType])
+  
+  // 🗑️ Index-uri vechi - vor fi eliminate după migrație
+  @@index([fromUsername, toUsername])
 }
 
 model BillingDetails {
@@ -98,6 +109,7 @@ model BillingDetails {
 model User {
   id                 String             @id @default(uuid())
   name               String?            @unique
+  slug               String?            @unique     
   email              String?            @unique
   emailVerified      Boolean?           @default(false)
   image              String?

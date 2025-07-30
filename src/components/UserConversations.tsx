@@ -57,6 +57,7 @@ const UserConversations: React.FC<UserConversationsProps> = ({ className = "" })
       
       if (data.success) {
         setConversations(data.conversations);
+        console.log("data conversations:", data.conversations);
       } else {
         setError(data.error || 'Nu s-au putut încărca conversațiile');
       }

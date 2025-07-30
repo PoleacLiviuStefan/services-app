@@ -1,7 +1,7 @@
 import { getServerSession } from "next-auth";
 import { prisma } from "@/lib/prisma";
 import { authOptions } from "@/lib/auth"; // Importă configurația NextAuth
-import { isError } from "@/utils/util";
+import { isError } from "@/utils/helper";
 
 export async function GET() {
   try {

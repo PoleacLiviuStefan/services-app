@@ -6,6 +6,7 @@ import SectionTitle from './ui/sectionTitle';
 import { FaCaretLeft, FaCaretRight } from 'react-icons/fa';
 import { ProviderInterface } from '@/interfaces/ProviderInterface';
 import LoadingSkeleton from './ui/loadingSkeleton';
+import Link from "next/link";
 
 const Slider = () => {
   const [providers, setProviders] = useState<ProviderInterface[]>([]);
@@ -100,7 +101,7 @@ const Slider = () => {
 
   return (
     <div className="flex flex-col items-center w-full space-y-8 h-full text-black mt-12">
-      <SectionTitle>Astrologi</SectionTitle>
+      <SectionTitle>Furnizori</SectionTitle>
 
       {/* Containerul slider-ului */}
       <div className="relative w-full overflow-hidden">
@@ -132,6 +133,7 @@ const Slider = () => {
                 >
                   <ProviderCard
                     name={provider.user?.name || 'N/A'}
+                    slug={provider.user?.slug}
                     image={provider.user?.image || ''}
                     rating={provider.averageRating}
                     description={provider.description || '—'}
@@ -180,11 +182,11 @@ const Slider = () => {
         </div>
       )}
 
-      <div className="flex justify-center w-full">
+      <Link href="/astrologi" className="flex justify-center w-full">
         <Button className="bg-gradient-to-t border-2 border-buttonPrimaryColor/20 shadow-lg shadow-buttonPrimaryColor/40 from-buttonPrimaryColor to-buttonSecondaryColor px-4 lg:px-8 py-2 lg:py-4 text-md text-white font-semibold">
           VEZI TOȚI ASTROLOGII
         </Button>
-      </div>
+      </Link>
     </div>
   );
 };

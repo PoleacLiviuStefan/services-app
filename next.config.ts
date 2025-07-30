@@ -2,6 +2,8 @@
 const nextConfig = {
   experimental: {
     runtime: 'nodejs',
+    // 🆕 Adăugat pentru BullMQ și Redis
+    serverComponentsExternalPackages: ['bullmq', 'redis'],
   },
   typescript: {
     ignoreBuildErrors: true,
@@ -10,10 +12,15 @@ const nextConfig = {
     ignoreDuringBuilds: true,
   },
   env: {
+    // Environment variables existente
     GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
     GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET,
     NEXT_PUBLIC_ZOOM_SDK_KEY: process.env.ZOOM_SDK_KEY,
     NEXT_PUBLIC_FILE_ROUTE: process.env.FILE_ROUTE,
+    
+    // 🆕 Environment variables pentru BullMQ
+    NEXT_PUBLIC_BULLMQ_ENABLED: process.env.REDIS_URL ? 'true' : 'false',
+    NEXT_PUBLIC_REDIS_CONFIGURED: process.env.REDIS_URL ? 'true' : 'false',
   },
   images: {
     domains: [
@@ -28,9 +35,15 @@ const nextConfig = {
         pathname: "/avatars/**",
       },
     ],
+    // 🆕 Optimizări pentru production (doar dacă nu sunt deja setate)
+    ...(process.env.NODE_ENV === 'production' && {
+      formats: ['image/avif', 'image/webp'],
+      minimumCacheTTL: 300,
+    }),
   },
   async headers() {
     return [
+      // Headers existente pentru video sessions
       {
         source: '/servicii/video/sessions/:sessionid*',
         headers: [
@@ -55,10 +68,49 @@ const nextConfig = {
             ].join('; ')
           }
         ]
-      }
+      },
+      // 🆕 Headers pentru admin API routes
+      {
+        source: '/api/admin/:path*',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'no-cache, no-store, must-revalidate',
+          },
+        ],
+      },
     ];
   },
+  
+  // 🆕 Redirects pentru admin routes
+  async redirects() {
+    return [
+      {
+        source: '/admin/queue',
+        destination: '/admin/dashboard?tab=queue',
+        permanent: false,
+      },
+    ];
+  },
+
+  // 🆕 Rewrites pentru admin routes
+  async rewrites() {
+    return [
+      {
+        source: '/admin/queue-status',
+        destination: '/api/admin/queue',
+      },
+    ];
+  },
+
   webpack: (config, { isServer }) => {
+    // 🆕 Server-side externals pentru BullMQ și Redis
+    if (isServer) {
+      config.externals = config.externals || [];
+      config.externals.push('bullmq', 'redis');
+    }
+
+    // Client-side fallbacks (existente + noi)
     if (!isServer) {
       config.resolve.fallback = {
         ...config.resolve.fallback,
@@ -77,6 +129,7 @@ const nextConfig = {
       };
     }
 
+    // Regula existentă pentru Zoom
     config.module.rules.push({
       test: /\.js$/,
       include: /node_modules\/@zoom/,

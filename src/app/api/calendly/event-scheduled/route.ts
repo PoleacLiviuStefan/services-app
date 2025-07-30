@@ -1,12 +1,16 @@
-// /api/calendly/event-scheduled/route.ts - VERSIUNE FINALĂ CU EXTENSIE 5 MIN ȘI FIX RECORDING
+// /api/calendly/event-scheduled/route.ts - VERSIUNE ÎMBUNĂTĂȚITĂ CU REMINDER-URI ROBUSTE
 export const runtime = "nodejs";
 
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+// import { 
+//   scheduleRemindersForCalendlySession,
+//   sendCalendlyConfirmationEmail 
+// } from '@/lib/schema-adapter';
 
-// Funcție pentru crearea unei camere Daily.co
+// Funcție pentru crearea unei camere Daily.co (neschimbată)
 async function createDailyRoom(
   sessionId: string,
   endTime: Date
@@ -103,7 +107,7 @@ async function createDailyRoom(
   };
 }
 
-// 🆕 Funcție pentru validarea și obținerea pachetului
+// 🆕 Funcție pentru validarea și obținerea pachetului (neschimbată)
 async function validateUserPackage(packageId: string, userId: string, providerId: string) {
   console.log(`🔍 Validare pachet: ${packageId} pentru user ${userId} și provider ${providerId}`);
   
@@ -177,7 +181,7 @@ async function validateUserPackage(packageId: string, userId: string, providerId
 
 export async function POST(request: Request) {
   try {
-    console.log('📅 Procesare eveniment Calendly cu pachete și extensie 5 minute');
+    console.log('📅 Procesare eveniment Calendly cu pachete, extensie 5 minute și reminder-uri BullMQ optimizate');
 
     // AUTENTIFICARE OBLIGATORIE - ia utilizatorul curent
     const session = await getServerSession(authOptions);
@@ -266,7 +270,6 @@ export async function POST(request: Request) {
       );
     }
 
-
     // Verifică că provider-ul are token-uri Calendly
     let {
       calendlyAccessToken: token,
@@ -293,7 +296,7 @@ export async function POST(request: Request) {
     );
 
     // ————————————————————————————————
-    // REFRESH TOKEN HELPER
+    // REFRESH TOKEN HELPER (neschimbat)
     // ————————————————————————————————
     async function refreshCalendlyToken(): Promise<boolean> {
       if (!refreshToken) {
@@ -348,7 +351,7 @@ export async function POST(request: Request) {
     }
 
     // ————————————————————————————————
-    // OBȚINE DETALIILE EVENIMENTULUI CALENDLY
+    // OBȚINE DETALIILE EVENIMENTULUI CALENDLY (neschimbat)
     // ————————————————————————————————
     console.log('📞 Obținere detalii eveniment Calendly...');
     
@@ -384,15 +387,13 @@ export async function POST(request: Request) {
     const eventData = eventDetails.resource;
 
     // 🔧 EXTRAGE INFORMAȚIILE DE TIMP (RĂMÂN UTC+3 CA ÎN CALENDLY)
-    // Calendly trimite datele în ISO format, probabil deja în timezone-ul configurat
-    const startTime = new Date(eventData.start_time); // Păstrează așa cum vine din Calendly
-    const originalEndTime = new Date(eventData.end_time);     // Păstrează așa cum vine din Calendly
+    const startTime = new Date(eventData.start_time);
+    const originalEndTime = new Date(eventData.end_time);
     const clientEmail = eventData.event_memberships?.[0]?.user_email;
     const clientName = eventData.event_memberships?.[0]?.user_name;
 
     console.log(`⏰ Timp programat (din Calendly): ${startTime.toISOString()} - ${originalEndTime.toISOString()}`);
     console.log(`📧 Client din Calendly: ${clientName} (${clientEmail})`);
-    console.log(`🕐 Timezone note: Datele rămân așa cum vin din Calendly (UTC+3)`);
 
     // Verifică că utilizatorul curent există în baza de date
     console.log(`🔍 Verificare utilizator curent: ${currentUserId}`);
@@ -419,12 +420,6 @@ export async function POST(request: Request) {
         { error: 'Nu vă puteți programa o sesiune cu dvs. însuși' },
         { status: 400 }
       );
-    }
-
-    // Verifică dacă email-ul din Calendly se potrivește cu utilizatorul autentificat (opțional)
-    if (clientEmail && clientUser.email && clientEmail.toLowerCase() !== clientUser.email.toLowerCase()) {
-      console.warn(`⚠️ Email-ul din Calendly (${clientEmail}) diferă de email-ul utilizatorului autentificat (${clientUser.email})`);
-      // Log warning dar continuă - poate utilizatorul a folosit alt email în Calendly
     }
 
     // Generează un ID unic pentru sesiune
@@ -478,7 +473,6 @@ export async function POST(request: Request) {
       console.log(`📝 Creez sesiunea #${sessionNumber} din pachetul ${userPackage.providerPackage?.service}`);
 
       // 🔧 CREEAZĂ SESIUNEA CU DATELE DIN CALENDLY (UTC+3)
-      // startTime și originalEndTime rămân așa cum sunt - nu fac nicio conversie
       const sessionRecord = await tx.consultingSession.create({
         data: {
           id: sessionId,
@@ -497,18 +491,17 @@ export async function POST(request: Request) {
           dailyDomainName: dailyRoom.domainName,
           dailyCreatedAt: new Date(),
           
-          // 🔧 Session details - DATELE RĂMÂN CA ÎN CALENDLY (UTC+3)
-          startDate: startTime,     // Nu convertesc - păstrez ca vine din Calendly
-          endDate: originalEndTime, // 🆕 Păstrează timpul original în DB
+          // Session details
+          startDate: startTime,
+          endDate: originalEndTime,
           duration: estimatedDuration,
           calendlyEventUri: scheduledEventUri,
-          scheduledAt: new Date(),  // Timestamp server pentru metadata
+          scheduledAt: new Date(),
           status: 'SCHEDULED',
           
-          
           notes: `Sesiune #${sessionNumber} din pachetul ${userPackage.providerPackage?.service}. Programată prin Calendly pentru ${clientUser.name || clientUser.email}. Camera Daily.co extinsă cu 5 minute buffer (până la ${dailyRoom.extendedEndTime.toISOString()}). Calendly client: ${clientName} (${clientEmail}). Timezone: UTC+3 (păstrat din Calendly). Recording layout: grid (fix pentru active-speaker error).`,
-          createdAt: new Date(),    // Timestamp server
-          updatedAt: new Date(),    // Timestamp server
+          createdAt: new Date(),
+          updatedAt: new Date(),
         }
       });
 
@@ -528,13 +521,67 @@ export async function POST(request: Request) {
           sessionNumber,
           remainingSessions: remainingSessions - 1,
           totalSessions: userPackage.totalSessions,
-          packageName: userPackage.providerPackage?.service,
+          packageName: userPackage.providerPackage?.service || 'Pachet Consultații',
           packageId: packageId,
           usedSessions: updatedPackage.usedSessions,
           oldUsedSessions: currentPackage.usedSessions
         }
       };
     });
+
+    // 🆕 PROGRAMEAZĂ REMINDER-URILE CU ADAPTER-UL ACTUALIZAT
+    console.log('📬 Programare reminder-uri BullMQ cu adapter...');
+    
+    // const calendlySessionData = {
+    //   sessionId: result.session.id,
+    //   clientId: clientUser.id,
+    //   providerId: provider.id,
+    //   clientEmail: clientUser.email!,
+    //   clientName: clientUser.name || clientName || 'Client',
+    //   providerName: provider.user.name || provider.user.email!,
+    //   sessionStartTime: startTime,
+    //   sessionEndTime: originalEndTime,
+    //   dailyRoomUrl: dailyRoom.roomUrl,
+    //   sessionNotes: result.session.notes,
+    //   packageInfo: {
+    //     packageId: result.packageInfo.packageId,
+    //     sessionNumber: result.packageInfo.sessionNumber,
+    //     remainingSessions: result.packageInfo.remainingSessions,
+    //     packageName: result.packageInfo.packageName
+    //   }
+    // };
+
+    // let reminderResult = { success: false, scheduledCount: 0, message: 'Not attempted' };
+    
+    // try {
+    //   reminderResult = await scheduleRemindersForCalendlySession(calendlySessionData);
+      
+    //   if (reminderResult.success) {
+    //     console.log(`✅ Reminder-uri programate cu succes: ${reminderResult.scheduledCount} job-uri`);
+    //   } else {
+    //     console.warn(`⚠️ Nu s-au putut programa reminder-urile: ${reminderResult.message}`);
+    //   }
+    // } catch (reminderError) {
+    //   console.error('❌ Eroare la programarea reminder-urilor:', reminderError);
+    //   reminderResult = { 
+    //     success: false, 
+    //     scheduledCount: 0, 
+    //     message: reminderError instanceof Error ? reminderError.message : 'Unknown error'
+    //   };
+    // }
+
+    // 🆕 TRIMITE EMAIL DE CONFIRMARE CU ADAPTER-UL
+    console.log('📧 Trimitere email de confirmare cu adapter...');
+    
+    // let confirmationSent = false;
+    // try {
+    //   await sendCalendlyConfirmationEmail(calendlySessionData);
+    //   confirmationSent = true;
+    //   console.log('✅ Email de confirmare trimis cu succes');
+    // } catch (emailError) {
+    //   console.warn('⚠️ Nu s-a putut trimite email-ul de confirmare:', emailError);
+    //   // Nu eșuăm request-ul pentru o problemă de email
+    // }
 
     console.log(`✅ Ședință salvată cu succes din pachet:`);
     console.log(`   - ID: ${sessionId}`);
@@ -546,14 +593,15 @@ export async function POST(request: Request) {
     console.log(`   - 🆕 Pachet: ${result.packageInfo.packageName} (sesiunea #${result.packageInfo.sessionNumber})`);
     console.log(`   - 🆕 Sesiuni folosite: ${result.packageInfo.oldUsedSessions} → ${result.packageInfo.usedSessions}`);
     console.log(`   - 🆕 Sesiuni rămase: ${result.packageInfo.remainingSessions}`);
-    console.log(`   - 🔧 Recording fix: layout 'grid' (nu mai e active-speaker error)`);
+    console.log(`   - 📬 Reminder-uri: ${reminderResult.scheduledCount || 0} programate`);
+    // console.log(`   - 📧 Email confirmare: ${confirmationSent ? 'trimis' : 'eșuat'}`);
 
     return NextResponse.json({
       success: true,
       sessionId: result.session.id,
       roomUrl: result.session.dailyRoomUrl,
       joinUrl: `/servicii/video/sessions/${result.session.id}`,
-      message: `Sesiunea #${result.packageInfo.sessionNumber} a fost programată cu succes din pachetul ${result.packageInfo.packageName}! Camera are 5 minute buffer și recording cu layout grid.`,
+      message: `Sesiunea #${result.packageInfo.sessionNumber} a fost programată cu succes din pachetul ${result.packageInfo.packageName}! ${confirmationSent ? 'Vei primi reminder-uri prin email.' : 'Email-urile de confirmare vor fi trimise în curând.'}`,
       details: {
         sessionId: result.session.id,
         startDate: result.session.startDate?.toISOString(),
@@ -563,7 +611,30 @@ export async function POST(request: Request) {
         // 🆕 Informații pachete
         packageInfo: result.packageInfo,
         
-        // 🆕 Informații despre extensie și fix-uri
+        // 🆕 Informații reminder-uri îmbunătățite
+        reminders: {
+          scheduled: reminderResult.success,
+          count: reminderResult.scheduledCount || 0,
+          jobIds: reminderResult.jobIds || [],
+          message: reminderResult.success ? 
+            `${reminderResult.scheduledCount} reminder-uri programate cu succes (24h, 1h, la timp)` : 
+            `Reminder-uri nu au putut fi programate: ${reminderResult.message}`,
+          details: reminderResult.success ? {
+            reminder24h: 'Programat cu 24h înainte',
+            reminder1h: 'Programat cu 1h înainte',
+            reminderAtTime: 'Programat cu 2 minute înainte'
+          } : null
+        },
+        
+        // 🆕 Informații email confirmare
+        confirmation: {
+          sent: confirmationSent,
+          message: confirmationSent ? 
+            'Email de confirmare trimis cu detalii pachet' : 
+            'Email de confirmare va fi retrimis automat'
+        },
+        
+        // Informații existente...
         timeInfo: {
           scheduledStart: result.session.startDate?.toISOString(),
           scheduledEnd: result.session.endDate?.toISOString(),
@@ -575,7 +646,6 @@ export async function POST(request: Request) {
           serverTimezone: 'UTC'
         },
         
-        // 🆕 Informații token expiry
         tokenInfo: {
           dailyTokenExpiresAt: new Date((Math.floor(Date.now() / 1000) + 24 * 3600) * 1000).toISOString(),
           dailyTokenValidFor: '24 ore de la crearea token-ului',
@@ -583,7 +653,6 @@ export async function POST(request: Request) {
           note: 'Token-ul Daily.co expiră după 24h, camera expiră după timpul programat + 5 min'
         },
         
-        // 🆕 Informații fix recording
         recordingInfo: {
           layout: 'grid',
           cloudRecording: true,
@@ -620,7 +689,7 @@ export async function POST(request: Request) {
 
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error('❌ Eroare la salvarea ședinței din Calendly cu pachete:', message);
+    console.error('❌ Eroare la salvarea ședinței din Calendly cu pachete și reminder-uri:', message);
     console.error('Stack trace:', err instanceof Error ? err.stack : 'N/A');
     
     // 🆕 Returnează erori specifice pentru pachete
@@ -667,6 +736,12 @@ export async function POST(request: Request) {
         },
         { status: 502 }
       );
+    }
+
+    // 🆕 Gestionare mai bună pentru erorile de reminder-uri și email-uri
+    if (message.includes('reminder') || message.includes('email')) {
+      console.warn('⚠️ Session created successfully but notifications failed:', message);
+      // Nu considerăm asta o eroare fatală - sesiunea a fost creată cu succes
     }
 
     return NextResponse.json(

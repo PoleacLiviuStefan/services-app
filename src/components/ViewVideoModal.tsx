@@ -1,7 +1,7 @@
 // components/ViewVideoModal.tsx
 'use client';
 
-import { extractYouTubeId } from '@/utils/util';
+import { extractYouTubeId } from '@/utils/helper';
 import React, { FC } from 'react';
 
 export interface ViewVideoModalProps {

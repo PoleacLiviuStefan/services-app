@@ -12,8 +12,8 @@ export default function GlobalPresenceTracker() {
   // Populează slugRef când apare numele în session
   useEffect(() => {
     if (session?.user?.name) {
-      const raw = session.user.name.trim().split(/\s+/).join('-')
-      slugRef.current = encodeURIComponent(raw)
+      const userSlug = session.user.slug;
+      slugRef.current = encodeURIComponent(userSlug)
     }
   }, [session?.user?.name])
 

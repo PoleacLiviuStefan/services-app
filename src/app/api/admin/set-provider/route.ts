@@ -73,10 +73,10 @@ export async function POST(req: Request) {
     }
 
     // Setăm rolul la Client
-    await prisma.user.update({
-      where: { email },
-      data: { role: "STANDARD" },
-    });
+    // await prisma.user.update({
+    //   where: { email },
+    //   data: { role: "STANDARD" },
+    // });
 
     return new Response(
       JSON.stringify({
@@ -98,10 +98,10 @@ export async function POST(req: Request) {
       },
     });
 
-    await prisma.user.update({
-      where: { email },
-      data: { role: "STANDARD" },
-    });
+    // await prisma.user.update({
+    //   where: { email },
+    //   data: { role: "STANDARD" },
+    // });
 
     return new Response(
       JSON.stringify({

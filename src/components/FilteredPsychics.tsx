@@ -116,6 +116,7 @@ const FilteredPsychics = () => {
                 <ProviderCard
                   key={p.id}
                   name={p.user?.name || "N/A"}
+                  slug={p.user?.slug}
                   image={p.user?.image || ""}
                   rating={p.averageRating}
                   description={p.description || "—"}

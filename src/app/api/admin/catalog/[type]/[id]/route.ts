@@ -56,7 +56,6 @@ export async function DELETE(
             _count: {
               select: {
                 providers: true,
-                sessions: true,
                 mainFor: true // provideri care au aceasta ca specialitate principală
               }
             }
@@ -344,7 +343,6 @@ export async function GET(
             _count: {
               select: {
                 providers: true,
-                sessions: true,
                 mainFor: true
               }
             }

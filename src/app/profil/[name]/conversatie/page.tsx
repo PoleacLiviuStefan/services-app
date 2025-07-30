@@ -5,9 +5,11 @@ import { Send, ArrowLeft, Circle } from 'lucide-react';
 import { useParams, useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { 
-  resolveRecipientName, 
-  normalizeUserName, 
-  generateConversationId 
+  generateConversationId,
+  extractUserSlug,
+  createConversationUrl,
+  isValidSlug,
+  debugUser
 } from '@/utils/userResolver';
 
 interface Message {
@@ -15,12 +17,27 @@ interface Message {
   content: string;
   fromUsername: string;
   toUsername: string;
+  fromUserSlug?: string;
+  toUserSlug?: string;
   createdAt: string;
+  isFromCurrentUser?: boolean; // Nou câmp din API
+  sender?: {                   // Informații îmbogățite despre expeditor
+    slug?: string;
+    name: string;
+    image?: string;
+  };
+  receiver?: {                 // Informații îmbogățite despre destinatar
+    slug?: string;
+    name: string;
+    image?: string;
+  };
 }
 
-interface User {
-  id: string;
-  username: string;
+interface RecipientUser {
+  name: string;
+  slug: string;
+  email?: string;
+  image?: string;
 }
 
 export default function ConversatiePage() {
@@ -28,97 +45,182 @@ export default function ConversatiePage() {
   const router = useRouter();
   const { data: session, status } = useSession();
   
-  // Namnet din URL (formatat)
-  const rawRecipientName = params.name as string;
+  // Slug-ul destinatarului din URL
+  const recipientSlug = params.name as string;
   
-  const [recipientName, setRecipientName] = useState<string>('');
+  const [recipientInfo, setRecipientInfo] = useState<RecipientUser | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [isConnected, setIsConnected] = useState(false);
   const [recipientOnline, setRecipientOnline] = useState(false);
   const [error, setError] = useState<string>('');
   const [loading, setLoading] = useState(true);
+  const [messagesLoading, setMessagesLoading] = useState(false);
+  const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
+  const [hasMoreMessages, setHasMoreMessages] = useState(true);
+  const [messagesOffset, setMessagesOffset] = useState(0);
   
   const eventSourceRef = useRef<EventSource | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
 
-  // Obține numele utilizatorului curent din sesiunea NextAuth
-  const currentUserName = session?.user?.name;
+  // Obține slug-ul utilizatorului curent din sesiunea NextAuth
+  const currentUserSlug = extractUserSlug(session?.user);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
+  // Scroll la bottom doar pentru mesaje noi, nu pentru cele încărcate cu "Load more"
+  const shouldScrollToBottom = useRef(true);
+
   useEffect(() => {
-    scrollToBottom();
+    if (shouldScrollToBottom.current) {
+      scrollToBottom();
+    }
+    // Reset flag după scroll
+    shouldScrollToBottom.current = true;
   }, [messages]);
 
-  // Rezolvă numele real al destinatarului
+  // Debug info pentru utilizatorul curent
   useEffect(() => {
-    const resolveRecipient = async () => {
-      if (!rawRecipientName) {
-        setError('Destinatar invalid');
+    if (session?.user) {
+      debugUser(session.user, 'Current User from Session');
+    }
+  }, [session]);
+
+  // Validează și încarcă informațiile destinatarului
+  useEffect(() => {
+    const loadRecipientInfo = async () => {
+      if (!recipientSlug) {
+        setError('Slug destinatar lipsește');
+        setLoading(false);
+        return;
+      }
+
+      // Validează formatul slug-ului
+      if (!isValidSlug(recipientSlug)) {
+        setError('Formatul slug-ului este invalid');
         setLoading(false);
         return;
       }
 
       try {
-        // Încearcă să obții lista de utilizatori pentru rezolvare precisă
-        // Dacă nu e disponibilă, va folosi fallback-ul
-        let users: { name: string; email: string }[] = [];
+        // Obține informații despre destinatar din API
+        const response = await fetch(`/api/users/by-slug/${encodeURIComponent(recipientSlug)}`);
         
-        try {
-          // Încearcă să încarci utilizatorii dacă ai un endpoint pentru asta
-          const response = await fetch('/api/users'); // endpoint opțional
-          if (response.ok) {
-            const data = await response.json();
-            users = data.users || [];
+        if (!response.ok) {
+          if (response.status === 404) {
+            setError('Utilizatorul nu a fost găsit');
+          } else {
+            setError('Eroare la încărcarea informațiilor utilizatorului');
           }
-        } catch (error) {
-          console.log('Could not load users list, using fallback');
+          setLoading(false);
+          return;
         }
 
-        const resolvedName = await resolveRecipientName(rawRecipientName, users);
-        setRecipientName(resolvedName);
-        setLoading(false);
+        const data = await response.json();
+        
+        if (data.success && data.user) {
+          setRecipientInfo(data.user);
+          setLoading(false);
+        } else {
+          setError('Utilizatorul nu a fost găsit');
+          setLoading(false);
+        }
       } catch (error) {
-        console.error('Error resolving recipient name:', error);
-        setError('Eroare la rezolvarea numelui destinatarului');
+        console.error('Error loading recipient info:', error);
+        setError('Eroare la încărcarea informațiilor utilizatorului');
         setLoading(false);
       }
     };
 
-    resolveRecipient();
-  }, [rawRecipientName]);
+    loadRecipientInfo();
+  }, [recipientSlug]);
 
   // Funcție pentru a încărca mesajele anterioare
-  const loadPreviousMessages = async (currentUserName: string, recipientName: string) => {
+  const loadPreviousMessages = async (currentSlug: string, targetSlug: string, offset = 0, isLoadMore = false): Promise<void> => {
     try {
+      if (isLoadMore) {
+        setLoadingOlderMessages(true);
+      } else {
+        setMessagesLoading(true);
+      }
+
       const response = await fetch(
-        `/api/chat/conversation?user1=${encodeURIComponent(currentUserName)}&user2=${encodeURIComponent(recipientName)}&limit=50`
+        `/api/chat/conversation?user1=${encodeURIComponent(currentSlug)}&user2=${encodeURIComponent(targetSlug)}&limit=50&offset=${offset}`
       );
       const data = await response.json();
       
       if (data.success) {
-        setMessages(data.messages);
+        const newMessages = data.messages || [];
+        
+        if (isLoadMore) {
+          // Pentru "Load more", adaugă mesajele mai vechi la începutul listei
+          setMessages(prev => [...newMessages, ...prev]);
+          // Verifică dacă mai sunt mesaje de încărcat din API response
+          setHasMoreMessages(data.meta?.hasMoreMessages || false);
+          setMessagesOffset(prev => prev + newMessages.length);
+        } else {
+          // Pentru încărcarea inițială - ultimele 50 de mesaje
+          setMessages(newMessages);
+          setHasMoreMessages(data.meta?.hasMoreMessages || false);
+          setMessagesOffset(newMessages.length);
+        }
       } else {
         console.error('Error loading messages:', data.error);
       }
     } catch (error) {
       console.error('Error loading previous messages:', error);
+    } finally {
+      if (isLoadMore) {
+        setLoadingOlderMessages(false);
+      } else {
+        setMessagesLoading(false);
+      }
     }
   };
 
+  // Funcție pentru încărcarea mesajelor mai vechi
+  const loadOlderMessages = () => {
+    if (!currentUserSlug || !recipientInfo?.slug || !hasMoreMessages || loadingOlderMessages) {
+      return;
+    }
+    
+    // Salvează poziția scroll curentă pentru a o restabili după încărcarea mesajelor
+    const chatContainer = chatContainerRef.current;
+    const scrollHeightBefore = chatContainer?.scrollHeight || 0;
+    
+    // Nu face scroll automat când se încarcă mesaje vechi
+    shouldScrollToBottom.current = false;
+    
+    loadPreviousMessages(currentUserSlug, recipientInfo.slug, messagesOffset, true).then(() => {
+      // Restabilește poziția scroll după încărcarea mesajelor
+      if (chatContainer) {
+        const scrollHeightAfter = chatContainer.scrollHeight;
+        const heightDifference = scrollHeightAfter - scrollHeightBefore;
+        chatContainer.scrollTop = heightDifference;
+      }
+    });
+  };
+
   // Funcție pentru a conecta la SSE
-  const connectEventSource = (currentUserName: string, recipientName: string) => {
+  const connectEventSource = (currentSlug: string, targetSlug: string) => {
     if (eventSourceRef.current) {
       eventSourceRef.current.close();
     }
 
-    // Generează conversationId folosind numele reale
-    const conversationId = generateConversationId(currentUserName, recipientName);
-    const eventSourceUrl = `/api/chat/conversation/events?user=${encodeURIComponent(currentUserName)}&conversation=${encodeURIComponent(conversationId)}`;
+    // Generează conversationId folosind slug-urile
+    const conversationId = generateConversationId(currentSlug, targetSlug);
+    const eventSourceUrl = `/api/chat/conversation/events?user=${encodeURIComponent(currentSlug)}&conversation=${encodeURIComponent(conversationId)}`;
+    
+    console.log('🔌 Connecting to SSE:', {
+      currentSlug,
+      targetSlug,
+      conversationId,
+      eventSourceUrl
+    });
+    
     const eventSource = new EventSource(eventSourceUrl);
 
     eventSource.onopen = () => {
@@ -130,36 +232,70 @@ export default function ConversatiePage() {
     eventSource.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
+        console.log('📨 SSE Message received:', data);
         
         switch (data.type) {
           case 'connected':
-            console.log('Connected to conversation');
+            console.log('✅ Connected to conversation:', data.conversationId);
             break;
+            
           case 'message':
             // Verifică dacă mesajul aparține conversației curente
-            if ((data.message.fromUsername === currentUserName && data.message.toUsername === recipientName) ||
-                (data.message.fromUsername === recipientName && data.message.toUsername === currentUserName)) {
-              setMessages(prev => [...prev, data.message]);
+            const message = data.message;
+            if (message && recipientInfo) {
+              const belongsToConversation = 
+                (message.fromUserSlug === currentUserSlug && message.toUserSlug === recipientInfo.slug) ||
+                (message.fromUserSlug === recipientInfo.slug && message.toUserSlug === currentUserSlug) ||
+                // Fallback pentru mesaje vechi fără slug
+                (message.fromUsername === session?.user?.name && message.toUsername === recipientInfo.name) ||
+                (message.fromUsername === recipientInfo.name && message.toUsername === session?.user?.name);
+                
+              if (belongsToConversation) {
+                console.log('✅ Adding new message via SSE:', message.content);
+                // Mesajele din SSE sunt noi și se adaugă la sfârșit
+                shouldScrollToBottom.current = true;
+                setMessages(prev => [...prev, {
+                  id: message.id,
+                  content: message.content,
+                  fromUsername: message.fromUsername || message.sender?.name || '',
+                  toUsername: message.toUsername || message.receiver?.name || '',
+                  fromUserSlug: message.fromUserSlug || message.sender?.slug,
+                  toUserSlug: message.toUserSlug || message.receiver?.slug,
+                  createdAt: message.createdAt,
+                  isFromCurrentUser: message.fromUserSlug === currentUserSlug || message.fromUsername === session?.user?.name,
+                  sender: message.sender,
+                  receiver: message.receiver
+                }]);
+              } else {
+                console.log('⚠️ Message not for this conversation');
+              }
             }
             break;
+            
           case 'userOnline':
-            if (data.username === recipientName) {
+            if (data.userSlug === recipientInfo?.slug) {
+              console.log('👤 Recipient came online');
               setRecipientOnline(true);
             }
             break;
+            
           case 'userOffline':
-            if (data.username === recipientName) {
+            if (data.userSlug === recipientInfo?.slug) {
+              console.log('👤 Recipient went offline');
               setRecipientOnline(false);
             }
             break;
+            
           case 'heartbeat':
             // Heartbeat pentru a menține conexiunea
+            console.log('💓 Heartbeat received');
             break;
+            
           default:
-            console.log('Unknown message type:', data.type);
+            console.log('❓ Unknown SSE message type:', data.type);
         }
       } catch (error) {
-        console.error('Error parsing event data:', error);
+        console.error('❌ Error parsing SSE event data:', error);
       }
     };
 
@@ -170,8 +306,8 @@ export default function ConversatiePage() {
       
       // Încearcă să se reconecteze după 3 secunde
       setTimeout(() => {
-        if (currentUserName && recipientName) {
-          connectEventSource(currentUserName, recipientName);
+        if (currentSlug && targetSlug) {
+          connectEventSource(currentSlug, targetSlug);
         }
       }, 3000);
     };
@@ -179,10 +315,10 @@ export default function ConversatiePage() {
     eventSourceRef.current = eventSource;
   };
 
-  // Inițializare la mount - așteaptă rezolvarea numelui
+  // Inițializare la mount
   useEffect(() => {
     const initializeChat = async () => {
-      // Verifică dacă încă se încarcă numele destinatarului
+      // Verifică dacă încă se încarcă informațiile destinatarului
       if (loading) {
         return;
       }
@@ -192,28 +328,34 @@ export default function ConversatiePage() {
         return; // Așteaptă să se încarce sesiunea
       }
       
-      if (status === 'unauthenticated' || !session?.user?.name) {
+      if (status === 'unauthenticated' || !session?.user) {
         setError('Trebuie să te autentifici pentru a accesa conversația');
         return;
       }
 
-      const currentUserName = session.user.name;
+      const currentSlug = extractUserSlug(session.user);
       
-      // Verifică dacă numele destinatarului este valid
-      if (!recipientName || recipientName.trim() === '') {
+      // Verifică dacă utilizatorul curent are slug
+      if (!currentSlug) {
+        setError('Contul tău nu are un slug valid. Te rugăm să contactezi suportul.');
+        return;
+      }
+
+      // Verifică dacă destinatarul este valid
+      if (!recipientInfo || !recipientInfo.slug) {
         setError('Destinatar invalid');
         return;
       }
 
       // Verifică să nu încerce să converseze cu sine
-      if (normalizeUserName(currentUserName) === normalizeUserName(recipientName)) {
+      if (currentSlug === recipientInfo.slug) {
         setError('Nu poți conversa cu tine însuți');
         return;
       }
 
-      // Încarcă mesajele și conectează-te la SSE folosind numele reale
-      await loadPreviousMessages(currentUserName, recipientName);
-      connectEventSource(currentUserName, recipientName);
+      // Încarcă mesajele și conectează-te la SSE folosind slug-urile
+      await loadPreviousMessages(currentSlug, recipientInfo.slug, 0, false);
+      connectEventSource(currentSlug, recipientInfo.slug);
     };
 
     initializeChat();
@@ -224,23 +366,22 @@ export default function ConversatiePage() {
         eventSourceRef.current.close();
       }
     };
-  }, [recipientName, session, status, loading]);
+  }, [recipientInfo, session, status, loading]);
 
   // Funcție pentru trimiterea mesajelor
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newMessage.trim() || !isConnected || !currentUserName) return;
+    if (!newMessage.trim() || !isConnected || !recipientInfo?.slug) return;
 
     try {
-      const response = await fetch('/api/chat/conversation/messages', {
+      const response = await fetch('/api/chat/conversation', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           content: newMessage.trim(),
-          fromUsername: currentUserName, // numele real
-          toUsername: recipientName // numele real rezolvat
+          toUserSlug: recipientInfo.slug
         })
       });
 
@@ -248,6 +389,8 @@ export default function ConversatiePage() {
       
       if (data.success) {
         setNewMessage('');
+        // Mesajul va fi adăugat prin SSE și va face scroll automat
+        shouldScrollToBottom.current = true;
       } else {
         console.error('Error sending message:', data.error);
         alert('Eroare la trimiterea mesajului: ' + data.error);
@@ -297,6 +440,21 @@ export default function ConversatiePage() {
     });
     
     return groups;
+  };
+
+  // Determină dacă un mesaj este de la utilizatorul curent
+  const isMessageFromCurrentUser = (message: Message): boolean => {
+    // Folosește câmpul isFromCurrentUser din API dacă este disponibil
+    if (typeof message.isFromCurrentUser === 'boolean') {
+      return message.isFromCurrentUser;
+    }
+    
+    // Fallback pentru mesaje vechi - încearcă să compare slug-urile mai întâi
+    if (message.fromUserSlug && currentUserSlug) {
+      return message.fromUserSlug === currentUserSlug;
+    }
+    // Fallback pentru mesaje vechi fără slug
+    return message.fromUsername === session?.user?.name;
   };
 
   if (status === 'loading' || loading) {
@@ -350,7 +508,7 @@ export default function ConversatiePage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="w-full lg:max-w-4xl mx-auto h-screen flex flex-col">
+      <div className="w-full lg:max-w-4xl mx-auto flex flex-col" style={{ height: '90vh' }}>
         {/* Header */}
         <div className="bg-white shadow-sm p-4 border-b">
           <div className="flex items-center justify-between">
@@ -362,13 +520,21 @@ export default function ConversatiePage() {
                 <ArrowLeft size={20} className="text-gray-600" />
               </button>
               <div className="flex items-center space-x-2">
-                <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                  <span className="text-blue-600 font-semibold">
-                    {recipientName.charAt(0).toUpperCase()}
-                  </span>
+                <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center overflow-hidden">
+                  {recipientInfo?.image ? (
+                    <img 
+                      src={recipientInfo.image} 
+                      alt={recipientInfo.name}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <span className="text-blue-600 font-semibold">
+                      {recipientInfo?.name.charAt(0).toUpperCase()}
+                    </span>
+                  )}
                 </div>
                 <div>
-                  <h1 className="font-semibold text-gray-800">{recipientName}</h1>
+                  <h1 className="font-semibold text-gray-800">{recipientInfo?.name}</h1>
                   <div className="flex items-center space-x-1">
                     <Circle 
                       size={8} 
@@ -387,24 +553,60 @@ export default function ConversatiePage() {
               <span className="text-sm text-gray-600">
                 {isConnected ? 'Conectat' : 'Deconectat'}
               </span>
+              {messages.length > 0 && (
+                <>
+                  <span className="text-gray-400">•</span>
+                  <span className="text-sm text-gray-600">
+                    {messages.length} mesaje
+                  </span>
+                </>
+              )}
             </div>
           </div>
         </div>
 
         {/* Messages Area */}
-        <div className="flex-1 bg-white overflow-hidden">
+        <div className="flex-1 bg-white overflow-hidden" style={{ maxHeight: '70vh' }}>
           <div 
             ref={chatContainerRef}
             className="h-full overflow-y-auto p-4"
-            style={{ maxHeight: 'calc(100vh - 140px)' }}
+            style={{ height: '70vh' }}
           >
-            {Object.keys(messageGroups).length === 0 ? (
+            {/* Load More Button - Afișat la începutul conversației */}
+            {hasMoreMessages && messages.length > 0 && (
+              <div className="flex justify-center mb-4">
+                <button
+                  onClick={loadOlderMessages}
+                  disabled={loadingOlderMessages}
+                  className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                >
+                  {loadingOlderMessages ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600"></div>
+                      <span>Se încarcă mesaje mai vechi...</span>
+                    </>
+                  ) : (
+                    <span>Încarcă mesaje mai vechi ({messagesOffset}+ mesaje)</span>
+                  )}
+                </button>
+              </div>
+            )}
+
+            {/* Loading State for Initial Messages */}
+            {messagesLoading ? (
+              <div className="flex justify-center items-center py-8">
+                <div className="text-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                  <p className="text-gray-600">Se încarcă mesajele...</p>
+                </div>
+              </div>
+            ) : Object.keys(messageGroups).length === 0 ? (
               <div className="text-center text-gray-500 py-8">
                 <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
                   <span className="text-2xl">💬</span>
                 </div>
                 <p className="text-lg font-medium mb-2">Conversație nouă</p>
-                <p>Trimite primul mesaj către {recipientName}!</p>
+                <p>Trimite primul mesaj către {recipientInfo?.name}!</p>
               </div>
             ) : (
               Object.entries(messageGroups).map(([dateKey, dayMessages]) => (
@@ -421,7 +623,7 @@ export default function ConversatiePage() {
                   {/* Messages for this day */}
                   <div className="space-y-3">
                     {dayMessages.map((message) => {
-                      const isFromCurrentUser = message.fromUsername === currentUserName;
+                      const isFromCurrentUser = isMessageFromCurrentUser(message);
                       
                       return (
                         <div
@@ -457,7 +659,7 @@ export default function ConversatiePage() {
                 type="text"
                 value={newMessage}
                 onChange={(e) => setNewMessage(e.target.value)}
-                placeholder={`Trimite un mesaj către ${recipientName}...`}
+                placeholder={`Trimite un mesaj către ${recipientInfo?.name}...`}
                 className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 disabled={!isConnected}
                 maxLength={500}

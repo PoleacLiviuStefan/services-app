@@ -184,6 +184,7 @@ const AdminPsychics: React.FC<AdminPsychicsProps> = ({ physics }) => {
       if (response.ok) {
         const itemInfo = await response.json();
         setDeleteCatalogModal(prev => ({ ...prev, itemInfo, loading: false }));
+        console.log("itemInfo este: ",itemInfo)
       } else {
         console.error('Eroare la încărcarea informațiilor elementului');
         setDeleteCatalogModal(prev => ({ ...prev, loading: false }));
@@ -273,7 +274,7 @@ const AdminPsychics: React.FC<AdminPsychicsProps> = ({ physics }) => {
                   isProvider={Boolean(physic.provider)}
                   online={physic.provider?.online}
                   rating={physic.provider?.rating || 0}
-                  description="Lorem ipsum dolor sit amet"
+                  description={physic.provider?.description || "—"}
                   reviews={physic.provider?.reviewsCount || 0}
                   speciality="Speciality"
                   openDeleteUserModal={()=>openDeleteUserModal(physic)}
@@ -530,9 +531,9 @@ const AdminPsychics: React.FC<AdminPsychicsProps> = ({ physics }) => {
                     {deleteCatalogModal.itemInfo.relations.sessionsCount !== undefined && (
                       <li>• Sesiuni care vor rămâne: {deleteCatalogModal.itemInfo.relations.sessionsCount}</li>
                     )}
-                    {deleteCatalogModal.itemInfo.relations.mainForCount !== undefined && (
+                    {/* {deleteCatalogModal.itemInfo.relations.mainForCount !== undefined && (
                       <li>• Provideri principali afectați: {deleteCatalogModal.itemInfo.relations.mainForCount}</li>
-                    )}
+                    )} */}
                   </ul>
                 </div>
 
@@ -540,8 +541,8 @@ const AdminPsychics: React.FC<AdminPsychicsProps> = ({ physics }) => {
                   <div className="bg-orange-100 p-3 rounded mb-4">
                     <h4 className="font-semibold text-orange-800 mb-2">🔄 Ce se va întâmpla:</h4>
                     <ul className="text-orange-700 text-sm space-y-1">
-                      {deleteCatalogModal.itemInfo.willDeleteRelations && (
-                        <li>• Se vor șterge {deleteCatalogModal.itemInfo.willDeleteRelations} relații cu providerii</li>
+                      {deleteCatalogModal.itemInfo.willDisconnectRelations && (
+                        <li>• Se vor șterge {deleteCatalogModal.itemInfo.willDisconnectRelations} relații cu providerii</li>
                       )}
                       {deleteCatalogModal.itemInfo.willUpdateProviders && (
                         <li>• Se vor actualiza {deleteCatalogModal.itemInfo.willUpdateProviders} provideri</li>

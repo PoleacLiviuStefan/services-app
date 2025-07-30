@@ -17,6 +17,7 @@ import UserBillingDetails from "./UserBillingDetails";
 import UserConversations from "./UserConversations";
 import Cropper from "react-easy-crop";
 import { getCroppedImg } from "@/utils/cropImage";
+import { formatForUrl } from "@/utils/helper";
 
 interface ProviderProfile {
   id: string;
@@ -352,33 +353,46 @@ const ProfilePage: React.FC = () => {
   }, [session, status, router]);
 
   // Build slug for fetching provider
-  const rawName = session?.user?.name ?? "";
-  const slug = rawName
-    ? encodeURIComponent(rawName.trim().split(/\s+/).join("-"))
-    : "";
+  const slug = session?.user?.name ? formatForUrl(session.user.name) : null;
 
-  const fetchProviderBySlug = async () => {
-    if (!slug) {
+// 🔧 2. MODIFICĂ funcția fetchProviderBySlug pentru debugging mai bun:
+const fetchProviderBySlug = async () => {
+  if (!slug) {
+    console.log("❌ Nu există slug pentru căutare");
+    setProvider(null);
+    setLoadingProvider(false);
+    return;
+  }
+  
+  console.log("🔍 Căutare provider pentru utilizatorul:", session?.user?.name);
+  console.log("🏷️ Slug generat:", slug);
+  
+  setLoadingProvider(true);
+  try {
+    const apiUrl = `/api/user/${encodeURIComponent(slug)}`;
+    console.log("📡 Apel API către:", apiUrl);
+    
+    const res = await fetch(apiUrl, { credentials: "include" });
+    
+    console.log("📊 Răspuns API:", res.status, res.statusText);
+    
+    if (!res.ok) {
+      const errorText = await res.text();
+      console.log("❌ Eroare API:", errorText);
       setProvider(null);
-      setLoadingProvider(false);
-      return;
+    } else {
+      const data = await res.json();
+      console.log("✅ Date primite:", data);
+      setProvider(data.provider as ProviderProfile);
     }
-    setLoadingProvider(true);
-    try {
-      const res = await fetch(`/api/user/${slug}`, { credentials: "include" });
-      if (!res.ok) {
-        setProvider(null);
-      } else {
-        const { provider } = await res.json();
-        setProvider(provider as ProviderProfile);
-      }
-    } catch (err) {
-      console.error(err);
-      setProvider(null);
-    } finally {
-      setLoadingProvider(false);
-    }
-  };
+  } catch (err) {
+    console.error("💥 Eroare în fetch:", err);
+    setProvider(null);
+  } finally {
+    setLoadingProvider(false);
+  }
+};
+
 
   useEffect(() => {
     if (status === "authenticated" && slug) fetchProviderBySlug();

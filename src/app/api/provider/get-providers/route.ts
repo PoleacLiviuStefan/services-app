@@ -2,7 +2,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { isError } from '@/utils/util';
+import { isError } from '@/utils/helper';
 
 export async function GET(req: NextRequest) {
   try {
