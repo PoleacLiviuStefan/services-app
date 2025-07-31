@@ -73,9 +73,8 @@ const CategorySelector: React.FC<CategorySelectorProps> = ({
             <li key={i}>
               <button
                 onClick={() => toggle(name)}
-                className={`flex items-center w-full px-3 py-2 text-left text-sm ${
-                  isOn ? "bg-primaryColor text-white" : "text-gray-700 hover:bg-gray-100"
-                }`}
+                className={`flex items-center w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-100
+                `}
               >
                 <span
                   className={`mr-2 inline-block h-4 w-4 border rounded ${
