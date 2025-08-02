@@ -89,7 +89,7 @@ export class ConsultationReminderAdapter {
     // Import dinamic pentru a evita dependențele circulare
     const { scheduleConsultationReminders } = await import('./queue');
 
-    const reminderData = this.convertCalendlyDataToReminderData(data);
+    const reminderData = ConsultationReminderAdapter.convertCalendlyDataToReminderData(data);
     return await scheduleConsultationReminders(reminderData);
   }
 
@@ -159,7 +159,7 @@ export class ConsultationReminderAdapter {
    * Programează reminder-uri pentru o sesiune existentă
    */
   static async scheduleRemindersForExistingSession(sessionId: string) {
-    const session = await this.findSessionForReminder(sessionId);
+    const session = await ConsultationReminderAdapter.findSessionForReminder(sessionId);
     
     if (!session || !session.startDate || !session.endDate) {
       throw new Error(`Session ${sessionId} not found or missing dates`);
@@ -203,7 +203,7 @@ export class ConsultationReminderAdapter {
     newStartTime: Date, 
     newEndTime: Date
   ) {
-    const session = await this.findSessionForReminder(sessionId);
+    const session = await ConsultationReminderAdapter.findSessionForReminder(sessionId);
     
     if (!session) {
       throw new Error(`Session ${sessionId} not found`);
@@ -237,7 +237,7 @@ export class ConsultationReminderAdapter {
     reason?: string; 
     session?: ExistingConsultingSession 
   }> {
-    const session = await this.findSessionForReminder(sessionId);
+    const session = await ConsultationReminderAdapter.findSessionForReminder(sessionId);
     
     if (!session) {
       return { canReceive: false, reason: 'Session not found' };
@@ -327,22 +327,22 @@ export class ConsultationReminderAdapter {
    * Programează în bloc reminder-uri pentru toate sesiunile viitoare
    */
   static async scheduleAllUpcomingReminders(hoursAhead: number = 48) {
-    const sessions = await this.findUpcomingSessions(hoursAhead);
+    const sessions = await ConsultationReminderAdapter.findUpcomingSessions(hoursAhead);
     const results = [];
 
     for (const session of sessions) {
       try {
-        const result = await this.scheduleRemindersForExistingSession(session.id);
+        const result = await ConsultationReminderAdapter.scheduleRemindersForExistingSession(session.id);
         results.push({
-          sessionId: session.id,
-          success: true,
-          ...result
+          ...result,
+          sessionId: session.id // Override if needed
         });
       } catch (error) {
         results.push({
           sessionId: session.id,
           success: false,
-          error: error instanceof Error ? error.message : 'Unknown error'
+          scheduledCount: 0,
+          message: error instanceof Error ? error.message : 'Unknown error'
         });
       }
     }
@@ -395,7 +395,7 @@ export class ConsultationReminderAdapter {
     });
 
     // Reprogramează reminder-urile
-    await this.rescheduleRemindersForSession(sessionId, newStartDate, newEndDate);
+    await ConsultationReminderAdapter.rescheduleRemindersForSession(sessionId, newStartDate, newEndDate);
 
     return updatedSession;
   }
@@ -417,7 +417,7 @@ export class ConsultationReminderAdapter {
     });
 
     // Anulează reminder-urile
-    await this.cancelRemindersForSession(sessionId);
+    await ConsultationReminderAdapter.cancelRemindersForSession(sessionId);
 
     return cancelledSession;
   }

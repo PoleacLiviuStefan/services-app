@@ -20,8 +20,10 @@ const getRedisConfig = () => {
     maxRetriesPerRequest: 3,
     retryDelayOnFailover: 100,
     lazyConnect: true,
-    connectTimeout: 60000,
-    commandTimeout: 5000,
+    connectTimeout: 30000,
+    commandTimeout: 15000,
+    keepAlive: 30000,
+    family: 4,
     // Pentru conexiuni SSL (dacă e necesar)
     ...(url.protocol === 'rediss:' && {
       tls: {
@@ -129,7 +131,9 @@ export async function scheduleConsultationReminders(sessionData: {
     return { 
       success: false, 
       message: 'Queue not available - check Redis configuration',
-      scheduledJobs: []
+      scheduledJobs: [],
+      scheduledCount: 0,
+      sessionId: sessionData.sessionId
     };
   }
 
@@ -143,7 +147,9 @@ export async function scheduleConsultationReminders(sessionData: {
       return {
         success: false,
         message: 'Session is in the past',
-        scheduledJobs: []
+        scheduledJobs: [],
+        scheduledCount: 0,
+        sessionId: sessionData.sessionId
       };
     }
 
@@ -277,7 +283,9 @@ export async function scheduleConsultationReminders(sessionData: {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',
       scheduledJobs: [],
-      sessionId: sessionData.sessionId
+      scheduledCount: 0,
+      sessionId: sessionData.sessionId,
+      message: `Failed to schedule reminders: ${error instanceof Error ? error.message : 'Unknown error'}`
     };
   }
 }

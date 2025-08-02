@@ -21,7 +21,7 @@
     "queue:clean": "curl -X POST http://localhost:3000/api/admin/queue -H 'Content-Type: application/json' -d '{\"action\": \"clean_queue\"}'",
     "queue:start-worker": "curl -X POST http://localhost:3000/api/admin/queue -H 'Content-Type: application/json' -d '{\"action\": \"start_worker\"}'",
     "queue:stop-worker": "curl -X POST http://localhost:3000/api/admin/queue -H 'Content-Type: application/json' -d '{\"action\": \"stop_worker\"}'",
-    "test:redis": "node scripts/test-redis.js",
+    "test:redis": "node src/scripts/test-redis.js",
     "test:mail": "ts-node -e \"import('./lib/mail').then(({sendConsultationReminder24h}) => sendConsultationReminder24h('test@example.com', 'Test User', 'Test Provider', new Date(Date.now() + 24*60*60*1000).toISOString(), new Date(Date.now() + 25*60*60*1000).toISOString()).then(() => console.log('✅ Email sent')))\"",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",

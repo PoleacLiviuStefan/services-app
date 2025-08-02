@@ -136,7 +136,7 @@ export async function sendConsultationReminder1h(
   });
 
   const sessionTime = `${timeFormatter.format(startDate)} - ${timeFormatter.format(endDate)}`;
-  const joinUrl = dailyRoomUrl || `${process.env.NEXT_PUBLIC_BASE_URL}/servicii/video/sessions`;
+  const joinUrl = dailyRoomUrl || `${process.env.NEXT_PUBLIC_BASE_URL}/profil?tab=sessions`;
   
   await transporter.sendMail({
     from: `"MysticGold" <${process.env.FROM_MAIL}>`,
@@ -174,7 +174,7 @@ export async function sendConsultationReminderAtTime(
   });
 
   const sessionTime = `${timeFormatter.format(startDate)} - ${timeFormatter.format(endDate)}`;
-  const joinUrl = dailyRoomUrl || `${process.env.NEXT_PUBLIC_BASE_URL}/servicii/video/sessions`;
+  const joinUrl = dailyRoomUrl || `${process.env.NEXT_PUBLIC_BASE_URL}/profil?tab=sessions`;
   
   await transporter.sendMail({
     from: `"MysticGold" <${process.env.FROM_MAIL}>`,
@@ -223,7 +223,7 @@ export async function sendConsultationConfirmation(
 
   const sessionDate = dateFormatter.format(startDate);
   const sessionTime = `${timeFormatter.format(startDate)} - ${timeFormatter.format(endDate)}`;
-  const mySessionsUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/servicii/video/sessions`;
+  const mySessionsUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/profil?tab=sessions`;
   
   await transporter.sendMail({
     from: `"MysticGold" <${process.env.FROM_MAIL}>`,
@@ -288,10 +288,9 @@ export async function sendConsultationCancellationEmail(
           
           <div style="background: white; padding: 20px; border-radius: 8px; border-left: 4px solid #c53030; margin: 20px 0;">
             <h3 style="margin: 0 0 15px 0; color: #c53030;">📅 Detalii Consultație Anulată</h3>
-            <p style="margin: 5px 0;"><strong>🆔 ID Sesiune:</strong> ${sessionId}</p>
             <p style="margin: 5px 0;"><strong>📍 Data:</strong> ${sessionDate}</p>
             <p style="margin: 5px 0;"><strong>⏰ Ora:</strong> ${sessionTime}</p>
-            <p style="margin: 5px 0;"><strong>👨‍⚕️ Consultant:</strong> ${providerName}</p>
+            <p style="margin: 5px 0;"><strong>👨‍⚕️ Furnizor:</strong> ${providerName}</p>
             ${reason ? `<p style="margin: 5px 0;"><strong>📝 Motiv:</strong> ${reason}</p>` : ''}
           </div>
           
@@ -326,18 +325,19 @@ export async function sendConsultationCancellationEmail(
   });
 }
 
+// 🔧 FIXED: Renamed conflicting variable names
 export async function sendConsultationRescheduleEmail(
   to: string,
   clientName: string,
   providerName: string,
   sessionId: string,
   oldSessionTime: string,
-  newSessionTime: string,
+  newStartTime: string,        // ✅ Renamed from newSessionTime to newStartTime
   newSessionEndTime: string,
   reason?: string
 ) {
   const oldDate = new Date(oldSessionTime);
-  const newStartDate = new Date(newSessionTime);
+  const newStartDate = new Date(newStartTime);    // ✅ Using newStartTime parameter
   const newEndDate = new Date(newSessionEndTime);
   
   const dateFormatter = new Intl.DateTimeFormat('ro-RO', {
@@ -355,7 +355,7 @@ export async function sendConsultationRescheduleEmail(
 
   const oldSessionDate = `${dateFormatter.format(oldDate)}, ${timeFormatter.format(oldDate)}`;
   const newSessionDate = dateFormatter.format(newStartDate);
-  // const newSessionTime = `${timeFormatter.format(newStartDate)} - ${timeFormatter.format(newEndDate)}`;
+  const newSessionTimeRange = `${timeFormatter.format(newStartDate)} - ${timeFormatter.format(newEndDate)}`; // ✅ Renamed local variable
   
   await transporter.sendMail({
     from: `"MysticGold" <${process.env.FROM_MAIL}>`,
@@ -381,10 +381,9 @@ export async function sendConsultationRescheduleEmail(
           
           <div style="background: white; padding: 20px; border-radius: 8px; border-left: 4px solid #38a169; margin: 20px 0;">
             <h3 style="margin: 0 0 15px 0; color: #38a169;">📅 Noua Programare</h3>
-            <p style="margin: 5px 0;"><strong>🆔 ID Sesiune:</strong> ${sessionId}</p>
             <p style="margin: 5px 0;"><strong>📍 Data:</strong> ${newSessionDate}</p>
-            <p style="margin: 5px 0;"><strong>⏰ Ora:</strong> ${newSessionTime}</p>
-            <p style="margin: 5px 0;"><strong>👨‍⚕️ Consultant:</strong> ${providerName}</p>
+            <p style="margin: 5px 0;"><strong>⏰ Ora:</strong> ${newSessionTimeRange}</p>
+            <p style="margin: 5px 0;"><strong>👨‍⚕️ Furnizor:</strong> ${providerName}</p>
           </div>
           
           <div style="background: #e6fffa; padding: 20px; border-radius: 8px; margin: 20px 0;">
@@ -448,7 +447,7 @@ function generateReminderEmailTemplate(data: {
           <h3 style="margin: 0 0 15px 0; color: #4c51bf;">📅 Detalii Consultație</h3>
           <p style="margin: 5px 0;"><strong>📍 Data:</strong> ${sessionDate}</p>
           <p style="margin: 5px 0;"><strong>⏰ Ora:</strong> ${sessionTime}</p>
-          <p style="margin: 5px 0;"><strong>👨‍⚕️ Consultant:</strong> ${providerName}</p>
+          <p style="margin: 5px 0;"><strong>👨‍⚕️ Furnizor:</strong> ${providerName}</p>
           ${sessionNotes ? `<p style="margin: 5px 0;"><strong>📝 Note:</strong> ${sessionNotes}</p>` : ''}
         </div>
         
@@ -481,7 +480,7 @@ function generateReminderEmailTemplate(data: {
         <div style="background: white; padding: 20px; border-radius: 8px; border-left: 4px solid #e53e3e; margin: 20px 0;">
           <h3 style="margin: 0 0 15px 0; color: #e53e3e;">🎯 Consultația ta</h3>
           <p style="margin: 5px 0;"><strong>⏰ Ora:</strong> ${sessionTime}</p>
-          <p style="margin: 5px 0;"><strong>👨‍⚕️ Consultant:</strong> ${providerName}</p>
+          <p style="margin: 5px 0;"><strong>👨‍⚕️ Furnizor:</strong> ${providerName}</p>
           ${sessionNotes ? `<p style="margin: 5px 0;"><strong>📝 Note:</strong> ${sessionNotes}</p>` : ''}
         </div>
         
@@ -522,7 +521,7 @@ function generateReminderEmailTemplate(data: {
         <div style="background: #fff5f5; padding: 20px; border-radius: 8px; border: 2px solid #fc8181; margin: 20px 0;">
           <h3 style="margin: 0 0 15px 0; color: #c53030;">⚡ INTRĂ URGENT ÎN CONSULTAȚIE</h3>
           <p style="margin: 5px 0; font-size: 16px;"><strong>⏰ Ora:</strong> ${sessionTime}</p>
-          <p style="margin: 5px 0; font-size: 16px;"><strong>👨‍⚕️ Consultant:</strong> ${providerName}</p>
+          <p style="margin: 5px 0; font-size: 16px;"><strong>👨‍⚕️ Furnizor:</strong> ${providerName}</p>
           ${sessionNotes ? `<p style="margin: 5px 0;"><strong>📝 Note:</strong> ${sessionNotes}</p>` : ''}
         </div>
         
@@ -534,7 +533,7 @@ function generateReminderEmailTemplate(data: {
         ` : ''}
         
         <div style="background: #fef5e7; padding: 15px; border-radius: 8px; margin: 20px 0;">
-          <p style="margin: 0; color: #744210;"><strong>⚠️ URGENT:</strong> Consultantul te așteaptă! Intră cât mai repede în cameră.</p>
+          <p style="margin: 0; color: #744210;"><strong>⚠️ URGENT:</strong> Furnizorul te așteaptă! Intră cât mai repede în cameră.</p>
         </div>
       `,
       buttonText: '⚡ INTRĂ URGENT ÎN CONSULTAȚIE'
@@ -623,7 +622,7 @@ function generateConfirmationEmailTemplate(data: {
           <p style="margin: 5px 0;"><strong>🆔 ID Sesiune:</strong> ${sessionId}</p>
           <p style="margin: 5px 0;"><strong>📍 Data:</strong> ${sessionDate}</p>
           <p style="margin: 5px 0;"><strong>⏰ Ora:</strong> ${sessionTime}</p>
-          <p style="margin: 5px 0;"><strong>👨‍⚕️ Consultant:</strong> ${providerName}</p>
+          <p style="margin: 5px 0;"><strong>👨‍⚕️ Furnizor:</strong> ${providerName}</p>
           ${packageInfo ? `
           <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 15px 0;">
           <p style="margin: 5px 0;"><strong>📦 Pachet:</strong> ${packageInfo.packageName}</p>

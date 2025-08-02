@@ -1,5 +1,5 @@
-// workers/consultationReminderWorker.ts - WORKER COMPLET PENTRU REMINDER-URI
-import { Worker, Job } from 'bullmq';
+// workers/consultationReminderWorker.ts - WORKER PENTRU REMINDER-URI (BullMQ v5 Compatible)
+import { Worker, Job, Queue } from 'bullmq';
 import { prisma } from '../lib/prisma';
 import { 
   sendConsultationReminder24h, 
@@ -13,323 +13,93 @@ const getRedisConfig = () => {
   if (!process.env.REDIS_URL) {
     throw new Error('REDIS_URL is required for consultation reminder worker');
   }
-
   const url = new URL(process.env.REDIS_URL);
-  
   return {
     host: url.hostname,
     port: parseInt(url.port) || 6379,
     password: url.password || undefined,
     username: url.username || undefined,
     db: 0,
-    maxRetriesPerRequest: 3,
+    maxRetriesPerRequest: 3,        // limit retries for stability
     retryDelayOnFailover: 100,
     lazyConnect: true,
-    connectTimeout: 60000,
-    commandTimeout: 5000,
-    // Pentru conexiuni SSL (dacă e necesar)
-    ...(url.protocol === 'rediss:' && {
-      tls: {
-        rejectUnauthorized: false
-      }
-    })
+    connectTimeout: 30000,          // reduced from 60s to 30s
+    commandTimeout: 15000,          // set 15s timeout instead of 0 (infinite)
+    keepAlive: 30000,               // keep connection alive
+    family: 4,                      // force IPv4
+    ...(url.protocol === 'rediss:' && { tls: { rejectUnauthorized: false } })
   };
 };
 
+const redisOptions = getRedisConfig();
+
+// Queue pentru monitoring și management (înlocuiește QueueScheduler)
+let reminderQueue: Queue<ConsultationReminderJobData> | null = null;
+
 // 🔄 FUNCȚIA PRINCIPALĂ DE PROCESARE A JOB-URILOR
 async function processConsultationReminder(job: Job<ConsultationReminderJobData>) {
-  const { 
-    sessionId, 
-    clientId, 
-    providerId, 
-    clientEmail, 
-    clientName, 
-    providerName, 
-    sessionStartTime, 
-    sessionEndTime, 
-    reminderType,
-    dailyRoomUrl,
-    sessionNotes,
-    originalSessionTime 
-  } = job.data;
-
+  const { sessionId, clientEmail, clientName, providerName,
+          sessionStartTime, sessionEndTime, reminderType,
+          dailyRoomUrl, sessionNotes, originalSessionTime } = job.data;
   const jobId = job.id;
-  const processingStart = new Date();
-
-  console.log(`\n📧 [${jobId}] Processing ${reminderType} reminder for session ${sessionId}`);
-  console.log(`   👤 Client: ${clientName} (${clientEmail})`);
-  console.log(`   👨‍⚕️ Provider: ${providerName}`);
-  console.log(`   📅 Session time: ${sessionStartTime}`);
-  console.log(`   ⏰ Processing started: ${processingStart.toISOString()}`);
+  const start = Date.now();
+  console.log(`\n📧 [${jobId}] Processing ${reminderType} for session ${sessionId}`);
 
   try {
-    // 1️⃣ VERIFICĂ EXISTENȚA ȘI STATUSUL SESIUNII
+    // 1️⃣ Verificări: existență, status, timp și email
     const session = await prisma.consultingSession.findUnique({
       where: { id: sessionId },
       select: {
-        id: true,
-        status: true,
-        startDate: true,
-        endDate: true,
-        dailyRoomUrl: true,
-        notes: true,
-        client: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-          }
-        },
-        provider: {
-          select: {
-            id: true,
-            user: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-              }
-            }
-          }
-        }
+        status: true, startDate: true, endDate: true,
+        dailyRoomUrl: true, notes: true,
+        client: { select: { id: true, name: true, email: true } },
+        provider: { select: { user: { select: { name: true } } } }
       }
     });
-
-    if (!session) {
-      console.warn(`⚠️ [${jobId}] Session ${sessionId} not found - skipping reminder`);
-      return { 
-        success: false, 
-        reason: 'Session not found',
-        sessionId,
-        reminderType,
-        timestamp: new Date().toISOString()
-      };
-    }
-
-    // 2️⃣ VERIFICĂ STATUSUL SESIUNII
-    if (session.status === 'CANCELLED') {
-      console.warn(`⚠️ [${jobId}] Session ${sessionId} was cancelled - skipping reminder`);
-      return { 
-        success: false, 
-        reason: 'Session cancelled',
-        sessionId,
-        reminderType,
-        sessionStatus: session.status,
-        timestamp: new Date().toISOString()
-      };
-    }
-
-    if (session.status === 'COMPLETED') {
-      console.warn(`⚠️ [${jobId}] Session ${sessionId} already completed - skipping reminder`);
-      return { 
-        success: false, 
-        reason: 'Session already completed',
-        sessionId,
-        reminderType,
-        sessionStatus: session.status,
-        timestamp: new Date().toISOString()
-      };
-    }
-
-    // 3️⃣ VERIFICĂ SCHIMBĂRI DE TIMP
-    const dbStartTime = session.startDate?.toISOString();
-    if (originalSessionTime && dbStartTime && dbStartTime !== originalSessionTime) {
-      console.warn(`⚠️ [${jobId}] Session ${sessionId} time changed:`);
-      console.warn(`     Original: ${originalSessionTime}`);
-      console.warn(`     Current:  ${dbStartTime}`);
-      console.warn(`     Skipping reminder - session was rescheduled`);
-      return { 
-        success: false, 
-        reason: 'Session time changed',
-        sessionId,
-        reminderType,
-        originalTime: originalSessionTime,
-        currentTime: dbStartTime,
-        timestamp: new Date().toISOString()
-      };
-    }
-
-    // 4️⃣ VERIFICĂ EMAIL-UL CLIENTULUI
-    if (!session.client.email) {
-      console.error(`❌ [${jobId}] Client ${session.client.id} has no email - cannot send reminder`);
-      return { 
-        success: false, 
-        reason: 'Client has no email',
-        sessionId,
-        reminderType,
-        clientId: session.client.id,
-        timestamp: new Date().toISOString()
-      };
-    }
-
-    if (session.client.email !== clientEmail) {
-      console.warn(`⚠️ [${jobId}] Client email changed for session ${sessionId}:`);
-      console.warn(`     Job data:  ${clientEmail}`);
-      console.warn(`     Database:  ${session.client.email}`);
-      console.warn(`     Using database email for reminder`);
-    }
-
-    // 5️⃣ VERIFICĂ TIMING
+    if (!session) throw new Error('SessionNotFound');
+    if (['CANCELLED','COMPLETED'].includes(session.status)) throw new Error(`Session${session.status}`);
+    const dbStart = session.startDate?.toISOString();
+    if (originalSessionTime && dbStart !== originalSessionTime) throw new Error('SessionRescheduled');
+    if (!session.client.email) throw new Error('ClientNoEmail');
     const now = new Date();
-    const sessionStart = session.startDate ? new Date(session.startDate) : new Date(sessionStartTime);
-    
-    if (now >= sessionStart) {
-      console.warn(`⚠️ [${jobId}] Session ${sessionId} already started - skipping reminder`);
-      console.warn(`     Current time:   ${now.toISOString()}`);
-      console.warn(`     Session start:  ${sessionStart.toISOString()}`);
-      return { 
-        success: false, 
-        reason: 'Session already started',
-        sessionId,
-        reminderType,
-        currentTime: now.toISOString(),
-        sessionStartTime: sessionStart.toISOString(),
-        timestamp: new Date().toISOString()
-      };
+    const scheduled = session.startDate ? new Date(session.startDate) : new Date(sessionStartTime);
+    if (now >= scheduled) throw new Error('SessionStarted');
+
+    // 2️⃣ Pregătire date efective
+    const emailTo = session.client.email;
+    const nameTo = session.client.name || clientName;
+    const providerTo = session.provider.user.name || providerName;
+    const roomUrl = session.dailyRoomUrl || dailyRoomUrl;
+    const notes = session.notes || sessionNotes;
+    const startTime = session.startDate?.toISOString() || sessionStartTime;
+    const endTime = session.endDate?.toISOString() || sessionEndTime;
+
+    // 3️⃣ Trimitere email
+    if (reminderType === '24h') {
+      await sendConsultationReminder24h(emailTo, nameTo, providerTo, startTime, endTime, roomUrl, notes);
+    } else if (reminderType === '1h') {
+      await sendConsultationReminder1h(emailTo, nameTo, providerTo, startTime, endTime, roomUrl, notes);
+    } else if (reminderType === 'at_time') {
+      await sendConsultationReminderAtTime(emailTo, nameTo, providerTo, startTime, endTime, roomUrl, notes);
+    } else {
+      throw new Error('UnknownReminderType');
     }
+    console.log(`✅ [${jobId}] Sent in ${Date.now() - start}ms to ${emailTo}`);
 
-    // 6️⃣ PREGĂTEȘTE DATELE ACTUALIZATE
-    const actualClientEmail = session.client.email;
-    const actualClientName = session.client.name || clientName;
-    const actualProviderName = session.provider.user.name || providerName;
-    const actualDailyRoomUrl = session.dailyRoomUrl || dailyRoomUrl;
-    const actualSessionNotes = session.notes || sessionNotes;
-    const actualStartTime = session.startDate?.toISOString() || sessionStartTime;
-    const actualEndTime = session.endDate?.toISOString() || sessionEndTime;
-
-    console.log(`📤 [${jobId}] Sending ${reminderType} reminder to ${actualClientEmail}...`);
-
-    // 7️⃣ TRIMITE EMAIL-UL CORESPUNZĂTOR
-    const emailStart = new Date();
-    
-    try {
-      switch (reminderType) {
-        case '24h':
-          await sendConsultationReminder24h(
-            actualClientEmail,
-            actualClientName,
-            actualProviderName,
-            actualStartTime,
-            actualEndTime,
-            actualDailyRoomUrl,
-            actualSessionNotes
-          );
-          break;
-          
-        case '1h':
-          await sendConsultationReminder1h(
-            actualClientEmail,
-            actualClientName,
-            actualProviderName,
-            actualStartTime,
-            actualEndTime,
-            actualDailyRoomUrl,
-            actualSessionNotes
-          );
-          break;
-          
-        case 'at_time':
-          await sendConsultationReminderAtTime(
-            actualClientEmail,
-            actualClientName,
-            actualProviderName,
-            actualStartTime,
-            actualEndTime,
-            actualDailyRoomUrl,
-            actualSessionNotes
-          );
-          break;
-          
-        default:
-          throw new Error(`Unknown reminder type: ${reminderType}`);
-      }
-
-      const emailEnd = new Date();
-      const emailDuration = emailEnd.getTime() - emailStart.getTime();
-      
-      console.log(`✅ [${jobId}] ${reminderType} reminder sent successfully in ${emailDuration}ms`);
-      console.log(`   📧 Sent to: ${actualClientEmail}`);
-      console.log(`   📅 For session: ${sessionId} at ${actualStartTime}`);
-
-    } catch (emailError) {
-      console.error(`❌ [${jobId}] Email sending failed:`, emailError);
-      throw new Error(`Failed to send ${reminderType} reminder email: ${emailError instanceof Error ? emailError.message : 'Unknown email error'}`);
-    }
-
-    // 8️⃣ OPȚIONAL: SALVEAZĂ ÎN DB CĂ REMINDER-UL A FOST TRIMIS
-    try {
-      // Această parte necesită o modificare în schema Prisma pentru a adăuga câmpul remindersSent
-      // Pentru moment o lăsăm comentată
-      /*
-      await prisma.consultingSession.update({
-        where: { id: sessionId },
-        data: {
-          remindersSent: {
-            push: {
-              type: reminderType,
-              sentAt: new Date().toISOString(),
-              success: true,
-              sentTo: actualClientEmail,
-              jobId: jobId
-            }
-          }
-        }
-      });
-      */
-      console.log(`📝 [${jobId}] Reminder tracking updated in database`);
-    } catch (dbError) {
-      console.warn(`⚠️ [${jobId}] Could not update reminder status in DB:`, dbError);
-      // Nu aruncăm eroare pentru că email-ul a fost trimis cu succes
-    }
-
-    const processingEnd = new Date();
-    const totalDuration = processingEnd.getTime() - processingStart.getTime();
-    
-    console.log(`🎯 [${jobId}] Reminder processing completed in ${totalDuration}ms`);
-    
-    return { 
-      success: true, 
-      reminderType, 
-      sessionId, 
-      sentTo: actualClientEmail,
-      sentAt: processingEnd.toISOString(),
-      processingDuration: totalDuration,
-      jobId,
-      timestamp: new Date().toISOString()
-    };
-
-  } catch (error) {
-    const processingEnd = new Date();
-    const totalDuration = processingEnd.getTime() - processingStart.getTime();
-    
-    console.error(`❌ [${jobId}] Error processing ${reminderType} reminder for session ${sessionId}:`);
-    console.error(`   Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    console.error(`   Duration: ${totalDuration}ms`);
-    
-    // Salvează eroarea în DB (opțional)
+    // 4️⃣ (Opțional) Salvare status în DB
     try {
       /*
       await prisma.consultingSession.update({
         where: { id: sessionId },
-        data: {
-          remindersSent: {
-            push: {
-              type: reminderType,
-              sentAt: new Date().toISOString(),
-              success: false,
-              error: error instanceof Error ? error.message : 'Unknown error',
-              jobId: jobId
-            }
-          }
-        }
+        data: { remindersSent: { push: { type: reminderType, sentAt: new Date().toISOString(), success: true, sentTo: emailTo, jobId } } }
       });
       */
-    } catch (dbError) {
-      console.warn(`⚠️ [${jobId}] Could not save error to database:`, dbError);
-    }
+    } catch {}
 
-    // Re-aruncă eroarea pentru ca BullMQ să poată face retry
-    throw error;
+    return { success: true, jobId, sessionId, sentTo: emailTo, processedAt: new Date().toISOString(), duration: Date.now() - start };
+  } catch (err) {
+    console.error(`❌ [${jobId}] Error:`, err instanceof Error ? err.message : err);
+    throw err;
   }
 }
 
@@ -344,116 +114,109 @@ export function startConsultationReminderWorker(): Worker<ConsultationReminderJo
   }
 
   if (!process.env.REDIS_URL) {
-    console.warn('⚠️ REDIS_URL not configured - consultation reminder worker will not start');
-    console.warn('   Add REDIS_URL to your .env file to enable reminder functionality');
+    console.warn('⚠️ REDIS_URL not configured');
     return null;
   }
 
+  console.log('🔄 Starting consultation reminder worker...');
+  console.log(`   Redis: ${redisOptions.host}:${redisOptions.port}`);
+
   try {
-    const redisConfig = getRedisConfig();
-    
-    console.log('🔄 Starting consultation reminder worker...');
-    console.log(`   Redis: ${redisConfig.host}:${redisConfig.port}`);
-    console.log(`   Concurrency: 5 jobs`);
-    console.log(`   Queue: consultation-reminders`);
-    
+    // Inițializează Queue pentru monitoring (înlocuiește QueueScheduler)
+    reminderQueue = new Queue<ConsultationReminderJobData>(
+      'consultation-reminders',
+      { connection: redisOptions }
+    );
+
+    // Inițializează Worker
     reminderWorker = new Worker<ConsultationReminderJobData>(
       'consultation-reminders',
       processConsultationReminder,
-      {
-        connection: redisConfig,
-        concurrency: 5, // Procesează până la 5 job-uri simultan
-        removeOnComplete: 25, // Păstrează ultimele 25 job-uri completate
-        removeOnFail: 100,    // Păstrează ultimele 100 job-uri eșuate
-        // Setări pentru job-urile care durează mult
-        stalledInterval: 30000,    // 30 secunde
-        maxStalledCount: 1,        // Retry odată dacă job-ul se blochează
+      { 
+        connection: redisOptions, // Fix: folosește redisOptions în loc de connection nedefinit
+        concurrency: 5, 
+        removeOnComplete: { count: 25 }, 
+        removeOnFail: { count: 100 }, 
+        stalledInterval: 30000, 
+        maxStalledCount: 1 
       }
     );
 
-    // 📊 EVENT HANDLERS PENTRU MONITORING
-    reminderWorker.on('ready', () => {
-      console.log('✅ Consultation reminder worker is ready and listening for jobs');
-    });
-
-    reminderWorker.on('active', (job) => {
-      console.log(`🔄 [${job.id}] Processing ${job.data.reminderType} reminder for session ${job.data.sessionId}`);
-      console.log(`   Client: ${job.data.clientName}`);
-      console.log(`   Session: ${job.data.sessionStartTime}`);
-    });
-
-    reminderWorker.on('completed', (job, result) => {
-      console.log(`✅ [${job.id}] Completed ${job.data.reminderType} reminder:`, {
-        sessionId: result.sessionId,
-        success: result.success,
-        duration: result.processingDuration,
-        sentTo: result.sentTo
-      });
-    });
-
-    reminderWorker.on('failed', (job, err) => {
-      console.error(`❌ [${job?.id}] Failed ${job?.data.reminderType} reminder:`, {
-        sessionId: job?.data.sessionId,
-        error: err.message,
-        attempts: job?.attemptsMade,
-        maxAttempts: job?.opts.attempts
-      });
-    });
-
-    reminderWorker.on('error', (err) => {
-      console.error('❌ Consultation reminder worker error:', err);
-    });
-
-    reminderWorker.on('stalled', (jobId) => {
-      console.warn(`⚠️ Reminder job ${jobId} stalled - will be retried`);
-    });
-
-    reminderWorker.on('progress', (job, progress) => {
-      if (progress && typeof progress === 'object') {
-        console.log(`📈 [${job.id}] Progress:`, progress);
+    // Event listeners with better error handling
+    reminderWorker.on('ready', () => console.log('✅ Worker ready'));
+    reminderWorker.on('active', job => console.log(`🔄 Active ${job.id}`));
+    reminderWorker.on('completed', (job, res) => console.log(`✅ Completed ${job.id}`));
+    reminderWorker.on('failed', (job, err) => console.error(`❌ Failed ${job?.id}:`, err.message));
+    
+    // Enhanced error handling
+    reminderWorker.on('error', err => {
+      console.error('❌ Worker error:', err.message);
+      if (err.message.includes('Connection is closed') || err.message.includes('Command timed out')) {
+        console.log('🔄 Attempting to restart worker in 5 seconds...');
+        setTimeout(() => {
+          console.log('🔄 Restarting worker due to connection issues...');
+          restartWorker();
+        }, 5000);
       }
     });
 
-    console.log('✅ Consultation reminder worker started successfully');
-    console.log('   The worker will process reminder jobs as they become due');
-    console.log('   Use Ctrl+C to stop the worker gracefully');
-    
+    // Queue event listeners with better error handling
+    if (reminderQueue) {
+      reminderQueue.on('error', err => {
+        console.error('❌ Queue error:', err.message);
+        // Don't restart on queue errors, just log them
+      });
+    }
+
+    console.log('✅ Consultation reminder worker started');
     return reminderWorker;
 
   } catch (error) {
-    console.error('❌ Failed to start consultation reminder worker:', error);
-    
-    if (error instanceof Error) {
-      if (error.message.includes('ECONNREFUSED')) {
-        console.error('   → Redis connection refused. Is Redis running?');
-        console.error('   → Check your REDIS_URL configuration');
-      } else if (error.message.includes('authentication')) {
-        console.error('   → Redis authentication failed. Check credentials');
-      }
-    }
-    
-    reminderWorker = null;
+    console.error('❌ Failed to start worker:', error);
     return null;
   }
 }
 
-// 🛑 FUNCȚIE PENTRU OPRIREA WORKER-ULUI
-export async function stopConsultationReminderWorker(): Promise<void> {
-  if (!reminderWorker) {
-    console.log('⚠️ Consultation reminder worker is not running');
-    return;
-  }
-
+// � FUNCȚIE PENTRU RESTART WORKER
+async function restartWorker(): Promise<void> {
   try {
-    console.log('🛑 Stopping consultation reminder worker...');
+    console.log('🔄 Restarting worker...');
+    await stopConsultationReminderWorker();
     
-    // Permite job-urilor active să se termine (timeout 30 secunde)
-    await reminderWorker.close(false, 30000);
+    // Wait a bit before restarting
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    
+    const newWorker = startConsultationReminderWorker();
+    if (newWorker) {
+      console.log('✅ Worker restarted successfully');
+    } else {
+      console.error('❌ Failed to restart worker');
+    }
+  } catch (error) {
+    console.error('❌ Error restarting worker:', error);
+  }
+}
+
+// �🛑 FUNCȚIE PENTRU OPRIREA WORKER-ULUI
+export async function stopConsultationReminderWorker(): Promise<void> {
+  if (!reminderWorker) return;
+  
+  console.log('🛑 Stopping worker...');
+  
+  try {
+    // Oprește worker-ul
+    await reminderWorker.close();
     reminderWorker = null;
     
-    console.log('✅ Consultation reminder worker stopped successfully');
+    // Închide queue-ul
+    if (reminderQueue) {
+      await reminderQueue.close();
+      reminderQueue = null;
+    }
+    
+    console.log('✅ Worker stopped');
   } catch (error) {
-    console.error('❌ Error stopping consultation reminder worker:', error);
+    console.error('❌ Error stopping worker:', error);
     throw error;
   }
 }
@@ -514,6 +277,41 @@ export async function resumeWorker(): Promise<boolean> {
   }
 }
 
+// 📊 FUNCȚII PENTRU MONITORING QUEUE-UL
+export async function getQueueStats() {
+  if (!reminderQueue) {
+    return { error: 'Queue not initialized' };
+  }
+
+  try {
+    const [waiting, active, completed, failed, delayed] = await Promise.all([
+      reminderQueue.getWaiting(),
+      reminderQueue.getActive(),
+      reminderQueue.getCompleted(),
+      reminderQueue.getFailed(),
+      reminderQueue.getDelayed()
+    ]);
+
+    return {
+      counts: {
+        waiting: waiting.length,
+        active: active.length,
+        completed: completed.length,
+        failed: failed.length,
+        delayed: delayed.length
+      },
+      jobs: {
+        waiting: waiting.slice(0, 5).map(job => ({ id: job.id, data: job.data })),
+        active: active.slice(0, 5).map(job => ({ id: job.id, data: job.data })),
+        failed: failed.slice(0, 5).map(job => ({ id: job.id, failedReason: job.failedReason })),
+        delayed: delayed.slice(0, 5).map(job => ({ id: job.id, delay: job.opts.delay }))
+      }
+    };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : 'Unknown error' };
+  }
+}
+
 // 🧹 GRACEFUL SHUTDOWN PENTRU PROCES
 if (typeof process !== 'undefined') {
   const gracefulShutdown = async (signal: string) => {
@@ -544,6 +342,15 @@ if (require.main === module) {
     console.log('\n🎯 Worker started successfully!');
     console.log('   Waiting for reminder jobs...');
     console.log('   Press Ctrl+C to stop');
+    
+    // Afișează statistici periodic
+    setInterval(async () => {
+      const stats = await getQueueStats();
+      if (!stats.error) {
+        console.log(`📊 Queue stats: ${JSON.stringify(stats.counts)}`);
+      }
+    }, 60000); // la fiecare minut
+    
   } else {
     console.log('\n❌ Failed to start worker');
     console.log('   Check your Redis configuration and try again');
