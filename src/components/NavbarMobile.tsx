@@ -65,17 +65,36 @@ const NavbarMobile = () => {
       <div className="flex items-center justify-between px-4 h-full z-50">
         {/* Hamburger button in a fixed-width container */}
         <div className="w-10 flex items-center">
-          <button onClick={toggleMenu} className="relative w-8 h-8 focus:outline-none z-50">
-            <span className={`block absolute h-0.5 w-6 bg-white transform transition duration-300 ease-in-out ${isOpen ? 'rotate-45 top-3.5' : 'top-1'}`}></span>
-            <span className={`block absolute h-0.5 w-6 bg-white transform transition duration-300 ease-in-out ${isOpen ? 'opacity-0' : 'top-3.5'}`}></span>
-            <span className={`block absolute h-0.5 w-6 bg-white transform transition duration-300 ease-in-out ${isOpen ? '-rotate-45 top-3.5' : 'top-6'}`}></span>
+          <button
+            onClick={toggleMenu}
+            className="relative w-8 h-8 focus:outline-none z-50"
+          >
+            <span
+              className={`block absolute h-0.5 w-6 bg-white transform transition duration-300 ease-in-out ${
+                isOpen ? "rotate-45 top-3.5" : "top-1"
+              }`}
+            ></span>
+            <span
+              className={`block absolute h-0.5 w-6 bg-white transform transition duration-300 ease-in-out ${
+                isOpen ? "opacity-0" : "top-3.5"
+              }`}
+            ></span>
+            <span
+              className={`block absolute h-0.5 w-6 bg-white transform transition duration-300 ease-in-out ${
+                isOpen ? "-rotate-45 top-3.5" : "top-6"
+              }`}
+            ></span>
           </button>
         </div>
 
         {/* Logo in absolute position for perfect centering */}
         <div className="absolute z-10 left-1/2 transform -translate-x-1/2">
           <Link href="/" onClick={toggleMenu}>
-            <Image src={mysticLogo} alt="Mystic Gold Logo" className="w-[60px] h-full" />
+            <Image
+              src={mysticLogo}
+              alt="Mystic Gold Logo"
+              className="w-[60px] h-full"
+            />
           </Link>
         </div>
 
@@ -86,37 +105,51 @@ const NavbarMobile = () => {
           ) : user?.name ? (
             <div className="relative group z-50">
               <div className="flex items-center gap-4">
-              <LanguageSwitcher />
-              <Button className="px-2 py-1 z-50 gap-4 shadow-md shadow-primaryColor bg-gradient-to-tr from-buttonPrimaryColor to-buttonSecondaryColor text-md hover:text-white hover:bg-primaryColor font-semibold border-2 border-buttonSecondaryColor/30 text-white">
-                <FaUserAlt />
-              </Button>
+                <LanguageSwitcher />
+                <Button className="px-2 py-1 z-50 gap-4 shadow-md shadow-primaryColor bg-gradient-to-tr from-buttonPrimaryColor to-buttonSecondaryColor text-md hover:text-white hover:bg-primaryColor font-semibold border-2 border-buttonSecondaryColor/30 text-white">
+                  <FaUserAlt />
+                </Button>
               </div>
               <div className="absolute right-0 mt-2 w-36 bg-white text-primaryColor rounded-md shadow-md opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300">
                 <Link href="/profil">
-                  <p className="px-4 py-2 hover:bg-gray-100 cursor-pointer">Profil</p>
+                  <p className="px-4 py-2 hover:bg-gray-100 cursor-pointer">
+                    Profil
+                  </p>
                 </Link>
                 <button
                   onClick={() => handleLogout(slug)}
                   className="w-full bg-red-600 text-white font-bold text-left px-4 py-2 hover:bg-red-700 cursor-pointer"
                 >
-                  {t('navigation.logout')}
+                  {t("navigation.logout")}
                 </button>
               </div>
             </div>
           ) : (
-            <Link href="/autentificare">
-              <Button className="px-2 py-1 gap-4 z-50 shadow-md shadow-primaryColor bg-gradient-to-tr from-buttonPrimaryColor to-buttonSecondaryColor text-md hover:text-white hover:bg-primaryColor font-semibold border-2 border-buttonSecondaryColor/30 text-white">
-                <FaUserAlt />
-              </Button>
-            </Link>
+            <div className="flex items-center gap-4">
+              <LanguageSwitcher />
+              <Link href="/autentificare">
+                <Button className="px-2 py-1 gap-4 z-50 shadow-md shadow-primaryColor bg-gradient-to-tr from-buttonPrimaryColor to-buttonSecondaryColor text-md hover:text-white hover:bg-primaryColor font-semibold border-2 border-buttonSecondaryColor/30 text-white">
+                  <FaUserAlt />
+                </Button>
+              </Link>
+            </div>
           )}
         </div>
       </div>
 
-      <div className={`fixed top-[50px] left-0 w-full bg-primaryColor transform transition-transform duration-300 ease-in-out ${isOpen ? 'translate-y-0' : '-translate-y-full'}`}>
+      <div
+        className={`fixed top-[50px] left-0 w-full bg-primaryColor transform transition-transform duration-300 ease-in-out ${
+          isOpen ? "translate-y-0" : "-translate-y-full"
+        }`}
+      >
         <ul className="flex flex-col items-center justify-center h-screen space-y-8 text-white text-xl z-50">
-          <li onClick={() => {setIsOpen(false); toggleMenu()}}>
-            <Link href="/">{t('navbar.home')}</Link>
+          <li
+            onClick={() => {
+              setIsOpen(false);
+              toggleMenu();
+            }}
+          >
+            <Link href="/">{t("navbar.home")}</Link>
           </li>
 
           {/* Buton PSIHOLOGI + Lista cu animatie */}
@@ -125,23 +158,43 @@ const NavbarMobile = () => {
               onClick={togglePsychologists}
               className="flex items-center justify-center w-full text-white font-bold px-4 py-2 focus:outline-none"
             >
-              <span>{t('navbar.services')}</span>
-              <FaChevronDown className={`ml-2 transition-transform duration-300 ${isPsychologistsOpen ? 'rotate-180' : ''}`} />
+              <span>{t("navbar.services")}</span>
+              <FaChevronDown
+                className={`ml-2 transition-transform duration-300 ${
+                  isPsychologistsOpen ? "rotate-180" : ""
+                }`}
+              />
             </button>
 
             <div
               className={`overflow-hidden transition-all duration-300 ease-in-out ${
-                isPsychologistsOpen ? 'max-h-[365px] opacity-100' : 'max-h-0 opacity-0'
+                isPsychologistsOpen
+                  ? "max-h-[365px] opacity-100"
+                  : "max-h-0 opacity-0"
               }`}
             >
               <ul className="mt-2 bg-white text-primaryColor text-center rounded-lg shadow-lg ">
-                 <Link href={`/astrologi`} onClick={() => {setIsOpen(false); setIsPsychologistsOpen(false)}}> 
-                <li className="py-2 px-4 hover:bg-primaryColor/10 cursor-pointer">
-                  {t('navbar.general')}
-                </li>
+                <Link
+                  href={`/astrologi`}
+                  onClick={() => {
+                    setIsOpen(false);
+                    setIsPsychologistsOpen(false);
+                  }}
+                >
+                  <li className="py-2 px-4 hover:bg-primaryColor/10 cursor-pointer">
+                    {t("navbar.general")}
+                  </li>
                 </Link>
                 {specialities.map((speciality, index) => (
-                  <Link key={index} href={`/astrologi?speciality=${speciality}`} onClick={() => {setIsOpen(false); setIsPsychologistsOpen(false)}} className="block w-full">
+                  <Link
+                    key={index}
+                    href={`/astrologi?speciality=${speciality}`}
+                    onClick={() => {
+                      setIsOpen(false);
+                      setIsPsychologistsOpen(false);
+                    }}
+                    className="block w-full"
+                  >
                     <li className="py-2 px-4 hover:bg-primaryColor/10 cursor-pointer">
                       {speciality}
                     </li>
@@ -152,10 +205,12 @@ const NavbarMobile = () => {
           </li>
 
           <li onClick={() => setIsOpen(false)}>
-            <Button className='text-xl' onClick={handleDespreNoiClick}>{t('navbar.about')}</Button>
+            <Button className="text-xl" onClick={handleDespreNoiClick}>
+              {t("navbar.about")}
+            </Button>
           </li>
           <li onClick={() => setIsOpen(false)}>
-            <Link href="/">{t('navigation.articles')}</Link>
+            <Link href="/">{t("navigation.articles")}</Link>
           </li>
         </ul>
       </div>

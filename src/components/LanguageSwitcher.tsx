@@ -6,7 +6,7 @@ export const LanguageSwitcher: React.FC = () => {
   const { language, setLanguage, isLoading } = useTranslation();
 
   return (
-    <div className="flex items-center space-x-2">
+    <div className="flex items-center space-x-2 z-50">
       <button
         onClick={() => setLanguage('ro')}
         disabled={isLoading}
