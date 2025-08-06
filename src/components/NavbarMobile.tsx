@@ -11,6 +11,7 @@ import Image from 'next/image';
 import { displayedServices } from '@/utils/constants';
 import handleLogout from '@/lib/api/logout/logout';
 import { useRouter } from 'next/navigation';
+import  LanguageSwitcher from './LanguageSwitcher'
 
 const NavbarMobile = () => {
   const { data: session, status } = useSession();
@@ -84,10 +85,12 @@ const NavbarMobile = () => {
             <p className="text-white">...</p>
           ) : user?.name ? (
             <div className="relative group z-50">
+              <div className="flex items-center gap-4">
+              <LanguageSwitcher />
               <Button className="px-2 py-1 z-50 gap-4 shadow-md shadow-primaryColor bg-gradient-to-tr from-buttonPrimaryColor to-buttonSecondaryColor text-md hover:text-white hover:bg-primaryColor font-semibold border-2 border-buttonSecondaryColor/30 text-white">
                 <FaUserAlt />
               </Button>
-
+              </div>
               <div className="absolute right-0 mt-2 w-36 bg-white text-primaryColor rounded-md shadow-md opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300">
                 <Link href="/profil">
                   <p className="px-4 py-2 hover:bg-gray-100 cursor-pointer">Profil</p>

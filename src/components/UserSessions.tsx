@@ -526,7 +526,7 @@ export default function UserSessions() {
   };
 
   async function handleCancelSession(sessionId: string) {
-    if (!confirm('Ești sigur că vrei să anulezi această sesiune?')) {
+    if (!confirm(t('userSessions.confirmCancel'))) {
       return;
     }
 
@@ -549,15 +549,15 @@ export default function UserSessions() {
       setProviderSessions(prev => prev.map(updateSession));
       setClientSessions(prev => prev.map(updateSession));
 
-      alert('Sesiunea a fost anulată cu succes!');
+      alert(t('userSessions.cancelledSuccess'));
     } catch (error) {
       console.error('Eroare la anularea sesiunii:', error);
-      alert('A apărut o eroare la anularea sesiunii. Te rugăm să încerci din nou.');
+      alert(t('userSessions.cancelledError'));
     }
   }
 
   async function handleForceEndSession(sessionId: string) {
-    if (!confirm('Ești sigur că vrei să închizi această sesiune definitiv?')) {
+    if (!confirm(t('userSessions.confirmForceEnd'))) {
       return;
     }
 
@@ -582,10 +582,10 @@ export default function UserSessions() {
       setProviderSessions(prev => prev.map(updateSession));
       setClientSessions(prev => prev.map(updateSession));
 
-      alert('Sesiunea a fost închisă cu succes!');
+      alert(t('userSessions.forceEndSuccess'));
     } catch (error) {
       console.error('Eroare la închiderea sesiunii:', error);
-      alert('A apărut o eroare la închiderea sesiunii. Te rugăm să încerci din nou.');
+      alert(t('userSessions.forceEndError'));
     }
   }
 
@@ -603,14 +603,14 @@ export default function UserSessions() {
         {sessions.map((sess) => {
           const date = sess.startDate ? parseISO(sess.startDate) : null;
           const humanDate = date && isValid(date)
-            ? date.toLocaleString("ro-RO", {
+            ? date.toLocaleString(lang === 'ro' ? 'ro-RO' : 'en-US', {
                 day: "2-digit",
                 month: "2-digit",
                 year: "numeric",
                 hour: "2-digit",
                 minute: "2-digit",
               })
-            : "Data necunoscută";
+            : t('userSessions.unknownDate');
           const remaining = date && isValid(date) ? renderTimeRemaining(date) : "";
 
           const canJoin = sess.joinUrl && 
@@ -651,7 +651,7 @@ export default function UserSessions() {
                         ? 'bg-green-100 text-green-800' 
                         : 'bg-blue-100 text-blue-800'
                     }`}>
-                      {role === 'provider' ? '👨‍⚕️ Furnizor' : '👤 Client'}
+                      {role === 'provider' ? `👨‍⚕️ ${t('userSessions.provider')}` : `👤 ${t('userSessions.client')}`}
                     </span>
                     
                     {hasRecordingAvailable && isCompleted && (
@@ -667,14 +667,14 @@ export default function UserSessions() {
 
                     {hasReview && (
                       <span className="flex justify-center items-center px-2 py-1 rounded-full text-xs font-medium text-center bg-yellow-100 text-yellow-800">
-                        ⭐ Recenzată ({sess.myReview?.rating}/5)
+                        {t('userSessions.reviewed', { rating: sess.myReview?.rating })}
                       </span>
                     )}
 
                     {/* 🆕 Badge pentru furnizor când clientul a lăsat recenzie */}
                     {hasClientReview && (
                       <span className="flex justify-center items-center px-2 py-1 rounded-full text-xs font-medium text-center bg-emerald-100 text-emerald-800">
-                        ⭐ Recenzie primită ({sess.clientReview?.rating}/5)
+                        {t('userSessions.reviewReceived', { rating: sess.clientReview?.rating })}
                       </span>
                     )}
                   </div>
@@ -723,7 +723,7 @@ export default function UserSessions() {
                     {hasClientReview && sess.clientReview && (
                       <div className="mt-2 p-3 bg-emerald-50 rounded border">
                         <p className="text-sm font-medium text-emerald-800">
-                          Recenzia de la {sess.clientReview.clientName}:
+                          {t('userSessions.reviewFrom', { name: sess.clientReview.clientName })}
                         </p>
                         <div className="flex items-center gap-2 mt-1">
                           {renderStars(sess.clientReview.rating)} 
@@ -735,7 +735,7 @@ export default function UserSessions() {
                           </p>
                         )}
                         <p className="text-xs text-gray-500 mt-2">
-                          Adăugată pe {new Date(sess.clientReview.date).toLocaleDateString('ro-RO')}
+                          {t('userSessions.addedOn', { date: new Date(sess.clientReview.date).toLocaleDateString(lang === 'ro' ? 'ro-RO' : 'en-US') })}
                         </p>
                       </div>
                     )}
@@ -743,13 +743,13 @@ export default function UserSessions() {
                     {hasReview && sess.myReview && (
                       <div className="mt-2 p-2 bg-yellow-50 rounded border">
                         <p className="text-sm">
-                          <span className="font-medium">Recenzia ta:</span> {renderStars(sess.myReview.rating)} ({sess.myReview.rating}/5)
+                        <span className="font-medium">{t('userSessions.yourReview')}:</span> {renderStars(sess.myReview.rating)} ({sess.myReview.rating}/5)
                         </p>
                         {sess.myReview.comment && (
                           <p className="text-xs text-gray-600 mt-1">&quot;{sess.myReview.comment}&quot;</p>
                         )}
                         <p className="text-xs text-gray-400 mt-1">
-                          Adăugată pe {new Date(sess.myReview.date).toLocaleDateString('ro-RO')}
+                          {t('userSessions.addedOn', { date: new Date(sess.myReview.date).toLocaleDateString(lang === 'ro' ? 'ro-RO' : 'en-US') })}
                         </p>
                       </div>
                     )}
@@ -781,18 +781,18 @@ export default function UserSessions() {
                         }}
                         className="block w-full px-4 py-2 bg-primaryColor text-white rounded hover:bg-secondaryColor text-center transition-colors"
                       >
-                        {sess.status === 'IN_PROGRESS' ? 'Reintră în sesiune' : 'Intră în sesiune'}
+                        {sess.status === 'IN_PROGRESS' ? t('userSessions.rejoinSession') : t('userSessions.joinSession')}
                       </Link>
                     ) : isCompleted && hasRecordingAvailable ? (
                       <button
                         onClick={() => openModal(sess.recordingUrl!)}
                         className="w-full px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 text-center transition-colors flex items-center gap-2 justify-center"
                       >
-                        📹 Vezi înregistrarea
+                        {t('userSessions.viewRecording')}
                       </button>
                     ) : isCompleted && hasRecordingProcessing ? (
                       <div className="w-full px-4 py-2 bg-orange-100 text-orange-800 rounded text-center text-sm">
-                        ⏳ Înregistrare în procesare
+                        {t('userSessions.recordingProcessing')}
                       </div>
                     ) : isCompleted && hasAnyRecording ? (
                       <button
@@ -803,18 +803,18 @@ export default function UserSessions() {
                         {loadingRecording === sess.id ? (
                           <>
                             <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                            Se încarcă...
+                            {t('userSessions.loadingShort')}
                           </>
                         ) : (
                           <>
-                            🔍 Verifică înregistrarea
+                            {t('userSessions.checkRecording')}
                           </>
                         )}
                       </button>
                     ) : (
                       <div className="w-full px-4 py-2 bg-gray-100 text-gray-600 rounded text-center text-sm">
-                        {sess.status === 'CANCELLED' ? 'Sesiune anulată' : 
-                         isCompleted && !hasAnyRecording ? 'Fără înregistrare' : (remaining && sess.status === 'SCHEDULED' && remaining)}
+                        {sess.status === 'CANCELLED' ? t('userSessions.sessionCancelled') : 
+                         isCompleted && !hasAnyRecording ? t('userSessions.noRecording') : (remaining && sess.status === 'SCHEDULED' && remaining)}
                       </div>
                     )}
 
@@ -843,7 +843,7 @@ export default function UserSessions() {
                         onClick={() => handleCancelSession(sess.id)}
                         className="w-full px-3 py-1 bg-red-500 text-white rounded text-sm hover:bg-red-600 transition-colors"
                       >
-                        Anulează
+                        {t('userSessions.cancelBtn')}
                       </button>
                     )}
 
@@ -852,7 +852,7 @@ export default function UserSessions() {
                         onClick={() => handleForceEndSession(sess.id)}
                         className="w-full px-3 py-1 bg-orange-500 text-white rounded text-sm hover:bg-orange-600 transition-colors"
                       >
-                        Închide sesiunea
+                        {t('userSessions.forceEndBtn')}
                       </button>
                     )}
                   </div>
@@ -872,13 +872,14 @@ export default function UserSessions() {
         <div>
           <h2 className="text-xl lg:text-2xl font-bold">{t('userSessions.title')}</h2>
           <div className="text-sm text-gray-600 mt-1">
-            {t('userSessions.total', { count: providerSessions.length + clientSessions.length })}
-            {stats?.client?.totalReviews && stats?.client?.totalReviews>0  && (
+            {t('userSessions.total')} { parseInt(providerSessions.length) + parseInt(clientSessions.length)}
+            <br/>
+            {stats?.client?.totalReviews!==0 && stats?.client?.totalReviews>0  && (
               <span className="ml-2 text-yellow-600">
                 • {t('userSessions.givenReviews', { count: stats.client.totalReviews })}
               </span>
             )}
-            {stats?.provider?.totalReviews && (
+            {stats?.provider?.totalReviews!==0 && (
               <span className="ml-2 text-emerald-600">
                 • {t('userSessions.receivedReviews', { count: stats.provider.totalReviews })}
                 {stats.provider.averageRating && (
@@ -923,9 +924,9 @@ export default function UserSessions() {
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
               }`}
             >
-              Ca Furnizor ({providerSessions.length})
+              {t('userSessions.asProvider')} ({providerSessions.length})
               {/* 🆕 Afișează recenziile primite */}
-              {stats?.provider?.totalReviews && (
+              {stats?.provider?.totalReviews!==0 && (
                 <span className="ml-1 text-xs text-emerald-600">
                   ({stats.provider.totalReviews} recenzii)
                 </span>
@@ -941,7 +942,7 @@ export default function UserSessions() {
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
               }`}
             >
-              Ca Client ({clientSessions.length})
+              {t('userSessions.asClient')} ({clientSessions.length})
               {stats?.client?.totalReviews && stats?.client?.totalReviews>0  && (
                 <span className="ml-1 text-xs text-yellow-600">
                   ({stats.client.totalReviews} recenzii date)
@@ -1017,7 +1018,7 @@ export default function UserSessions() {
             </div>
             <div className="px-4 pb-4">
               <video controls src={modalUrl} className="w-full rounded">
-                Browser-ul tău nu suportă video HTML5.
+                {t('userSessions.noHtml5Video')}
               </video>
             </div>
           </div>

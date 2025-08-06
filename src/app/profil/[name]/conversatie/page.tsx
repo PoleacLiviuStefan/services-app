@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import { useTranslation } from '@/hooks/useTranslation';
 import { Send, ArrowLeft, Circle } from 'lucide-react';
 import { useParams, useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
@@ -45,7 +46,8 @@ export default function ConversatiePage() {
   const router = useRouter();
   const { data: session, status } = useSession();
   
-  // Slug-ul destinatarului din URL
+  const { t } = useTranslation();
+   // Slug-ul destinatarului din URL
   const recipientSlug = params.name as string;
   
   const [recipientInfo, setRecipientInfo] = useState<RecipientUser | null>(null);
@@ -462,7 +464,7 @@ export default function ConversatiePage() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Se încarcă conversația...</p>
+          <p className="text-gray-600">{t('userConversations.loadingConversation')}</p>
         </div>
       </div>
     );
@@ -541,7 +543,7 @@ export default function ConversatiePage() {
                       className={`${recipientOnline ? 'text-green-500 fill-current' : 'text-gray-400'}`} 
                     />
                     <span className="text-xs text-gray-500">
-                      {recipientOnline ? 'Online' : 'Offline'}
+                      {recipientOnline ? t('userConversations.online') : t('userConversations.offline')}
                     </span>
                   </div>
                 </div>
@@ -551,13 +553,13 @@ export default function ConversatiePage() {
             <div className="flex items-center space-x-2">
               <div className={`w-3 h-3 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
               <span className="text-sm text-gray-600">
-                {isConnected ? 'Conectat' : 'Deconectat'}
+                {isConnected ? t('userConversations.connected') : t('userConversations.disconnected')}
               </span>
               {messages.length > 0 && (
                 <>
                   <span className="text-gray-400">•</span>
                   <span className="text-sm text-gray-600">
-                    {messages.length} mesaje
+                   { messages.length} {t('userConversations.messagesCount')}
                   </span>
                 </>
               )}
@@ -583,10 +585,10 @@ export default function ConversatiePage() {
                   {loadingOlderMessages ? (
                     <>
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600"></div>
-                      <span>Se încarcă mesaje mai vechi...</span>
+                      <span>{t('userConversations.loadingOlderMessages')}</span>
                     </>
                   ) : (
-                    <span>Încarcă mesaje mai vechi ({messagesOffset}+ mesaje)</span>
+                    <span>{t('userConversations.loadOlderMessages', { count: messagesOffset })}</span>
                   )}
                 </button>
               </div>
@@ -597,7 +599,7 @@ export default function ConversatiePage() {
               <div className="flex justify-center items-center py-8">
                 <div className="text-center">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-                  <p className="text-gray-600">Se încarcă mesajele...</p>
+                  <p className="text-gray-600">{t('userConversations.loadingMessages')}</p>
                 </div>
               </div>
             ) : Object.keys(messageGroups).length === 0 ? (
@@ -605,8 +607,8 @@ export default function ConversatiePage() {
                 <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
                   <span className="text-2xl">💬</span>
                 </div>
-                <p className="text-lg font-medium mb-2">Conversație nouă</p>
-                <p>Trimite primul mesaj către {recipientInfo?.name}!</p>
+                <p className="text-lg font-medium mb-2">{t('userConversations.newConversation')}</p>
+                <p>{t('userConversations.sendFirstMessage', { name: recipientInfo?.name })}</p>
               </div>
             ) : (
               Object.entries(messageGroups).map(([dateKey, dayMessages]) => (

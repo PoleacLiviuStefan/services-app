@@ -34,7 +34,10 @@
       "message": "mesaj",
       "messages": "mesaje",
       "refresh": "Reîmprospătează",
-      "refreshing": "Se reîmprospătează..."
+      "refreshing": "Se reîmprospătează...",
+      "loadingConversation": "Se încarcă conversația...",
+      "connected":"Conectat",
+      "messagesCount": "mesaje"
     },
     "scheduleMeeting": {
       "selectPackageTitle": "Selectează pachetul pentru programare",
@@ -423,7 +426,11 @@
       "sessionsLeft": "ședințe rămase",
       "outOf": "din"
       ,
-      "scheduledFor": "Programată pentru"
+      "scheduledFor": "Programată pentru",
+      "noRecording": "Fără înregistrare",
+      "sessionCancelled": "Sesiune anulată",
+      "asProvider": "Ca Furnizor",
+      "asClient": "Ca Client"
     }
   },
   "en": {
@@ -461,7 +468,11 @@
       "message": "message",
       "messages": "messages",
       "refresh": "Refresh",
-      "refreshing": "Refreshing..."
+      "refreshing": "Refreshing...",
+      "loadingConversation": "Loading conversation...",
+      "connected": "Connected",
+      "messagesCount": "messages"
+
     },
     "scheduleMeeting": {
       "selectPackageTitle": "Select package for scheduling",
@@ -869,7 +880,11 @@
       "sessionsLeft": "sessions left",
       "outOf": "out of"
       ,
-      "scheduledFor": "Scheduled for"
+      "scheduledFor": "Scheduled for",
+      "noRecording": "No recording",
+      "sessionCancelled": "Session cancelled",
+      "asProvider": "As Provider",
+      "asClient": "As Client"
     }
   }
 }
