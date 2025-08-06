@@ -96,6 +96,15 @@ const nextConfig = {
   // 🆕 Rewrites pentru admin routes
   async rewrites() {
     return [
+          {
+      source: '/articole/:path*',
+      destination: 'https://docker-image-production-56ef.up.railway.app/:path*',
+    },
+    // Proxy și pentru /blog (fără path)
+    {
+      source: '/articole',
+      destination: 'https://docker-image-production-56ef.up.railway.app/',
+    },
       {
         source: '/admin/queue-status',
         destination: '/api/admin/queue',

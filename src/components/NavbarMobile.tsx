@@ -149,11 +149,11 @@ const NavbarMobile = () => {
           </li>
 
           <li onClick={() => setIsOpen(false)}>
-            <Button onClick={handleDespreNoiClick}>{t('navbar.about')}</Button>
+            <Button className='text-xl' onClick={handleDespreNoiClick}>{t('navbar.about')}</Button>
           </li>
-          {/* <li onClick={() => setIsOpen(false)}>
-            <Link href="/">ARTICOLE</Link>
-          </li> */}
+          <li onClick={() => setIsOpen(false)}>
+            <Link href="/">{t('navigation.articles')}</Link>
+          </li>
         </ul>
       </div>
     </nav>

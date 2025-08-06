@@ -116,9 +116,10 @@
     },
     "navigation": {
       "home": "ACASA",
-      "psychologists": "ASTROLOGI",
+      "psychologists": "SERVICII EZOTERICE",
       "about": "DESPRE NOI",
       "profile": "Profil",
+      "articles": "ARTICOLE",
       "logout": "Deconectare",
       "login": "Autentificare",
       "register": "Înregistrare"
@@ -542,9 +543,10 @@
     },
     "navigation": {
       "home": "HOME",
-      "psychologists": "PROVIDERS",
+      "psychologists": "EZOTERIC SERVICES",
       "about": "ABOUT US",
       "profile": "Profile",
+      "articles": "ARTICLES",
       "logout": "Logout",
       "login": "Login",
       "register": "Register"

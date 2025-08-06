@@ -29,7 +29,8 @@ const Navbar = () => {
   const navigationItems = useMemo(() => [
     { key: "navigation.home", originalText: "ACASA" },
     { key: "navigation.psychologists", originalText: "SERVICII EZOTERICE" },
-    { key: "navigation.about", originalText: "DESPRE NOI" }
+    { key: "navigation.about", originalText: "DESPRE NOI" },
+    { key: "navigation.articles", originalText: "ARTICOLE" }
   ], []); // Gol pentru a evita warning-ul, dar language va triggera re-render oricum
 
   // 🔧 Effect pentru scroll după navigare
