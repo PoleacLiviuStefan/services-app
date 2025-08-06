@@ -2,6 +2,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from '@/hooks/useTranslation';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -28,6 +29,7 @@ interface UserConversationsProps {
 
 const UserConversations: React.FC<UserConversationsProps> = ({ className = "" }) => {
   const { data: session } = useSession();
+  const { t } = useTranslation();
   const [conversations, setConversations] = useState<ConversationPreview[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>('');
@@ -81,9 +83,9 @@ const UserConversations: React.FC<UserConversationsProps> = ({ className = "" })
         minute: '2-digit' 
       });
     } else if (diffDays === 1) {
-      return 'Ieri';
+      return t('userConversations.yesterday');
     } else if (diffDays < 7) {
-      return `${diffDays} zile`;
+      return t('userConversations.daysAgo', { count: diffDays });
     } else {
       return date.toLocaleDateString('ro-RO', { 
         day: 'numeric', 
@@ -107,7 +109,7 @@ const UserConversations: React.FC<UserConversationsProps> = ({ className = "" })
       <div className={`${className}`}>
         <div className="flex items-center justify-center py-12">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-          <span className="ml-3 text-gray-600">Se încarcă conversațiile...</span>
+          <span className="ml-3 text-gray-600">{t('userConversations.loading')}</span>
         </div>
       </div>
     );
@@ -118,13 +120,13 @@ const UserConversations: React.FC<UserConversationsProps> = ({ className = "" })
       <div className={`${className}`}>
         <div className="text-center py-12">
           <div className="text-red-500 text-6xl mb-4">⚠️</div>
-          <h3 className="text-lg font-semibold text-gray-800 mb-2">Eroare</h3>
+          <h3 className="text-lg font-semibold text-gray-800 mb-2">{t('userConversations.error')}</h3>
           <p className="text-gray-600 mb-4">{error}</p>
           <button
             onClick={fetchConversations}
             className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
           >
-            Încearcă din nou
+            {t('userConversations.tryAgain')}
           </button>
         </div>
       </div>
@@ -136,12 +138,12 @@ const UserConversations: React.FC<UserConversationsProps> = ({ className = "" })
       <div className={`${className}`}>
         <div className="text-center py-12">
           <MessageCircle className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-          <h3 className="text-lg font-semibold text-gray-800 mb-2">Nu ai conversații</h3>
+          <h3 className="text-lg font-semibold text-gray-800 mb-2">{t('userConversations.noConversations')}</h3>
           <p className="text-gray-600 mb-4">
-            Conversațiile tale vor apărea aici după ce trimiți primul mesaj.
+            {t('userConversations.noConversationsInfo')}
           </p>
           <p className="text-sm text-gray-500">
-            Vizitează profilul unui astrolog și începe o conversație!
+            {t('userConversations.visitProfileToStart')}
           </p>
         </div>
       </div>
@@ -154,7 +156,7 @@ const UserConversations: React.FC<UserConversationsProps> = ({ className = "" })
         <div className="p-4 border-b bg-gray-50">
           <h3 className="text-lg font-semibold text-gray-800 flex items-center">
             <MessageCircle className="w-5 h-5 mr-2" />
-            Conversațiile tale ({conversations.length})
+            {t('userConversations.title')} ({conversations.length})
           </h3>
         </div>
 
@@ -213,20 +215,20 @@ const UserConversations: React.FC<UserConversationsProps> = ({ className = "" })
                         <div className="flex items-center justify-between">
                           <p className="text-sm text-gray-600 truncate">
                             <span className="font-medium">
-                              {isFromCurrentUser ? 'Tu: ' : ''}
+                              {isFromCurrentUser ? t('userConversations.you') + ': ' : ''}
                             </span>
                             {truncateMessage(conversation.lastMessage.content)}
                           </p>
                         </div>
                       ) : (
                         <p className="text-sm text-gray-500 italic">
-                          Nu sunt mesaje încă
+                          {t('userConversations.noMessagesYet')}
                         </p>
                       )}
 
                       <div className="mt-1 flex items-center text-xs text-gray-500">
                         <MessageCircle className="w-3 h-3 mr-1" />
-                        {conversation.messageCount} {conversation.messageCount === 1 ? 'mesaj' : 'mesaje'}
+                        {conversation.messageCount} {conversation.messageCount === 1 ? t('userConversations.message') : t('userConversations.messages')}
                       </div>
                     </div>
                   </div>
@@ -244,7 +246,7 @@ const UserConversations: React.FC<UserConversationsProps> = ({ className = "" })
           disabled={loading}
           className="text-sm text-gray-500 hover:text-gray-700 disabled:opacity-50"
         >
-          {loading ? 'Se actualizează...' : 'Actualizează conversațiile'}
+          {loading ? t('userConversations.refreshing') : t('userConversations.refresh')}
         </button>
       </div>
     </div>

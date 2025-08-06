@@ -6,6 +6,7 @@ import EntityRequestApproval from '@/components/EntityRequestApproval';
 import { FaCaretLeft, FaCaretRight, FaTrash, FaEye, FaUserTimes } from 'react-icons/fa';
 import { ProviderInterface } from '@/interfaces/ProviderInterface';
 import { useCatalogStore } from '@/store/catalog';
+import { useTranslation } from '@/hooks/useTranslation';
 
 interface AdminPsychicsProps {
   physics: (ProviderInterface & { provider: string })[];
@@ -38,6 +39,7 @@ interface DeleteCatalogModal {
 }
 
 const AdminPsychics: React.FC<AdminPsychicsProps> = ({ physics }) => {
+  const { t } = useTranslation();
   const [tab, setTab] = useState<'users' | 'requests' | 'catalog'>('users');
   const [statusTab, setStatusTab] = useState<'PENDING' | 'APPROVED' | 'REJECTED'>('PENDING');
   const [typeTab, setTypeTab] = useState<'SPECIALITY' | 'TOOL' | 'READING'>('SPECIALITY');
@@ -234,19 +236,19 @@ const AdminPsychics: React.FC<AdminPsychicsProps> = ({ physics }) => {
           className={`bg-primaryColor text-white px-4 py-2 rounded hover:bg-secondaryColor transition-colors ${tab === 'users' ? 'font-bold bg-secondaryColor' : ''}`}
           onClick={() => setTab('users')}
         >
-          👥 Utilizatori ({physics.length})
+          👥 {t('adminPsychics.users')} ({physics.length})
         </button>
         <button
           className={`bg-primaryColor text-white px-4 py-2 rounded hover:bg-secondaryColor transition-colors ${tab === 'requests' ? 'font-bold bg-secondaryColor' : ''}`}
           onClick={() => setTab('requests')}
         >
-          📋 Cereri ({requests.length})
+          📋 {t('adminPsychics.requests')} ({requests.length})
         </button>
         <button
           className={`bg-primaryColor text-white px-4 py-2 rounded hover:bg-secondaryColor transition-colors ${tab === 'catalog' ? 'font-bold bg-secondaryColor' : ''}`}
           onClick={() => setTab('catalog')}
         >
-          📚 Catalog ({specialities.length + tools.length + readings.length})
+          📚 {t('adminPsychics.catalog')} ({specialities.length + tools.length + readings.length})
         </button>
       </div>
 
@@ -256,13 +258,13 @@ const AdminPsychics: React.FC<AdminPsychicsProps> = ({ physics }) => {
           <div className="flex justify-center mb-4">
             <input
               type="text"
-              placeholder="Caută utilizator (nume/email)..."
+              placeholder={t('adminPsychics.searchUser')}
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
               className="w-1/2 p-2 border rounded"
             />
           </div>
-          <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 place-items-center">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 place-items-center">
             {currentUsers.map(physic => (
               <div key={physic.id} className="relative">
                 <ProviderCard
@@ -373,7 +375,7 @@ const AdminPsychics: React.FC<AdminPsychicsProps> = ({ physics }) => {
           <div className="flex justify-center mb-4">
             <input
               type="text"
-              placeholder={`Caută în ${catalogTab}...`}
+              placeholder={t('adminPsychics.searchCatalog')}
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
               className="w-1/2 p-2 border rounded"
@@ -431,7 +433,7 @@ const AdminPsychics: React.FC<AdminPsychicsProps> = ({ physics }) => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
             <h3 className="text-lg font-bold mb-4 text-red-600">
-              ⚠️ Șterge Utilizator
+              ⚠️ {t('adminPsychics.deleteUser')}
             </h3>
             
             {deleteUserModal.loading ? (
@@ -442,7 +444,7 @@ const AdminPsychics: React.FC<AdminPsychicsProps> = ({ physics }) => {
             ) : deleteUserModal.userInfo ? (
               <div>
                 <p className="mb-4">
-                  Sunteți sigur că doriți să ștergeți utilizatorul <strong>{deleteUserModal.userInfo.user.name || deleteUserModal.userInfo.user.email}</strong>?
+                  {t('adminPsychics.confirmDeleteUser')} <strong>{deleteUserModal.userInfo.user.name || deleteUserModal.userInfo.user.email}</strong>?
                 </p>
                 
                 <div className="bg-gray-100 p-3 rounded mb-4">
@@ -474,7 +476,7 @@ const AdminPsychics: React.FC<AdminPsychicsProps> = ({ physics }) => {
                 )}
 
                 <p className="text-red-600 text-sm mb-4">
-                  <strong>Această acțiune nu poate fi anulată!</strong> Se vor șterge toate datele asociate utilizatorului.
+                  <strong>{t('adminPsychics.thisActionCannotBeUndone')}</strong> {t('adminPsychics.allAssociatedData')}
                 </p>
               </div>
             ) : (
@@ -487,7 +489,7 @@ const AdminPsychics: React.FC<AdminPsychicsProps> = ({ physics }) => {
                 className="px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400"
                 disabled={deleteUserModal.loading}
               >
-                Anulează
+                {t('adminPsychics.cancel')}
               </button>
               {deleteUserModal.userInfo?.canDelete && (
                 <button
@@ -495,7 +497,7 @@ const AdminPsychics: React.FC<AdminPsychicsProps> = ({ physics }) => {
                   className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 disabled:opacity-50"
                   disabled={deleteUserModal.loading}
                 >
-                  {deleteUserModal.loading ? 'Se șterge...' : 'Șterge Definitiv'}
+                  {deleteUserModal.loading ? t('adminPsychics.deleting') : t('adminPsychics.deleteDefinitely')}
                 </button>
               )}
             </div>
@@ -508,7 +510,7 @@ const AdminPsychics: React.FC<AdminPsychicsProps> = ({ physics }) => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 max-w-lg w-full mx-4">
             <h3 className="text-lg font-bold mb-4 text-red-600">
-              ⚠️ Șterge din Catalog (cu Forța)
+              ⚠️ {t('adminPsychics.forceDelete')}
             </h3>
             
             {deleteCatalogModal.loading ? (
@@ -519,7 +521,7 @@ const AdminPsychics: React.FC<AdminPsychicsProps> = ({ physics }) => {
             ) : deleteCatalogModal.itemInfo ? (
               <div>
                 <p className="mb-4">
-                  Sunteți sigur că doriți să ștergeți <strong>{deleteCatalogModal.itemInfo.item.name}</strong>?
+                  {t('adminPsychics.confirmDeleteCatalog')} <strong>{deleteCatalogModal.itemInfo.item.name}</strong>?
                 </p>
                 
                 <div className="bg-gray-100 p-3 rounded mb-4">
@@ -556,12 +558,12 @@ const AdminPsychics: React.FC<AdminPsychicsProps> = ({ physics }) => {
 
                 <div className="bg-red-100 p-3 rounded mb-4">
                   <p className="text-red-700 text-sm">
-                    <strong>⚠️ Ștergere forțată activată!</strong> Elementul va fi șters împreună cu toate relațiile sale, indiferent de numărul de provideri asociați.
+                    <strong>⚠️ {t('adminPsychics.forceDelete')}!</strong> {t('adminPsychics.thisWillDeleteFromAll')}
                   </p>
                 </div>
 
                 <p className="text-red-600 text-sm mb-4">
-                  <strong>Această acțiune nu poate fi anulată!</strong>
+                  <strong>{t('adminPsychics.irreversibleAction')}</strong>
                 </p>
               </div>
             ) : (
@@ -574,7 +576,7 @@ const AdminPsychics: React.FC<AdminPsychicsProps> = ({ physics }) => {
                 className="px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400"
                 disabled={deleteCatalogModal.loading}
               >
-                Anulează
+                {t('adminPsychics.cancel')}
               </button>
               {deleteCatalogModal.itemInfo && (
                 <button

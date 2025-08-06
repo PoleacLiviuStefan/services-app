@@ -1,0 +1,34 @@
+{
+  "ro": {
+    "search": {
+      "searchByName": "Caută după nume",
+      "resetFilters": "Resetează filtre",
+      "searchPlaceholder": "Caută psihologi...",
+      "noResults": "Nu s-au găsit rezultate",
+      "resultsFound": "rezultate găsite",
+      "sortBy": "Sortează după",
+      "sortByReviews": "Număr recenzii",
+      "sortByPriceDesc": "Preț - descrescător",
+      "sortByPriceAsc": "Preț - crescător",
+      "speciality": "Specialitate",
+      "tools": "Instrumente",
+      "reading": "Citire"
+    }
+  },
+  "en": {
+    "search": {
+      "searchByName": "Search by name",
+      "resetFilters": "Reset filters",
+      "searchPlaceholder": "Search psychologists...",
+      "noResults": "No results found",
+      "resultsFound": "results found",
+      "sortBy": "Sort by",
+      "sortByReviews": "Number of reviews",
+      "sortByPriceDesc": "Price - descending",
+      "sortByPriceAsc": "Price - ascending",
+      "speciality": "Speciality",
+      "tools": "Tools",
+      "reading": "Reading"
+    }
+  }
+}

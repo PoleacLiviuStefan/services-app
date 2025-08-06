@@ -9,6 +9,7 @@ import Modal from "@/components/ui/modal";
 import AddAttributeProvider from "@/components/ui/addAttributeProvider";
 import EditButton from "@/components/ui/editButton";
 import { useCatalogStore } from "@/store/catalog";
+import { useTranslation } from "@/hooks/useTranslation";
 
 interface ProviderInterface {
   id: string;
@@ -67,6 +68,7 @@ type EditModalType =
 
 const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
   console.log("provider: ", provider);
+  const { t } = useTranslation();
   const specialitiesStore = useCatalogStore((s) => s.specialities);
   const readingsStore = useCatalogStore((s) => s.readings);
   const toolsStore = useCatalogStore((s) => s.tools);
@@ -404,7 +406,7 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
     try {
       // Ensure calendlyEventTypeUri selected
       if (!newPackageEventUri) {
-        alert("Trebuie să selectezi tipul de ședință din Calendly.");
+        alert(t('providerDetails.calendlySessionTypeRequired'));
         return;
       }
       // Build packages array
@@ -509,11 +511,11 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
       {/* Stripe Connect */}
       <div className="h-full flex flex-col justify-between bg-gray-50 p-4 rounded">
         <div>
-          <strong>Cont Stripe:</strong>{" "}
+          <strong>{t('providerDetails.stripeAccount')}</strong>{" "}
           {localProvider.stripeAccountId ? (
-            <span className="text-green-700">Conectat</span>
+            <span className="text-green-700">{t('providerDetails.connected')}</span>
           ) : (
-            <span className="text-red-600">Nu ești conectat</span>
+            <span className="text-red-600">{t('providerDetails.notConnected')}</span>
           )}
         </div>
         {!localProvider.stripeAccountId ? (
@@ -523,7 +525,7 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
             }}
             className="mt-2 px-4 py-2 bg-primaryColor text-white rounded hover:bg-primaryColor-dark"
           >
-            Conectează-te cu Stripe
+            {t('providerDetails.connectWithStripe')}
           </Button>
         ) : (
           <Button
@@ -531,7 +533,7 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
             disabled={loadingStripe} // 🆕
             className="mt-2 px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 disabled:opacity-50"
           >
-            {loadingStripe ? "Se deconectează..." : "Deconectează Stripe"} {/* 🆕 */}
+            {loadingStripe ? t('providerDetails.disconnecting') : t('providerDetails.disconnectStripe')} {/* 🆕 */}
           </Button>
         )}
       </div>
@@ -539,11 +541,11 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
       {/* Calendly Connect */}
       <div className="h-full flex flex-col justify-between bg-gray-50 p-4 rounded">
         <div>
-          <strong>Conectare Calendly:</strong>{" "}
+          <strong>{t('providerDetails.calendlyConnection')}</strong>{" "}
           {localProvider.isCalendlyConnected ? (
-            <span className="text-green-700">Conectat</span>
+            <span className="text-green-700">{t('providerDetails.connected')}</span>
           ) : (
-            <span className="text-red-600">Nu ești conectat</span>
+            <span className="text-red-600">{t('providerDetails.notConnected')}</span>
           )}
         </div>
         {!localProvider.isCalendlyConnected ? (
@@ -552,7 +554,7 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
             disabled={loadingCalendly} // 🆕
             className="mt-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
           >
-            {loadingCalendly ? "Se conectează..." : "Conectează-te cu Calendly"} {/* 🆕 */}
+            {loadingCalendly ? t('providerDetails.connecting') : t('providerDetails.connectWithCalendly')} {/* 🆕 */}
           </Button>
         ) : (
           <Button
@@ -560,7 +562,7 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
             disabled={loadingCalendly} // 🆕
             className="mt-2 px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 disabled:opacity-50"
           >
-            {loadingCalendly ? "Se deconectează..." : "Deconectare Calendly"} {/* 🆕 */}
+            {loadingCalendly ? t('providerDetails.disconnecting') : t('providerDetails.disconnectCalendly')} {/* 🆕 */}
           </Button>
         )}
       </div>
@@ -573,7 +575,7 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
       {showEditModal === "VideoUrl" && (
         <Modal
           closeModal={() => setShowEditModal("")}
-          title="Editează Video URL"
+          title={t('providerDetails.editVideoUrl')}
         >
           <input
             type="text"
@@ -587,7 +589,7 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
             disabled={loading} // 🆕
             className="mt-4 py-3 w-full bg-primaryColor text-white hover:bg-secondaryColor disabled:opacity-50"
           >
-            {loading ? "Se salvează..." : "Salvează"} {/* 🆕 */}
+            {loading ? t('providerDetails.saving') : t('providerDetails.save')} {/* 🆕 */}
           </Button>
         </Modal>
       )}
@@ -595,7 +597,7 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
       {showEditModal === "ScheduleLink" && (
         <Modal
           closeModal={() => setShowEditModal("")}
-          title="Editează Link Programări"
+          title={t('providerDetails.editScheduleLink')}
         >
           <input
             type="text"
@@ -609,7 +611,7 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
             disabled={loading} // 🆕
             className="mt-4 py-3 w-full bg-primaryColor text-white hover:bg-secondaryColor disabled:opacity-50"
           >
-            {loading ? "Se salvează..." : "Salvează"} {/* 🆕 */}
+            {loading ? t('providerDetails.saving') : t('providerDetails.save')} {/* 🆕 */}
           </Button>
         </Modal>
       )}
@@ -617,7 +619,7 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
       {showEditModal === "MainSpeciality" && (
         <Modal
           closeModal={() => setShowEditModal("")}
-          title="Editează Specialitatea Principală"
+          title={t('providerDetails.editMainSpecialty')}
         >
           <div className="space-y-2 max-h-[60vh] overflow-auto">
             {specialitiesStore.map((spec) => (
@@ -990,7 +992,7 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
 
       {/* =================== Detalii Furnizor =================== */}
       <div className="max-w-3xl mx-auto bg-white shadow rounded p-6">
-        <h3 className="text-lg font-semibold mb-4">Detalii Furnizor</h3>
+        <h3 className="text-lg font-semibold mb-4">{t('providerDetails.title')}</h3>
 
         {/* Stripe & Calendly Integration */}
         {renderIntegrationSections()}
@@ -999,7 +1001,7 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
           {/* Descriere */}
           <div className="h-full flex flex-col justify-between bg-gray-50 p-4 rounded">
             <div>
-              <strong>Descriere:</strong> {localProvider.description || "—"}
+              <strong>{t('providerDetails.description')}</strong> {localProvider.description || "—"}
             </div>
             <EditButton showEditModal={() => setShowEditModal("Description")} />
           </div>
@@ -1007,15 +1009,15 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
           {/* Stare */}
           <div className="h-full flex flex-col justify-between bg-gray-50 p-4 rounded">
             <div>
-              <strong>Stare:</strong>{" "}
-              {localProvider.online ? "Online" : "Offline"}
+              <strong>{t('providerDetails.status')}</strong>{" "}
+              {localProvider.online ? t('providerDetails.online') : t('providerDetails.offline')}
             </div>
           </div>
 
           {/* Video URL */}
           <div className="h-full flex flex-col justify-between bg-gray-50 p-4 rounded">
             <div>
-              <strong>Video URL:</strong> {localProvider.videoUrl || "—"}
+              <strong>{t('providerDetails.videoUrl')}</strong> {localProvider.videoUrl || "—"}
             </div>
             <EditButton showEditModal={() => setShowEditModal("VideoUrl")} />
           </div>
@@ -1023,7 +1025,7 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
           {/* Reading */}
           <div className="h-full flex flex-col justify-between bg-gray-50 p-4 rounded">
             <div>
-              <strong>Citire:</strong> {localProvider.reading?.name || "—"}
+              <strong>{t('providerDetails.reading')}</strong> {localProvider.reading?.name || "—"}
             </div>
             <EditButton showEditModal={() => setShowEditModal("Reading")} />
           </div>
@@ -1031,7 +1033,7 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
           {/* Specialitate Principală */}
           <div className="h-full flex flex-col justify-between bg-gray-50 p-4 rounded">
             <div>
-              <strong>Specialitate Principală:</strong>{" "}
+              <strong>{t('providerDetails.mainSpeciality')}</strong>{" "}
               {localProvider.mainSpeciality?.name || "—"}
             </div>
             <EditButton
@@ -1042,7 +1044,7 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
           {/* Unealtă Principală */}
           <div className="h-full flex flex-col justify-between bg-gray-50 p-4 rounded">
             <div>
-              <strong>Unealtă Principală:</strong>{" "}
+              <strong>{t('providerDetails.mainTool')}</strong>{" "}
               {localProvider.mainTool?.name || "—"}
             </div>
             <EditButton showEditModal={() => setShowEditModal("MainTool")} />
@@ -1051,7 +1053,7 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
           {/* Specializări */}
           <div className="h-full flex flex-col justify-between bg-gray-50 p-4 rounded">
             <div>
-              <strong>Specializări:</strong>{" "}
+              <strong>{t('providerDetails.specialities')}</strong>{" "}
               {localProvider.specialities.map((s) => s.name).join(", ") || "—"}
             </div>
             <EditButton
@@ -1062,7 +1064,7 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
           {/* Unelte */}
           <div className="h-full flex flex-col justify-between bg-gray-50 p-4 rounded">
             <div>
-              <strong>Instrumente:</strong>{" "}
+              <strong>{t('providerDetails.tools')}</strong>{" "}
               {localProvider.tools.map((t) => t.name).join(", ") || "—"}
             </div>
             <EditButton showEditModal={() => setShowEditModal("Tools")} />
@@ -1071,11 +1073,11 @@ const ProviderDetails: FC<ProviderDetailsProps> = ({ provider }) => {
           {/* Pachete (două coloane) */}
           <div className="col-span-1 sm:col-span-2 h-full flex flex-col justify-between bg-gray-50 p-4 rounded">
             <div>
-              <strong>Tipuri de Sedinte:</strong>
+              <strong>{t('providerDetails.sessionTypes')}</strong>
               <ul className="list-disc ml-6 mt-2">
                 {localProvider.providerPackages.map((pkg) => (
                   <li key={pkg.id}>
-                    {pkg.service} – {pkg.totalSessions} sesiuni @ {pkg.price}{" "}
+                    {pkg.service} – {pkg.totalSessions} {t('providerDetails.sessions')} @ {pkg.price}{" "}
                     RON
                   </li>
                 )) || <span>—</span>}

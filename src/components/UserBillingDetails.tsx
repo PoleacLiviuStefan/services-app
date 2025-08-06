@@ -3,6 +3,7 @@
 
 import React, { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
+import { useTranslation } from '@/hooks/useTranslation';
 
 interface BillingDetails {
   id: string;
@@ -17,18 +18,20 @@ interface BillingDetails {
 
 type EntityType = 'persFizica' | 'persJuridica';
 
+
 const fieldLabels: Record<keyof BillingDetails, string> = {
-  companyName: 'Firmă',
-  cif: 'CNP/CIF',
-  address: 'Adresă',
-  phone: 'Telefon',
-  bank: 'Numele Băncii',
-  iban: 'IBAN',
+  companyName: 'userBillingDetails.companyName',
+  cif: 'userBillingDetails.cif',
+  address: 'userBillingDetails.address',
+  phone: 'userBillingDetails.phone',
+  bank: 'userBillingDetails.bank',
+  iban: 'userBillingDetails.iban',
   id: '',
   userId: ''
 };
 
 export default function UserBillingDetails() {
+  const { t } = useTranslation();
   const { data: session } = useSession();
   const [details, setDetails] = useState<BillingDetails | null>(null);
   const [loading, setLoading] = useState(true);
@@ -61,7 +64,7 @@ export default function UserBillingDetails() {
           setEntityType(bd.bank?.trim() ? 'persJuridica' : 'persFizica');
         }
       })
-      .catch(() => setError("Nu am putut încărca detaliile de facturare"))
+      .catch(() => setError(t('userBillingDetails.loadError')))
       .finally(() => setLoading(false));
   }, [session]);
 
@@ -120,15 +123,15 @@ export default function UserBillingDetails() {
         setEntityType(data.billingDetails.bank?.trim() ? 'persJuridica' : 'persFizica');
         setEditMode(false);
       })
-      .catch(() => setError("Nu am putut salva detaliile"));
+      .catch(() => setError(t('userBillingDetails.saveError')));
   };
 
-  if (loading) return <p>Se încarcă...</p>;
+  if (loading) return <p>{t('userBillingDetails.loading')}</p>;
   if (error)   return <p className="text-red-500">{error}</p>;
 
   return (
     <div className="bg-white shadow rounded p-6 lg:max-w-4xl">
-      <h3 className="text-lg font-semibold mb-4">Detalii facturare</h3>
+      <h3 className="text-lg font-semibold mb-4">{t('userBillingDetails.title')}</h3>
 
       <div className="mb-4">
         <label className="inline-flex items-center mr-4">
@@ -138,7 +141,7 @@ export default function UserBillingDetails() {
             onChange={() => handleTypeChange('persFizica')}
             className="form-radio"
           />
-          <span className="ml-2">Persoană fizică</span>
+          <span className="ml-2">{t('userBillingDetails.persFizica')}</span>
         </label>
         <label className="inline-flex items-center">
           <input
@@ -147,7 +150,7 @@ export default function UserBillingDetails() {
             onChange={() => handleTypeChange('persJuridica')}
             className="form-radio"
           />
-          <span className="ml-2">Persoană juridică</span>
+          <span className="ml-2">{t('userBillingDetails.persJuridica')}</span>
         </label>
       </div>
 
@@ -157,8 +160,8 @@ export default function UserBillingDetails() {
             <div key={field}>
               <label className="block text-sm font-medium">
                 {field === 'companyName'
-                  ? (entityType === 'persFizica' ? 'Nume complet' : 'Firmă')
-                  : fieldLabels[field] || field
+                  ? (entityType === 'persFizica' ? t('userBillingDetails.fullName') : t('userBillingDetails.companyName'))
+                  : t(fieldLabels[field]) || field
                 }
               </label>
               <input
@@ -167,9 +170,9 @@ export default function UserBillingDetails() {
                 onChange={e => handleChange(field, e.target.value)}
                 className="w-full border p-2 rounded"
               />
-              {errors[field] && (
-                <p className="text-red-500 text-sm mt-1">{errors[field]}</p>
-              )}
+        {errors[field] && (
+          <p className="text-red-500 text-sm mt-1">{errors[field]}</p>
+        )}
             </div>
           ))}
           <div className="flex space-x-2 mt-4">
@@ -178,13 +181,13 @@ export default function UserBillingDetails() {
               disabled={!isFormValid}
               className="px-4 py-2 bg-primaryColor text-white rounded disabled:opacity-50"
             >
-              Salvează
+              {t('userBillingDetails.save')}
             </button>
             <button
               onClick={() => { setEditMode(false); setErrors({}); }}
               className="px-4 py-2 bg-gray-200 rounded"
             >
-              Anulează
+              {t('userBillingDetails.cancel')}
             </button>
           </div>
         </div>
@@ -193,8 +196,8 @@ export default function UserBillingDetails() {
           {requiredFields.map(field => (
             <p key={field}>
               <strong>{field === 'companyName'
-                ? (entityType === 'persFizica' ? 'Nume complet:' : 'Firmă:')
-                : (fieldLabels[field] || field) + ':'}
+                ? (entityType === 'persFizica' ? t('userBillingDetails.fullName') + ':' : t('userBillingDetails.companyName') + ':')
+                : (t(fieldLabels[field]) || field) + ':'}
               </strong>{' '}
               {(details as any)?.[field] ?? '-'}
             </p>
@@ -203,7 +206,7 @@ export default function UserBillingDetails() {
             onClick={() => setEditMode(true)}
             className="mt-2 px-4 py-2 bg-primaryColor text-white rounded"
           >
-            {details ? 'Editează' : 'Adaugă detalii'}
+            {details ? t('userBillingDetails.edit') : t('userBillingDetails.addDetails')}
           </button>
         </div>
       )}

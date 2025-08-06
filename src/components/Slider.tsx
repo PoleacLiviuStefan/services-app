@@ -3,12 +3,14 @@ import React, { useState, useEffect } from 'react';
 import ProviderCard from './providerCard';
 import Button from './atoms/button';
 import SectionTitle from './ui/sectionTitle';
+import { useTranslation } from '@/hooks/useTranslation';
 import { FaCaretLeft, FaCaretRight } from 'react-icons/fa';
 import { ProviderInterface } from '@/interfaces/ProviderInterface';
 import LoadingSkeleton from './ui/loadingSkeleton';
 import Link from "next/link";
 
 const Slider = () => {
+  const { t } = useTranslation();
   const [providers, setProviders] = useState<ProviderInterface[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -101,7 +103,7 @@ const Slider = () => {
 
   return (
     <div className="flex flex-col items-center w-full space-y-8 h-full text-black mt-12">
-      <SectionTitle>Furnizori</SectionTitle>
+      <SectionTitle>{t('slider.providersTitle')}</SectionTitle>
 
       {/* Containerul slider-ului */}
       <div className="relative w-full overflow-hidden">
@@ -184,7 +186,7 @@ const Slider = () => {
 
       <Link href="/astrologi" className="flex justify-center w-full">
         <Button className="bg-gradient-to-t border-2 border-buttonPrimaryColor/20 shadow-lg shadow-buttonPrimaryColor/40 from-buttonPrimaryColor to-buttonSecondaryColor px-4 lg:px-8 py-2 lg:py-4 text-md text-white font-semibold">
-          VEZI TOȚI FURNIZORII
+          {t('slider.seeAllProviders')}
         </Button>
       </Link>
     </div>

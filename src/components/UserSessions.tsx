@@ -3,6 +3,7 @@
 "use client";
 
 import React, { useEffect, useState, useCallback } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import {
   parseISO,
@@ -11,6 +12,7 @@ import {
   differenceInHours,
   differenceInMinutes,
 } from "date-fns";
+import { useTranslation } from "@/hooks/useTranslation";
 
 interface SessionItem {
   id: string;
@@ -143,6 +145,7 @@ interface ReviewModal {
 }
 
 export default function UserSessions() {
+  const { t, lang } = useTranslation();
   const [providerSessions, setProviderSessions] = useState<SessionItem[]>([]);
   const [clientSessions, setClientSessions] = useState<SessionItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -342,16 +345,15 @@ export default function UserSessions() {
     }
   };
 
-  if (loading) return <p className="text-center text-gray-500">Se încarcă ședințele…</p>;
-  if (error) return <p className="text-red-500">Eroare: {error}</p>;
-  
+  if (loading) return <p className="text-center text-gray-500">{t('userSessions.loading')}</p>;
+  if (error) return <p className="text-red-500">{t('userSessions.error')}: {error}</p>;
   const hasAnySessions = providerSessions.length > 0 || clientSessions.length > 0;
-  if (!hasAnySessions) return <p>Nu există ședințe programate.</p>;
+  if (!hasAnySessions) return <p>{t('userSessions.noSessions')}</p>;
 
   // Funcție pentru calcularea timpului rămas
   const renderTimeRemaining = (start: Date) => {
     const deltaMs = start.getTime() - currentTime.getTime();
-    if (deltaMs <= 0) return "este în curs sau a trecut";
+    if (deltaMs <= 0) return t('userSessions.inProgressOrPast');
 
     const days = differenceInDays(start, currentTime);
     const afterDays = new Date(currentTime.getTime() + days * 24 * 60 * 60 * 1000);
@@ -360,12 +362,12 @@ export default function UserSessions() {
     const minutes = differenceInMinutes(start, afterHours);
 
     const parts: string[] = [];
-    if (days) parts.push(`${days} ${days === 1 ? "zi" : "zile"}`);
-    if (hours) parts.push(`${hours} ${hours === 1 ? "oră" : "ore"}`);
+    if (days) parts.push(`${days} ${days === 1 ? t('userSessions.day') : t('userSessions.days')}`);
+    if (hours) parts.push(`${hours} ${hours === 1 ? t('userSessions.hour') : t('userSessions.hours')}`);
     if (minutes || (!days && !hours))
-      parts.push(`${minutes} ${minutes === 1 ? "minut" : "minute"}`);
+      parts.push(`${minutes} ${minutes === 1 ? t('userSessions.minute') : t('userSessions.minutes')}`);
 
-    return `în ${parts.join(", ")}`;
+    return t('userSessions.inX', { time: parts.join(", ") });
   };
 
   const getStatusColor = (status: string) => {
@@ -381,11 +383,11 @@ export default function UserSessions() {
 
   const getStatusText = (status: string) => {
     switch (status) {
-      case 'SCHEDULED': return 'Programată';
-      case 'IN_PROGRESS': return 'În desfășurare';
-      case 'COMPLETED': return 'Finalizată';
-      case 'CANCELLED': return 'Anulată';
-      case 'NO_SHOW': return 'Absent';
+      case 'SCHEDULED': return t('userSessions.scheduled');
+      case 'IN_PROGRESS': return t('userSessions.inProgress');
+      case 'COMPLETED': return t('userSessions.completed');
+      case 'CANCELLED': return t('userSessions.cancelled');
+      case 'NO_SHOW': return t('userSessions.noShow');
       default: return status;
     }
   };
@@ -591,7 +593,7 @@ export default function UserSessions() {
     if (sessions.length === 0) {
       return (
         <div className="text-center py-8 text-gray-500">
-          <p>Nu există sesiuni ca {role === 'provider' ? 'furnizor' : 'client'}.</p>
+          <p>{t('userSessions.noSessionsAs', { role: role === 'provider' ? 'furnizor' : 'client' })}</p>
         </div>
       );
     }
@@ -680,28 +682,30 @@ export default function UserSessions() {
                   <div className="space-y-1 text-sm text-gray-600">
                     <div className="flex items-center gap-2">
                       {sess.counterpartImage && (
-                        <img 
+                        <Image 
                           src={sess.counterpartImage} 
                           alt={sess.counterpart}
+                          width={24}
+                          height={24}
                           className="w-6 h-6 rounded-full"
                         />
                       )}
                       <p>
                         <span className="font-medium">
-                          {role === 'provider' ? 'Client' : 'Furnizor'}:
+                          {role === 'provider' ? t('userSessions.client') : t('userSessions.provider')}:
                         </span>{" "}
                         {sess.counterpart}
                       </p>
                     </div>
                     
                     <p>
-                      <span className="font-medium">Programată pentru:</span>{" "}
+                      <span className="font-medium">{t('userSessions.scheduledFor')}:</span>{" "}
                       {humanDate}
                     </p>
                     
                     {/* {remaining && sess.status === 'SCHEDULED' && (
                       <p className="text-blue-600">
-                        <span className="font-medium">Timp rămas:</span> {remaining}
+                        <span className="font-medium">{t('userSessions.timeLeft')}:</span> {remaining}
                         <span className="ml-2 text-xs text-gray-400" title="Actualizare automată">
                           🔄
                         </span>
@@ -710,7 +714,7 @@ export default function UserSessions() {
 
                     {sess.rating && (
                       <p>
-                        <span className="font-medium">Rating:</span>{" "}
+                        <span className="font-medium">{t('userSessions.rating')}:</span>{" "}
                         {renderStars(sess.rating)} ({sess.rating}/5)
                       </p>
                     )}
@@ -727,7 +731,7 @@ export default function UserSessions() {
                         </div>
                         {sess.clientReview.comment && (
                           <p className="text-sm text-gray-700 mt-2 italic">
-                            "{sess.clientReview.comment}"
+                            &quot;{sess.clientReview.comment}&quot;
                           </p>
                         )}
                         <p className="text-xs text-gray-500 mt-2">
@@ -742,7 +746,7 @@ export default function UserSessions() {
                           <span className="font-medium">Recenzia ta:</span> {renderStars(sess.myReview.rating)} ({sess.myReview.rating}/5)
                         </p>
                         {sess.myReview.comment && (
-                          <p className="text-xs text-gray-600 mt-1">"{sess.myReview.comment}"</p>
+                          <p className="text-xs text-gray-600 mt-1">&quot;{sess.myReview.comment}&quot;</p>
                         )}
                         <p className="text-xs text-gray-400 mt-1">
                           Adăugată pe {new Date(sess.myReview.date).toLocaleDateString('ro-RO')}
@@ -752,8 +756,8 @@ export default function UserSessions() {
 
                     {sess.packageInfo && (
                       <p className="text-xs bg-gray-50 p-2 rounded">
-                        <span className="font-medium">Pachet:</span> {sess.packageInfo.service} 
-                        ({sess.packageInfo.remainingSessions} sesiuni rămase din {sess.packageInfo.totalSessions})
+                        <span className="font-medium">{t('userSessions.package')}:</span> {sess.packageInfo.service} 
+                        ({sess.packageInfo.remainingSessions} {t('userSessions.sessionsLeft')} {t('userSessions.outOf')} {sess.packageInfo.totalSessions})
                       </p>
                     )}
 
@@ -866,44 +870,41 @@ export default function UserSessions() {
       {/* Header simplu */}
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-6 gap-4">
         <div>
-          <h2 className="text-xl lg:text-2xl font-bold">Sesiunile tale</h2>
+          <h2 className="text-xl lg:text-2xl font-bold">{t('userSessions.title')}</h2>
           <div className="text-sm text-gray-600 mt-1">
-            Total: {providerSessions.length + clientSessions.length} sesiuni
+            {t('userSessions.total', { count: providerSessions.length + clientSessions.length })}
             {stats?.client?.totalReviews && stats?.client?.totalReviews>0  && (
               <span className="ml-2 text-yellow-600">
-                • {stats.client.totalReviews} recenzii date
+                • {t('userSessions.givenReviews', { count: stats.client.totalReviews })}
               </span>
             )}
-            {/* 🆕 Statistici pentru furnizor */}
             {stats?.provider?.totalReviews && (
               <span className="ml-2 text-emerald-600">
-                • {stats.provider.totalReviews} recenzii primite
+                • {t('userSessions.receivedReviews', { count: stats.provider.totalReviews })}
                 {stats.provider.averageRating && (
                   <span className="ml-1">
-                    (medie: {stats.provider.averageRating.toFixed(1)}/5)
+                    ({t('userSessions.average', { avg: stats.provider.averageRating.toFixed(1) })})
                   </span>
                 )}
               </span>
             )}
           </div>
         </div>
-        
-        {/* Doar sincronizare înregistrări pentru provider */}
         {isProvider && (
           <button
             onClick={handleSyncRecordings}
             disabled={syncingRecordings}
             className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50 flex items-center gap-2 transition-colors text-sm"
-            title="Sincronizează înregistrările"
+            title={t('userSessions.syncRecordings')}
           >
             {syncingRecordings ? (
               <>
                 <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                Sincronizare...
+                {t('userSessions.syncing')}
               </>
             ) : (
               <>
-                🔄 Sincronizare înregistrări
+                🔄 {t('userSessions.syncRecordings')}
               </>
             )}
           </button>
@@ -956,30 +957,30 @@ export default function UserSessions() {
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-6">
           <div className="bg-blue-50 p-3 rounded-lg text-center">
             <div className="text-2xl font-bold text-blue-600">{stats[activeTab].scheduled}</div>
-            <div className="text-sm text-blue-800">Programate</div>
+            <div className="text-sm text-blue-800">{t('userSessions.scheduled')}</div>
           </div>
           <div className="bg-green-50 p-3 rounded-lg text-center">
             <div className="text-2xl font-bold text-green-600">{stats[activeTab].inProgress}</div>
-            <div className="text-sm text-green-800">În curs</div>
+            <div className="text-sm text-green-800">{t('userSessions.inProgress')}</div>
           </div>
           <div className="bg-gray-50 p-3 rounded-lg text-center">
             <div className="text-2xl font-bold text-gray-600">{stats[activeTab].completed}</div>
-            <div className="text-sm text-gray-800">Finalizate</div>
+            <div className="text-sm text-gray-800">{t('userSessions.completed')}</div>
           </div>
           <div className="bg-red-50 p-3 rounded-lg text-center">
             <div className="text-2xl font-bold text-red-600">{stats[activeTab].cancelled}</div>
-            <div className="text-sm text-red-800">Anulate</div>
+            <div className="text-sm text-red-800">{t('userSessions.cancelled')}</div>
           </div>
           <div className="bg-purple-50 p-3 rounded-lg text-center">
             <div className="text-2xl font-bold text-purple-600">{stats[activeTab].recordingReady || 0}</div>
-            <div className="text-sm text-purple-800">Înregistrări</div>
+            <div className="text-sm text-purple-800">{t('userSessions.recordings')}</div>
           </div>
           
           {/* Statistici recenzii pentru client */}
           {activeTab === 'client' && stats.client.totalReviews !== undefined && (
             <div className="bg-yellow-50 p-3 rounded-lg text-center">
               <div className="text-2xl font-bold text-yellow-600">{stats.client.totalReviews || 0}</div>
-              <div className="text-sm text-yellow-800">Recenzii date</div>
+              <div className="text-sm text-yellow-800">{t('userSessions.givenReviews')}</div>
             </div>
           )}
 
@@ -987,7 +988,7 @@ export default function UserSessions() {
           {activeTab === 'provider' && stats.provider.totalReviews !== undefined && (
             <div className="bg-emerald-50 p-3 rounded-lg text-center">
               <div className="text-2xl font-bold text-emerald-600">{stats.provider.totalReviews || 0}</div>
-              <div className="text-sm text-emerald-800">Recenzii primite</div>
+              <div className="text-sm text-emerald-800">{t('userSessions.receivedReviews')}</div>
             </div>
           )}
         </div>
@@ -1029,14 +1030,14 @@ export default function UserSessions() {
           <div className="bg-white rounded-lg shadow-lg max-w-md w-full mx-4">
             <div className="p-6">
               <h3 className="text-lg font-bold mb-4">
-                {reviewModal.isEditing ? 'Editează recenzia' : 'Adaugă recenzie'} pentru {reviewModal.providerName}
+                {reviewModal.isEditing ? t('userSessions.editReview') : t('userSessions.addReview')} {t('userSessions.for')} {reviewModal.providerName}
               </h3>
               
               <div className="space-y-4">
                 {/* Selector rating cu stele vizibile */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Nota (1-5 stele)
+                    {t('userSessions.rating')} (1-5 {t('userSessions.stars')})
                   </label>
                   <div className="flex items-center space-x-2">
                     {renderStars(
@@ -1054,18 +1055,18 @@ export default function UserSessions() {
                 {/* Comentariu */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Comentariu (opțional)
+                    {t('userSessions.comment')} ({t('userSessions.optional')})
                   </label>
                   <textarea
                     value={reviewForm.comment}
                     onChange={(e) => setReviewForm(prev => ({ ...prev, comment: e.target.value }))}
-                    placeholder="Descrie experiența ta cu această sesiune..."
+                    placeholder={t('userSessions.commentPlaceholder')}
                     className="w-full p-3 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-primaryColor focus:border-transparent"
                     rows={4}
                     maxLength={500}
                   />
                   <div className="text-xs text-gray-500 mt-1">
-                    {reviewForm.comment.length}/500 caractere
+                    {reviewForm.comment.length}/500 {t('userSessions.characters')}
                   </div>
                 </div>
               </div>
@@ -1077,7 +1078,7 @@ export default function UserSessions() {
                   disabled={reviewModal.loading}
                   className="px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400 transition-colors disabled:opacity-50"
                 >
-                  Anulează
+                  {t('userSessions.cancel')}
                 </button>
                 <button
                   onClick={handleSubmitReview}
@@ -1087,10 +1088,10 @@ export default function UserSessions() {
                   {reviewModal.loading ? (
                     <>
                       <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                      Se salvează...
+                      {t('userSessions.saving')}
                     </>
                   ) : (
-                    reviewModal.isEditing ? 'Actualizează recenzia' : 'Salvează recenzia'
+                    reviewModal.isEditing ? t('userSessions.updateReview') : t('userSessions.saveReview')
                   )}
                 </button>
               </div>

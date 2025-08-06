@@ -4,9 +4,13 @@ import Link from "next/link";
 import Image from "next/image";
 import mysticLogo from "../../public/mysticnoblack.svg";
 import { useRouter } from "next/navigation";
+import { useTranslation } from "@/hooks/useTranslation";
 
 const Footer = () => {
     const router = useRouter();
+    const { t, language } = useTranslation();
+    
+    console.log("🦶 Footer render with language:", language);
 
   const handleDespreNoiClick = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -36,9 +40,9 @@ const Footer = () => {
     }
   };
    const navItems = [
-    { name: "ACASA", href: "/" },
-    { name: "ASTROLOGI", href: "/astrologi" },
-    { name: "DESPRE NOI", href: "#despre-noi", onClick: handleDespreNoiClick }
+    { name: t('footer.home'), href: "/" },
+    { name: t('footer.astrologers'), href: "/astrologi" },
+    { name: t('footer.aboutUs'), href: "#despre-noi", onClick: handleDespreNoiClick }
   ];
   return (
     <div className="w-full h-full py-4  lg:h-[200px] bg-gradient-to-t from-secondaryColor to-primaryColor/80 via-primaryColor px-20">
@@ -58,7 +62,7 @@ const Footer = () => {
 
         {/* Coloana 2: Elemente din Navbar */}
         <div className="flex flex-col items-center lg:items-start space-3 lg:space-y-5">
-          <h4 className="text-xl font-semibold">Navigare</h4>
+          <h4 className="text-xl font-semibold">{t('footer.navigation')}</h4>
           <ul className="flex flex-col items-center lg:items-start space-y-3  text-white">
                  {navItems.map((item, index) => (
         <li key={index} className="cursor-pointer">
@@ -78,24 +82,24 @@ const Footer = () => {
 
                 {/* Coloana 3: Elemente din Navbar */}
         <div className="flex flex-col items-center lg:items-start space-y-3 lg:space-y-5">
-          <h4 className="text-xl font-semibold">Juridic</h4>
+          <h4 className="text-xl font-semibold">{t('footer.legal')}</h4>
           <ul className="flex flex-col items-center lg:items-start space-y-3  text-white">
           
               <li className="cursor-pointer">
                 <Link href="/juridic/termeni-si-conditii">
-                  <span className="hover:underline">Termeni si Conditii</span>
+                  <span className="hover:underline">{t('footer.termsOfUse')}</span>
                 </Link>
               </li>
                         
               <li className="cursor-pointer">
                 <Link href="/juridic/politica-de-utilizare">
-                  <span className="hover:underline">Politica de Utilizare</span>
+                  <span className="hover:underline">{t('footer.usagePolicy')}</span>
                 </Link>
               </li>
                         
               <li className="cursor-pointer">
                 <Link href="/juridic/politica-de-plata">
-                  <span className="hover:underline">Politica de Plata</span>
+                  <span className="hover:underline">{t('footer.paymentPolicy')}</span>
                 </Link>
               </li>
           

@@ -3,7 +3,7 @@ import React from "react";
 import FaqQuestion from "./FaqQuestion";
 import { useTranslation } from "@/hooks/useTranslation";
 
-const Faq = () => {
+const FaqClient = () => {
   const { t } = useTranslation();
 
   return (
@@ -96,4 +96,4 @@ const Faq = () => {
   );
 };
 
-export default Faq;
+export default FaqClient;

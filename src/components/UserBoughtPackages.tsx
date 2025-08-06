@@ -4,6 +4,7 @@
 import React, { useEffect, useState, useMemo } from "react";
 import PackageListItem from "./PackageListItem";
 import { BoughtPackage, SoldPackage } from "@/interfaces/PurchaseInterface";
+import { useTranslation } from "@/hooks/useTranslation";
 
 interface UserBoughtPackagesProps {
   isProvider: boolean;
@@ -125,6 +126,7 @@ const PackagesSkeleton = ({ isProvider }: { isProvider: boolean }) => {
 };
 
 export default function UserBoughtPackages({ isProvider }: UserBoughtPackagesProps) {
+  const { t } = useTranslation();
   // 1. State hooks
   const [bought, setBought] = useState<BoughtPackage[]>([]);
   const [sold, setSold] = useState<SoldPackage[]>([]);
@@ -158,7 +160,7 @@ export default function UserBoughtPackages({ isProvider }: UserBoughtPackagesPro
       })
       .catch(err => {
         console.error("Error fetching packages:", err);
-        setError(err.message || "A apărut o eroare");
+        setError(err.message || t('userBoughtPackages.errorOccurred'));
       })
       .finally(() => setLoading(false));
   }, []);
@@ -237,23 +239,21 @@ export default function UserBoughtPackages({ isProvider }: UserBoughtPackagesPro
     return <PackagesSkeleton isProvider={isProvider} />;
   }
   
-  if (error) return <p className="text-red-500">Eroare: {error}</p>;
+  if (error) return <p className="text-red-500">{t('userBoughtPackages.errorOccurred')}: {error}</p>;
 
   // 🆕 Verifică dacă utilizatorul nu are pachete în modul curent
   const hasNoItems = !items.length;
   if (hasNoItems) {
     let noItemsMessage = "";
     if (!isProvider) {
-      noItemsMessage = "Nu ai cumpărat niciun pachet.";
+      noItemsMessage = t('userBoughtPackages.noPackagesPurchased');
     } else {
-      noItemsMessage = viewMode === 'client' 
-        ? "Nu ai cumpărat niciun pachet ca si client."
-        : "Nicio vânzare încă ca furnizor.";
+      noItemsMessage = viewMode === 'client'
+        ? t('userBoughtPackages.noPackagesPurchasedAsClient')
+        : t('userBoughtPackages.noSalesAsProvider');
     }
-    
     return (
       <div className="space-y-4 max-w-2xl mx-auto">
-        {/* 🆕 Butoane pentru provider */}
         {isProvider && (
           <div className="flex justify-center space-x-2 mb-6">
             <button
@@ -264,7 +264,7 @@ export default function UserBoughtPackages({ isProvider }: UserBoughtPackagesPro
                   : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
               }`}
             >
-              📦 Client
+              📦 {t('userBoughtPackages.clientMode')}
             </button>
             <button
               onClick={() => changeViewMode('provider')}
@@ -274,11 +274,10 @@ export default function UserBoughtPackages({ isProvider }: UserBoughtPackagesPro
                   : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
               }`}
             >
-              💼 Ca Furnizor
+              💼 {t('userBoughtPackages.providerMode')}
             </button>
           </div>
         )}
-        
         <div className="text-center p-8 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
           <div className="text-4xl mb-4">
             {viewMode === 'client' ? '🛍️' : '💰'}
@@ -331,10 +330,10 @@ export default function UserBoughtPackages({ isProvider }: UserBoughtPackagesPro
       {/* Titlu dinamic */}
       <h3 className="text-xl font-semibold mb-2">
         {!isProvider 
-          ? "Pachetele tale cumpărate" 
-          : viewMode === 'client' 
-            ? "Pachetele cumpărate (ca si client)"
-            : "Pachetele vândute (ca furnizor)"
+          ? t('userBoughtPackages.purchasedPackages')
+          : viewMode === 'client'
+            ? t('userBoughtPackages.purchasedAsClient')
+            : t('userBoughtPackages.soldAsProvider')
         }
       </h3>
 
@@ -343,19 +342,19 @@ export default function UserBoughtPackages({ isProvider }: UserBoughtPackagesPro
         <div className="grid grid-cols-3 gap-4 text-center">
           <div>
             <div className="text-2xl font-bold text-blue-600">{items.length}</div>
-            <div className="text-sm text-gray-600">Total</div>
+            <div className="text-sm text-gray-600">{t('userBoughtPackages.total')}</div>
           </div>
           <div>
             <div className="text-2xl font-bold text-green-600">
               {items.filter(pkg => (pkg.usedSessions ?? 0) < pkg.providerPackage.totalSessions).length}
             </div>
-            <div className="text-sm text-gray-600">Active</div>
+            <div className="text-sm text-gray-600">{t('userBoughtPackages.active')}</div>
           </div>
           <div>
             <div className="text-2xl font-bold text-orange-600">
               {items.filter(pkg => (pkg.usedSessions ?? 0) >= pkg.providerPackage.totalSessions).length}
             </div>
-            <div className="text-sm text-gray-600">Consumate</div>
+            <div className="text-sm text-gray-600">{t('userBoughtPackages.consumed')}</div>
           </div>
         </div>
       </div>
@@ -368,7 +367,7 @@ export default function UserBoughtPackages({ isProvider }: UserBoughtPackagesPro
             activeTab === 'all' ? 'bg-primaryColor text-white' : 'bg-gray-200'
           }`}
         >
-          Toate ({items.length})
+          {t('userBoughtPackages.all')} ({items.length})
         </button>
         <button 
           onClick={() => changeTab('unconsumed')} 
@@ -376,7 +375,7 @@ export default function UserBoughtPackages({ isProvider }: UserBoughtPackagesPro
             activeTab === 'unconsumed' ? 'bg-primaryColor text-white' : 'bg-gray-200'
           }`}
         >
-          Active ({items.filter(pkg => (pkg.usedSessions ?? 0) < pkg.providerPackage.totalSessions).length})
+          {t('userBoughtPackages.active')} ({items.filter(pkg => (pkg.usedSessions ?? 0) < pkg.providerPackage.totalSessions).length})
         </button>
         <button 
           onClick={() => changeTab('consumed')} 
@@ -384,7 +383,7 @@ export default function UserBoughtPackages({ isProvider }: UserBoughtPackagesPro
             activeTab === 'consumed' ? 'bg-primaryColor text-white' : 'bg-gray-200'
           }`}
         >
-          Consumate ({items.filter(pkg => (pkg.usedSessions ?? 0) >= pkg.providerPackage.totalSessions).length})
+          {t('userBoughtPackages.consumed')} ({items.filter(pkg => (pkg.usedSessions ?? 0) >= pkg.providerPackage.totalSessions).length})
         </button>
       </div>
 
@@ -392,7 +391,7 @@ export default function UserBoughtPackages({ isProvider }: UserBoughtPackagesPro
       <div className="flex flex-wrap gap-3 mb-4">
         <input 
           type="text" 
-          placeholder={isCurrentlyViewingAsProvider ? "Caută după nume client..." : "Caută după nume furnizor..."} 
+          placeholder={isCurrentlyViewingAsProvider ? t('userBoughtPackages.searchClient') : t('userBoughtPackages.searchProvider')} 
           value={searchText} 
           onChange={onSearchChange} 
           className="flex-1 border p-2 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
@@ -413,7 +412,7 @@ export default function UserBoughtPackages({ isProvider }: UserBoughtPackagesPro
           onClick={toggleSort} 
           className="px-3 py-1 border rounded hover:bg-gray-50 transition-colors"
         >
-          Sortare: {sortOrder.toUpperCase()}
+          {t('userBoughtPackages.sort')}: {sortOrder.toUpperCase()}
         </button>
       </div>
 
@@ -421,7 +420,7 @@ export default function UserBoughtPackages({ isProvider }: UserBoughtPackagesPro
       {sortedItems.length === 0 ? (
         <div className="text-center p-6 bg-gray-50 rounded-lg">
           <div className="text-3xl mb-2">🔍</div>
-          <p className="text-gray-500">Nu s-au găsit pachete cu criteriile selectate.</p>
+          <p className="text-gray-500">{t('userBoughtPackages.noPackagesFound')}</p>
           <button 
             onClick={() => {
               setSearchText('');
@@ -432,7 +431,7 @@ export default function UserBoughtPackages({ isProvider }: UserBoughtPackagesPro
             }}
             className="mt-2 text-blue-500 hover:text-blue-700 underline"
           >
-            Resetează filtrele
+            {t('userBoughtPackages.resetFilters')}
           </button>
         </div>
       ) : (
@@ -491,8 +490,8 @@ export default function UserBoughtPackages({ isProvider }: UserBoughtPackagesPro
       {/* Footer info */}
       <div className="text-center text-sm text-gray-500 mt-6 p-4 bg-gray-50 rounded-lg">
         <p>
-          Afișează {paginatedItems.length} din {sortedItems.length} pachete
-          {sortedItems.length !== items.length && ` (filtrate din ${items.length} total)`}
+          {t('userBoughtPackages.showingResults', { current: paginatedItems.length, total: sortedItems.length })}
+          {sortedItems.length !== items.length && ` ${t('userBoughtPackages.filteredResults', { original: items.length })}`}
         </p>
       </div>
     </div>

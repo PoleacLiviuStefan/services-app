@@ -7,7 +7,7 @@ import { FaArrowAltCircleRight } from "react-icons/fa";
 import Link from 'next/link';
 import { useTranslation } from '@/hooks/useTranslation';
 
-const Hero = () => {
+const HeroClient = () => {
   const { t } = useTranslation();
 
   return (
@@ -34,15 +34,15 @@ const Hero = () => {
       <div className="flex flex-col lg:flex-row items-center lg:gap-16 z-40">
         <div className='flex flex-col lg:items-start items-center justify-center space-y-4 lg:space-y-8 text-left'>
           <h1 className="text-2xl lg:text-5xl text-center lg:text-left font-extrabold">
-            {t("hero.title")} <span className='text-buttonSecondaryColor underline underline-offset-1 italic'>{t("hero.subtitle")}</span>
+            {t('hero.title')} <span className='text-buttonSecondaryColor underline underline-offset-1 italic'>{t('hero.subtitle')}</span>
           </h1>
           <p className='font-semibold text-center lg:text-left text-sm lg:text-lg text-textPrimaryColor px-6 lg:px-0'>
-            {t("hero.description")}
+            {t('hero.description')}
           </p>
           <div className='flex space-x-2'>
             <Link href="/astrologi">
             <Button horizontal={true} className='px-6 lg:px-12 py-2 lg:py-3 gap-3 lg:gap-6 shadow-lg shadow-buttonPrimaryColor/70 bg-gradient-to-t from-buttonPrimaryColor to-buttonSecondaryColor text-md lg:text-lg hover:text-white hover:bg-primaryColor font-semibold'>
-              {t("hero.ctaButton")}
+              {t('hero.ctaButton')}
               <span className='text-white text-lg lg:text-2xl'>
                 <FaArrowAltCircleRight />
               </span>
@@ -73,4 +73,4 @@ const Hero = () => {
   );
 };
 
-export default Hero;
+export default HeroClient;

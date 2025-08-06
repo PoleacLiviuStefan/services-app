@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { useTranslation } from '@/hooks/useTranslation';
 import Image from "next/image";
 import Link from "next/link";
 import { FaPlay, FaStar, FaVideo, FaComments } from "react-icons/fa";
@@ -17,6 +18,7 @@ interface ProfileMainInfoProps {
 }
 
 const ProfileMainInfo: React.FC<ProfileMainInfoProps> = ({ provider }) => {
+  const { t } = useTranslation();
   console.log("provider este: ",provider)
   const [showVideoModal, setShowVideoModal] = useState(false);
   const [showBuyPackageModal, setShowBuyPackageModal] = useState(false);
@@ -74,7 +76,7 @@ const ProfileMainInfo: React.FC<ProfileMainInfoProps> = ({ provider }) => {
                 className="absolute bottom-0 flex items-center bg-primaryColor text-white text-sm px-3 py-1 rounded-full"
               >
                 <FaPlay className="mr-2" />
-                Video Introductiv
+                {t('profileMainInfo.videoIntroduction')}
               </button>
             )}
             <span className="absolute top-2 right-2 flex items-center bg-yellow-500 text-white text-sm px-2 py-1 rounded-lg">
@@ -91,15 +93,15 @@ const ProfileMainInfo: React.FC<ProfileMainInfoProps> = ({ provider }) => {
         <div className="flex flex-col items-center space-y-4 max-w-[500px] w-full lg:w-[500px]">
           <ul className="flex justify-center space-x-8 w-full">
             <MainCharacteristic
-              label={<>Specialitate<br />Principală</>}
+              label={<>{t('profileMainInfo.mainSpeciality')}<br />{t('profileMainInfo.main')}</>}
               characteristic={provider.mainSpecialty}
             />
             <MainCharacteristic
-              label={<>Unealtă<br />Principală</>}
+              label={<>{t('profileMainInfo.mainTool')}<br />{t('profileMainInfo.main')}</>}
               characteristic={provider.mainTool}
             />
             <MainCharacteristic
-              label={<>Stil<br />Citire</>}
+              label={<>{t('profileMainInfo.readingStyle')}<br />{t('profileMainInfo.style')}</>}
               characteristic={provider.readingStyle}
             />
           </ul>
@@ -110,7 +112,7 @@ const ProfileMainInfo: React.FC<ProfileMainInfoProps> = ({ provider }) => {
             <Link href={createConversationUrl(provider.slug)}>
               <Button className="flex items-center gap-2 bg-primaryColor text-white px-6 py-5 rounded-md hover:bg-secondaryColor transition-colors">
                 <FaComments size={20} />
-                <span>Conversație</span>
+                <span>{t('profileMainInfo.conversation')}</span>
               </Button>
             </Link>
 
@@ -123,17 +125,17 @@ const ProfileMainInfo: React.FC<ProfileMainInfoProps> = ({ provider }) => {
               className="flex items-center gap-2 border-2 border-primaryColor text-primaryColor px-6 py-3 rounded-md hover:bg-primaryColor hover:text-white transition-all duration-300"
             >
               <FaVideo size={20} />
-              <span>Cumpără Ședințe</span>
+              <span>{t('profileMainInfo.buySessions')}</span>
             </Button>
           </div>
 
           {/* Instrucțiuni */}
           <div className="mt-6 p-4 bg-gray-50 rounded-lg w-full">
-            <p className="font-bold text-gray-800 mb-3">Pașii pentru a putea programa o consultație:</p>
+            <p className="font-bold text-gray-800 mb-3">{t('profileMainInfo.stepsTitle')}</p>
             <ol className="list-decimal list-inside space-y-2 text-gray-700">
-              <li>Apasă pe butonul 'Cumpără Ședințe'</li>
-              <li>Efectuează plata pentru suma afișată</li>
-              <li>Apasă pe butonul 'Programare Ședință' aflat puțin mai jos și alege un interval disponibil</li>
+              <li>{t('profileMainInfo.step1')}</li>
+              <li>{t('profileMainInfo.step2')}</li>
+              <li>{t('profileMainInfo.step3')}</li>
             </ol>
           </div>
         </div>

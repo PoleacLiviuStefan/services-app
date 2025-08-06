@@ -10,8 +10,10 @@ import { FaCaretLeft, FaCaretRight } from "react-icons/fa";
 import LoadingSkeleton from "./ui/loadingSkeleton";
 import Button from "./atoms/button";
 import { ProviderInterface } from "@/interfaces/ProviderInterface";
+import { useTranslation } from "@/hooks/useTranslation";
 
 const FilteredPsychics = () => {
+  const { t } = useTranslation();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -93,7 +95,7 @@ const FilteredPsychics = () => {
           onClick={fetchProviders}
           className="bg-gradient-to-t border-2 border-buttonPrimaryColor/20 shadow-lg shadow-buttonPrimaryColor/40 from-buttonPrimaryColor to-buttonSecondaryColor px-2 lg:px-4 py-1 lg:py-2 text-md text-white font-semibold"
         >
-          Caută după nume
+          {t("search.searchByName")}
         </Button>
 
         {/* butonul de reset */}
@@ -103,7 +105,7 @@ const FilteredPsychics = () => {
           onClick={resetFilters}
           className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-2 lg:px-4 py-1 lg:py-2 text-md font-semibold rounded"
         >
-          Resetează filtre
+          {t("search.resetFilters")}
         </Button>
       </aside>
 

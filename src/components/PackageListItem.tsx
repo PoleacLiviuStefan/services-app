@@ -2,7 +2,7 @@
 
 import React from "react";
 import { BoughtPackage, SoldPackage } from "@/interfaces/PurchaseInterface";
-
+import { useTranslation } from "@/hooks/useTranslation";
 interface PackageListItemProps {
   pkg: BoughtPackage | SoldPackage;
   isProvider: boolean;
@@ -10,6 +10,7 @@ interface PackageListItemProps {
 
 const PackageListItem: React.FC<PackageListItemProps> = ({ pkg, isProvider }) => {
   const { providerPackage, createdAt, expiresAt, usedSessions, invoices } = pkg as any;
+  const { t } = useTranslation();;
 
   return (
     <li className="border rounded-lg p-4 shadow-sm hover:shadow-md transition">
@@ -17,21 +18,21 @@ const PackageListItem: React.FC<PackageListItemProps> = ({ pkg, isProvider }) =>
         <div>
           <p className="text-lg font-medium">
             {isProvider
-              ? `Client: ${(pkg as SoldPackage).user.name}`
-              : `Astrolog: ${(pkg as BoughtPackage).provider.user.name}`}
+              ? `${t('userBoughtPackages.clientMode')}: ${(pkg as SoldPackage).user.name}`
+              : `${t('providerCard.provider')}: ${(pkg as BoughtPackage).provider.user.name}`}
           </p>
           <p className="text-sm text-gray-600">
-            Tip serviciu: {providerPackage.service}
+            {t('providerDetails.service')}: {providerPackage.service}
           </p>
           <p className="text-sm text-gray-600">
-            Preț: {providerPackage.price.toFixed(2)} RON
+            {t('providerDetails.price')}: {providerPackage.price.toFixed(2)} RON
           </p>
           <p className="text-sm text-gray-600">
-            Ședințe incluse: {providerPackage.totalSessions} (Folosite: {usedSessions})
+            {t('providerDetails.sessionTypes')}: {providerPackage.totalSessions} ({t('userBoughtPackages.consumed')}: {usedSessions})
           </p>
         </div>
         <div className="text-right text-sm">
-          <p>Achiziționat la:</p>
+          <p>{t('userBoughtPackages.purchasedPackages')}:</p>
           <p>
             {new Date(createdAt).toLocaleDateString("ro-RO", {
               day: "2-digit",
@@ -41,7 +42,7 @@ const PackageListItem: React.FC<PackageListItemProps> = ({ pkg, isProvider }) =>
           </p>
           {expiresAt && (
             <>
-              <p>Expiră la:</p>
+              <p>{t('userBoughtPackages.soldAsProvider')}:</p>
               <p>
                 {new Date(expiresAt).toLocaleDateString("ro-RO", {
                   day: "2-digit",
@@ -56,7 +57,7 @@ const PackageListItem: React.FC<PackageListItemProps> = ({ pkg, isProvider }) =>
 
       {invoices.length > 0 && (
         <div className="mt-4">
-          <h4 className="font-medium">Facturi emise:</h4>
+          <h4 className="font-medium">{t('userBoughtPackages.invoicesIssued') || 'Facturi emise:'}</h4>
           <ul className="mt-2 space-y-1">
             {invoices.map((inv) => (
               <li key={inv.id} className="text-sm">

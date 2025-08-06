@@ -1,0 +1,116 @@
+{
+  "ro": {
+    "navigation": {
+      "home": "ACASA",
+      "psychologists": "ASTROLOGI",
+      "about": "DESPRE NOI",
+      "profile": "Profil",
+      "logout": "Deconectare",
+      "login": "Autentificare",
+      "register": "Înregistrare"
+    },
+    "hero": {
+      "title": "Ghidarea ta astrală,",
+      "subtitle": "la un click distanță",
+      "description": "Conectează-te cu ghizi spirituali experimentați pentru consultații personalizate în astrologie, tarot și vindecarea chakrelor.",
+      "ctaButton": "Explorează Ghizii"
+    },
+    "about": {
+      "title": "Despre noi",
+      "storyTitle": "Povestea MysticGold",
+      "subtitle": "Pentru că ghidarea spirituală merită să fie făcută cu seriozitate, integritate și iubire.",
+      "description": "MysticGold s-a născut dintr-o nevoie reală și dureroasă: prea mulți oameni ajung să ceară ajutor în cele mai vulnerabile momente ale vieții, doar ca să fie dezamăgiți.",
+      "description2": "Noi am simțit asta. Am văzut asta. Și am spus:",
+      "enough": "ajunge",
+      "description3": "Așa a luat naștere MysticGold – o platformă care își propune să fie un spațiu sigur, curat și autentic pentru toți cei care caută sprijin prin astrologie, tarot, numerologie, terapie energetică sau coaching spiritual."
+    },
+    "curiosities": {
+      "visionTitle": "Viziunea noastră",
+      "visionDescription": "Vrem să construim cea mai de încredere comunitate de practicieni spirituali din România.",
+      "differenceTitle": "Ce facem diferit?",
+      "differenceDescription": "Selectăm cu atenție fiecare furnizor, în funcție de formare, etică și profesionalism.",
+      "audienceTitle": "Pentru cine este MysticGold?",
+      "audienceDescription": "Dacă ai simțit măcar o dată că ai nevoie de un sprijin real, dar nu știai încotro s-o apuci… ești în locul potrivit"
+    },
+    "faq": {
+      "title": "FAQ"
+    },
+    "footer": {
+      "navigation": "Navigare",
+      "legal": "Juridic",
+      "contact": "Contact",
+      "home": "ACASA",
+      "astrologers": "ASTROLOGI",
+      "aboutUs": "DESPRE NOI"
+    },
+    "search": {
+      "searchByName": "Caută după nume",
+      "resetFilters": "Resetează filtre",
+      "searchPlaceholder": "Caută psihologi...",
+      "sortBy": "Sortează după",
+      "sortByReviews": "Număr recenzii",
+      "sortByPriceDesc": "Preț - descrescător",
+      "sortByPriceAsc": "Preț - crescător",
+      "speciality": "Specialitate",
+      "tools": "Instrumente",
+      "reading": "Citire"
+    }
+  },
+  "en": {
+    "navigation": {
+      "home": "HOME",
+      "psychologists": "ASTROLOGERS",
+      "about": "ABOUT US",
+      "profile": "Profile",
+      "logout": "Logout",
+      "login": "Login",
+      "register": "Register"
+    },
+    "hero": {
+      "title": "Your astral guidance,",
+      "subtitle": "just a click away",
+      "description": "Connect with experienced spiritual guides for personalized consultations in astrology, tarot, and chakra healing.",
+      "ctaButton": "Explore Guides"
+    },
+    "about": {
+      "title": "About Us",
+      "storyTitle": "The MysticGold Story",
+      "subtitle": "Because spiritual guidance deserves to be done with seriousness, integrity and love.",
+      "description": "MysticGold was born from a real and painful need: too many people end up asking for help in the most vulnerable moments of their lives, only to be disappointed.",
+      "description2": "We felt that. We saw that. And we said:",
+      "enough": "enough",
+      "description3": "This is how MysticGold was born – a platform that aims to be a safe, clean and authentic space for all those who seek support through astrology, tarot, numerology, energy therapy or spiritual coaching."
+    },
+    "curiosities": {
+      "visionTitle": "Our Vision",
+      "visionDescription": "We want to build the most trusted community of spiritual practitioners in Romania.",
+      "differenceTitle": "What do we do differently?",
+      "differenceDescription": "We carefully select each provider, based on training, ethics and professionalism.",
+      "audienceTitle": "Who is MysticGold for?",
+      "audienceDescription": "If you've ever felt like you need real support, but didn't know where to turn... you're in the right place"
+    },
+    "faq": {
+      "title": "FAQ"
+    },
+    "footer": {
+      "navigation": "Navigation",
+      "legal": "Legal",
+      "contact": "Contact",
+      "home": "HOME",
+      "astrologers": "PROVIDERS",
+      "aboutUs": "ABOUT US"
+    },
+    "search": {
+      "searchByName": "Search by name",
+      "resetFilters": "Reset filters",
+      "searchPlaceholder": "Search psychologists...",
+      "sortBy": "Sort by",
+      "sortByReviews": "Number of reviews",
+      "sortByPriceDesc": "Price - descending",
+      "sortByPriceAsc": "Price - ascending",
+      "speciality": "Speciality",
+      "tools": "Tools",
+      "reading": "Reading"
+    }
+  }
+}

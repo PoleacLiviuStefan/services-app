@@ -3,7 +3,7 @@ import React, { useState, useRef, useEffect } from 'react';
 
 interface FaqQuestionProps {
   title: string;
-  answer: string;
+  answer: string | React.ReactElement;
 }
 
 const FaqQuestion: React.FC<FaqQuestionProps> = ({ title, answer }) => {

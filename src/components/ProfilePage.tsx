@@ -1,7 +1,7 @@
 // File: components/ProfilePage.tsx
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -18,6 +18,7 @@ import UserConversations from "./UserConversations";
 import Cropper from "react-easy-crop";
 import { getCroppedImg } from "@/utils/cropImage";
 import { formatForUrl } from "@/utils/helper";
+import { useTranslation } from "@/hooks/useTranslation";
 
 interface ProviderProfile {
   id: string;
@@ -309,6 +310,7 @@ const ProfilePage: React.FC = () => {
   const { data: session, status, update: refreshSession } = useSession();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { t } = useTranslation();
 
   // Determine initial tab from ?tab= query
   const paramTab = searchParams.get("tab") as Tab | null;
@@ -356,7 +358,7 @@ const ProfilePage: React.FC = () => {
   const slug = session?.user?.name ? formatForUrl(session.user.name) : null;
 
 // 🔧 2. MODIFICĂ funcția fetchProviderBySlug pentru debugging mai bun:
-const fetchProviderBySlug = async () => {
+const fetchProviderBySlug = useCallback(async () => {
   if (!slug) {
     console.log("❌ Nu există slug pentru căutare");
     setProvider(null);
@@ -391,7 +393,7 @@ const fetchProviderBySlug = async () => {
   } finally {
     setLoadingProvider(false);
   }
-};
+}, [slug, session?.user?.name]);
 
 
   useEffect(() => {
@@ -428,7 +430,7 @@ const fetchProviderBySlug = async () => {
   }, [session]);
 
   // Clean function to close modal and reset all states
-  const closeAvatarModal = () => {
+  const closeAvatarModal = useCallback(() => {
     setShowAvatarModal(false);
     setSelectedFile(null);
     setImagePreview(null);
@@ -436,21 +438,39 @@ const fetchProviderBySlug = async () => {
     setCrop({ x: 0, y: 0 });
     setZoom(1);
     setCroppedAreaPixels(null);
-  };
+  }, []);
 
   // Avatar crop handlers
-  const onCropComplete = (_: any, pixels: any) => setCroppedAreaPixels(pixels);
+  const onCropComplete = useCallback((_: any, pixels: any) => {
+    setCroppedAreaPixels(pixels);
+  }, []);
+
+  const onCropChange = useCallback((crop: { x: number; y: number }) => {
+    setCrop(crop);
+  }, []);
+
+  const onZoomChange = useCallback((zoom: number) => {
+    setZoom(zoom);
+  }, []);
   
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files?.[0]) {
       const file = e.target.files[0];
       setSelectedFile(file);
       setImagePreview(URL.createObjectURL(file));
       setUploadError(null);
     }
-  };
+  }, []);
 
-  const handleAvatarSave = async () => {
+  const handleResetImage = useCallback(() => {
+    setSelectedFile(null);
+    setImagePreview(null);
+    setCrop({ x: 0, y: 0 });
+    setZoom(1);
+    setUploadError(null);
+  }, []);
+
+  const handleAvatarSave = useCallback(async () => {
     if (!selectedFile || !provider || !croppedAreaPixels || !imagePreview)
       return;
     setIsUploading(true);
@@ -478,19 +498,19 @@ const fetchProviderBySlug = async () => {
     } finally {
       setIsUploading(false);
     }
-  };
+  }, [selectedFile, provider, croppedAreaPixels, imagePreview, closeAvatarModal]);
 
   // Name edit handlers
-  const handleEditNameClick = () => {
+  const handleEditNameClick = useCallback(() => {
     if (!provider) return;
     setNameError(null);
     setEditedName(provider.user.name);
     setIsEditingName(true);
-  };
+  }, [provider]);
 
-  const handleSaveName = async () => {
+  const handleSaveName = useCallback(async () => {
     if (!editedName.trim() || !provider)
-      return setNameError("Numele nu poate fi gol.");
+      return setNameError(t('profile.nameEmpty'));
     setIsSavingName(true);
     try {
       const res = await fetch(`/api/provider/${provider.id}/update-name`, {
@@ -500,18 +520,18 @@ const fetchProviderBySlug = async () => {
       });
       if (!res.ok) {
         const err = await res.json();
-        setNameError(err.error || "Eroare la salvare");
+        setNameError(err.error || t('profile.saveError'));
       } else {
         await fetchProviderBySlug();
         await refreshSession();
         setIsEditingName(false);
       }
     } catch {
-      setNameError("Eroare de rețea");
+      setNameError(t('profile.networkError'));
     } finally {
       setIsSavingName(false);
     }
-  };
+  }, [editedName, provider, fetchProviderBySlug, refreshSession, t]);
 
   // Function to update URL with selected tab
   const handleTabChange = (tab: Tab) => {
@@ -530,7 +550,7 @@ const fetchProviderBySlug = async () => {
       {/* Header */}
       <div className="flex items-center justify-between p-6 border-b border-gray-100 sticky top-0 bg-white rounded-t-2xl">
         <h3 className="text-xl font-semibold text-gray-900">
-          📸 Editează Avatar
+          {t('profile.editAvatar')}
         </h3>
         <button
           onClick={closeAvatarModal}
@@ -552,8 +572,8 @@ const fetchProviderBySlug = async () => {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                 </svg>
               </div>
-              <p className="text-gray-600">Selectează o imagine pentru avatar</p>
-              <p className="text-sm text-gray-400">PNG, JPG până la 5MB</p>
+              <p className="text-gray-600">{t('profile.selectImage')}</p>
+              <p className="text-sm text-gray-400">{t('profile.fileFormat')}</p>
             </div>
             
             <label className="block">
@@ -581,8 +601,8 @@ const fetchProviderBySlug = async () => {
                 crop={crop}
                 zoom={zoom}
                 aspect={1}
-                onCropChange={setCrop}
-                onZoomChange={setZoom}
+                onCropChange={onCropChange}
+                onZoomChange={onZoomChange}
                 onCropComplete={onCropComplete}
               />
             </div>
@@ -590,7 +610,7 @@ const fetchProviderBySlug = async () => {
             {/* Zoom control */}
             <div className="space-y-2">
               <label className="block text-sm font-medium text-gray-700">
-                Zoom: {Math.round(zoom * 100)}%
+                {t('profile.zoom')}: {Math.round(zoom * 100)}%
               </label>
               <input
                 type="range"
@@ -598,23 +618,17 @@ const fetchProviderBySlug = async () => {
                 max={3}
                 step={0.1}
                 value={zoom}
-                onChange={(e) => setZoom(Number(e.target.value))}
+                onChange={(e) => onZoomChange(Number(e.target.value))}
                 className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
               />
             </div>
 
             {/* Reset button */}
             <button
-              onClick={() => {
-                setSelectedFile(null);
-                setImagePreview(null);
-                setCrop({ x: 0, y: 0 });
-                setZoom(1);
-                setUploadError(null);
-              }}
+              onClick={handleResetImage}
               className="text-sm text-gray-500 hover:text-gray-700 underline"
             >
-              Selectează altă imagine
+              {t('profile.selectOtherImage')}
             </button>
           </div>
         )}
@@ -638,7 +652,7 @@ const fetchProviderBySlug = async () => {
           onClick={closeAvatarModal}
           className="px-4 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
         >
-          Anulează
+          {t('profile.cancel')}
         </Button>
         <Button
           onClick={handleAvatarSave}
@@ -651,10 +665,10 @@ const fetchProviderBySlug = async () => {
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
               </svg>
-              Salvez...
+              {t('profile.saving')}
             </>
           ) : (
-            'Salvează Avatar'
+            t('profile.saveAvatar')
           )}
         </Button>
       </div>
@@ -715,14 +729,14 @@ const fetchProviderBySlug = async () => {
                     }}
                     className="px-4 py-2 bg-gray-300 rounded"
                   >
-                    Anulează
+                    {t('profile.cancel')}
                   </Button>
                   <Button
                     onClick={handleSaveName}
                     disabled={isSavingName}
                     className="px-4 py-2 bg-primaryColor text-white rounded"
                   >
-                    {isSavingName ? "Salvez..." : "Salvează"}
+                    {isSavingName ? t('profile.saving') : t('profile.save')}
                   </Button>
                 </div>
               </div>
@@ -733,7 +747,7 @@ const fetchProviderBySlug = async () => {
                   onClick={handleEditNameClick}
                   className="mt-2 px-3 py-1 bg-gray-200 rounded text-sm"
                 >
-                  Editează nume
+                  {t('profile.editName')}
                 </Button>
               </div>
             )
@@ -750,14 +764,14 @@ const fetchProviderBySlug = async () => {
               onClick={() => setShowAvatarModal(true)}
               className="bg-primaryColor text-white px-4 py-2 rounded"
             >
-              Editează Avatar
+              {t('profile.editAvatar').replace('📸 ', '')}
             </Button>
           )}
           <Button
             onClick={() => handleLogout(slug)}
             className="bg-red-500 text-white px-4 py-2 rounded"
           >
-            Deconectare
+            {t('profile.logout')}
           </Button>
         </div>
       </div>
@@ -795,7 +809,7 @@ const fetchProviderBySlug = async () => {
                 `}>
                   📦
                 </div>
-                <span>Pachete</span>
+                <span>{t('profile.packages')}</span>
                 {activeTab === "packages" && (
                   <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-primaryColor to-primaryColor/60 rounded-full"></div>
                 )}
@@ -821,7 +835,7 @@ const fetchProviderBySlug = async () => {
                 `}>
                   🎯
                 </div>
-                <span>Ședințe</span>
+                <span>{t('profile.sessions')}</span>
                 {activeTab === "sessions" && (
                   <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-primaryColor to-primaryColor/60 rounded-full"></div>
                 )}
@@ -847,7 +861,7 @@ const fetchProviderBySlug = async () => {
                 `}>
                   💬
                 </div>
-                <span>Conversații</span>
+                <span>{t('profile.conversations')}</span>
                 {activeTab === "conversatii" && (
                   <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-primaryColor to-primaryColor/60 rounded-full"></div>
                 )}
@@ -873,7 +887,7 @@ const fetchProviderBySlug = async () => {
                 `}>
                   🧾
                 </div>
-                <span>Date Facturare</span>
+                <span>{t('profile.billing')}</span>
                 {activeTab === "billing" && (
                   <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-primaryColor to-primaryColor/60 rounded-full"></div>
                 )}
@@ -899,7 +913,7 @@ const fetchProviderBySlug = async () => {
       {session.user.role === "ADMIN" && (
         <div className="max-w-3xl mx-auto mt-10">
           <h3 className="text-lg font-semibold mb-4">
-            Administrare Utilizatori
+            {t('profile.userManagement')}
           </h3>
           <AdminPsychics physics={users} />
         </div>

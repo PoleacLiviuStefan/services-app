@@ -2,15 +2,15 @@
 'use client'
 
 import React, { useEffect, useState, useCallback, useRef } from "react";
+import { useTranslation } from '@/hooks/useTranslation';
 import Script from "next/script";
 import Head from "next/head";
 import Icon from "../atoms/icon";
 import Button from "../atoms/button";
 import BuyPackageModal from "../BuyPackageModal";
-import BoughtPackageCard from "../BoughtPackageCard";
-import { BoughtPackage } from "@/interfaces/PackageInterface";
 import { FaVideo, FaExclamationTriangle, FaRedo, FaArrowLeft, FaCheck, FaClock, FaCalendarAlt } from "react-icons/fa";
 import Link from "next/link";
+import { BoughtPackage } from "@/interfaces/PurchaseInterface";
 
 interface ScheduleMeetingProps {
   providerId: string;
@@ -34,6 +34,7 @@ export default function ScheduleMeeting({
   providerStripeAccountId,
   locale = "ro",
 }: ScheduleMeetingProps) {
+  const { t } = useTranslation();
   console.log("found services", services);
   
   // State pentru flow-ul de programare
@@ -299,9 +300,9 @@ export default function ScheduleMeeting({
       return (
         <div className="p-4 text-center text-blue-600">
           <div className="animate-spin inline-block w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full mb-2"></div>
-          <p>Se procesează programarea...</p>
+          <p>{t('scheduleMeeting.processingBooking')}</p>
           <p className="text-sm text-gray-500 mt-1">
-            Te rugăm să aștepți confirmarea
+            {t('scheduleMeeting.pleaseWaitForConfirmation')}
           </p>
         </div>
       );
@@ -311,9 +312,9 @@ export default function ScheduleMeeting({
       return (
         <div className="p-4 text-center text-gray-600">
           <div className="animate-spin inline-block w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full mb-2"></div>
-          <p>Se încarcă calendarul...</p>
+          <p>{t('scheduleMeeting.loadingCalendar')}</p>
           <p className="text-sm text-gray-500 mt-1">
-            Încercare {retryCountRef.current + 1} din {maxRetries + 1}
+            {t('scheduleMeeting.tryNumber', { current: retryCountRef.current + 1, max: maxRetries + 1 })}
           </p>
         </div>
       );
@@ -326,7 +327,7 @@ export default function ScheduleMeeting({
             <FaExclamationTriangle size={24} />
           </Icon>
           <p className="text-red-600 mb-3">
-            Nu s-a putut încărca calendarul. Verifică conexiunea la internet.
+            {t('scheduleMeeting.calendarLoadError')}
           </p>
           {retryCountRef.current < maxRetries ? (
             <Button
@@ -334,11 +335,11 @@ export default function ScheduleMeeting({
               className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 flex items-center gap-2 mx-auto"
             >
               <FaRedo />
-              Încearcă din nou
+              {t('scheduleMeeting.tryAgain')}
             </Button>
           ) : (
             <p className="text-gray-600 text-sm">
-              Te rugăm să reîncarci pagina sau să încerci mai târziu.
+              {t('scheduleMeeting.reloadOrTryLater')}
             </p>
           )}
         </div>
@@ -353,10 +354,10 @@ export default function ScheduleMeeting({
     <div className="max-w-2xl mx-auto">
       <div className="text-center mb-6">
         <h2 className="text-2xl font-bold text-gray-900 mb-2">
-          Selectează pachetul pentru programare
+          {t('scheduleMeeting.selectPackageTitle')}
         </h2>
         <p className="text-gray-600">
-          Alege unul dintre pachetele tale pentru a programa o ședință
+          {t('scheduleMeeting.selectPackageSubtitle')}
         </p>
       </div>
 
@@ -366,10 +367,10 @@ export default function ScheduleMeeting({
             <FaExclamationTriangle size={32} />
           </Icon>
           <h3 className="text-lg font-medium text-yellow-800 mb-2">
-            Nu ai pachete disponibile
+            {t('scheduleMeeting.noPackages')}
           </h3>
           <p className="text-yellow-700 mb-4">
-            Pentru a programa o ședință, trebuie să cumperi mai întâi un pachet.
+            {t('scheduleMeeting.buyPackageInfo')}
           </p>
           {services.length > 0 && (
             <Button 
@@ -377,7 +378,7 @@ export default function ScheduleMeeting({
               className="bg-primaryColor text-white px-6 py-3 rounded-md hover:bg-primaryColor/90 flex items-center gap-2 mx-auto"
             >
               <FaVideo />
-              Cumpără Pachete
+              {t('scheduleMeeting.buyPackages')}
             </Button>
           )}
         </div>
@@ -397,12 +398,12 @@ export default function ScheduleMeeting({
                 >
                   <div className="flex justify-between items-start mb-3">
                     <div>
-                      <h4 className="font-semibold text-lg text-gray-900">
-                        {pkg.providerPackage?.service || 'Serviciu'}
-                      </h4>
+            <h4 className="font-semibold text-lg text-gray-900">
+              {pkg.providerPackage?.service || t('scheduleMeeting.service')}
+            </h4>
                       <p className="text-sm text-gray-600">
-                        <span className="font-medium">{remainingSessions}</span> sesiuni rămase 
-                        din <span className="font-medium">{pkg.totalSessions}</span>
+                        <span className="font-medium">{remainingSessions}</span> {t('scheduleMeeting.sessionsLeft')} 
+                        {t('scheduleMeeting.outOf')} <span className="font-medium">{pkg.totalSessions}</span>
                       </p>
                     </div>
                     <div className="text-right">
@@ -433,12 +434,12 @@ export default function ScheduleMeeting({
                   <div className="flex justify-between items-center">
                     <div className="flex items-center text-sm text-gray-600">
                       <FaClock className="mr-1" />
-                      <span>Click pentru a programa</span>
+                      <span>{t('scheduleMeeting.clickToBook')}</span>
                     </div>
                     
                     {remainingSessions <= 1 && (
                       <span className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded-full">
-                        Ultima sesiune
+                        {t('scheduleMeeting.lastSession')}
                       </span>
                     )}
                   </div>
@@ -454,17 +455,17 @@ export default function ScheduleMeeting({
                 disabled={currentPage === 1}
                 className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50 hover:bg-gray-300"
               >
-                Anterior
+                {t('scheduleMeeting.previous')}
               </button>
               <span className="text-sm text-gray-600">
-                Pagina {currentPage} din {totalPages}
+                {t('scheduleMeeting.page')} {currentPage} {t('scheduleMeeting.of')} {totalPages}
               </span>
               <button
                 onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
                 disabled={currentPage === totalPages}
                 className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50 hover:bg-gray-300"
               >
-                Următor
+                {t('scheduleMeeting.next')}
               </button>
             </div>
           )}
@@ -484,10 +485,10 @@ export default function ScheduleMeeting({
             </Icon>
             <div>
               <h4 className="font-semibold text-blue-900">
-                Pachet selectat: {selectedPackage?.providerPackage?.service}
+                {t('scheduleMeeting.selectedPackage')}: {selectedPackage?.providerPackage?.service}
               </h4>
               <p className="text-sm text-blue-700">
-                {(selectedPackage?.totalSessions || 0) - (selectedPackage?.usedSessions || 0)} sesiuni rămase
+                {(selectedPackage?.totalSessions || 0) - (selectedPackage?.usedSessions || 0)} {t('scheduleMeeting.sessionsLeft')}
               </p>
             </div>
           </div>
@@ -496,14 +497,14 @@ export default function ScheduleMeeting({
             className="text-blue-600 hover:text-blue-800 flex items-center gap-1 text-sm"
           >
             <FaArrowLeft size={12} />
-            Schimbă
+            {t('scheduleMeeting.change')}
           </Button>
         </div>
       </div>
 
       <h3 className="text-xl font-semibold mb-4 text-center">
         <FaCalendarAlt className="inline mr-2" />
-        Selectează data și ora
+        {t('scheduleMeeting.selectDateTime')}
       </h3>
       
       <div
@@ -523,20 +524,20 @@ export default function ScheduleMeeting({
           <FaCheck size={48} />
         </Icon>
         <h3 className="text-xl font-semibold text-green-900 mb-2">
-          Programare confirmată!
+          {t('scheduleMeeting.confirmed')}
         </h3>
         <p className="text-green-700 mb-4">
-          Ședința ta a fost programată cu succes. Vei primi un email de confirmare.
+          {t('scheduleMeeting.success')}
         </p>
         <p className="text-sm text-gray-600 mb-4">
-          <strong>Pachet folosit:</strong> {selectedPackage?.providerPackage?.service}<br/>
-          <strong>Sesiuni rămase:</strong> {(selectedPackage?.totalSessions || 0) - (selectedPackage?.usedSessions || 0)}
+          <strong>{t('scheduleMeeting.packageUsed')}:</strong> {selectedPackage?.providerPackage?.service}<br/>
+          <strong>{t('scheduleMeeting.sessionsLeft')}:</strong> {(selectedPackage?.totalSessions || 0) - (selectedPackage?.usedSessions || 0)}
         </p>
         <Button
           onClick={handleStartNewBooking}
           className="bg-blue-500 text-white px-6 py-2 rounded hover:bg-blue-600"
         >
-          Programează altă ședință
+          {t('scheduleMeeting.scheduleAnother')}
         </Button>
       </div>
     </div>
@@ -547,7 +548,7 @@ export default function ScheduleMeeting({
     return (
       <div className="max-w-2xl mx-auto text-center p-8">
         <div className="animate-spin inline-block w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full mb-4"></div>
-        <p className="w-full text-center">Se încarcă...</p>
+        <p className="w-full text-center">{t('scheduleMeeting.loading')}</p>
       </div>
     );
   }
@@ -561,17 +562,17 @@ export default function ScheduleMeeting({
         </Icon>
         {errorBought === "Nu am găsit pachetele cumpărate" ? (
           <>
-            <h3 className="text-xl font-semibold mb-2">Autentificare necesară</h3>
-            <p className="mb-4">Trebuie să te autentifici pentru a putea programa o ședință.</p>
+            <h3 className="text-xl font-semibold mb-2">{t('scheduleMeeting.authRequired')}</h3>
+            <p className="mb-4">{t('scheduleMeeting.mustLoginToBook')}</p>
             <Link href="/autentificare">
               <Button className="bg-primaryColor text-white px-6 py-3 rounded">
-                Autentificare
+                {t('scheduleMeeting.login')}
               </Button>
             </Link>
           </>
         ) : (
           <>
-            <h3 className="text-xl font-semibold mb-2">Eroare</h3>
+            <h3 className="text-xl font-semibold mb-2">{t('scheduleMeeting.error')}</h3>
             <p>{errorBought}</p>
           </>
         )}

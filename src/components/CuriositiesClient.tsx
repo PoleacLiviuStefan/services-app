@@ -3,9 +3,9 @@ import React from "react";
 import PresentationContainer from "./ui/presentationContainer";
 import { useTranslation } from "@/hooks/useTranslation";
 
-const Curiosities = () => {
+const CuriositiesClient = () => {
   const { t } = useTranslation();
-  
+
   return (
     <div className="flex flex-col items-center space-y-8 w-screen bg-primaryColor p-4">
       {" "}
@@ -28,4 +28,4 @@ const Curiosities = () => {
   );
 };
 
-export default Curiosities;
+export default CuriositiesClient;

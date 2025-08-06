@@ -1,10 +1,11 @@
 export const displayedServices = [
-    'Astrologie',
-    'Tarot',
-    'Numerologie',
-    'Clarviziune',
-    'Rune',
-    'Reiki',
-    'Theta-Healing',
-    'EFT'
+    'astrology',
+    'tarot',
+    'numerology',
+    'clairvoyance',
+    'runes',
+    'reiki',
+    'thetaHealing',
+    'eft'
 ]
+

@@ -2,6 +2,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { useTranslation } from '@/hooks/useTranslation';
 import Button from '../atoms/button';
 import AboutProvider from './AboutProvider';
 import ReviewsProvider from './ReviewsProvider';
@@ -31,6 +32,7 @@ interface Props {
 
 const ProviderProfileSection: React.FC<Props> = ({ provider }) => {
   const [shownIndexSection, setIndexShownSection] = useState(1);
+  const { t } = useTranslation();
 
   // Serviciile unice extrase din pachete
   const services = Array.from(
@@ -49,7 +51,7 @@ const ProviderProfileSection: React.FC<Props> = ({ provider }) => {
               : 'bg-transparent text-black'
           }`}
         >
-          <CiCircleInfo className="text-lg" /> Despre Mine
+          <CiCircleInfo className="text-lg" /> {t('providerProfileSection.aboutMe')}
         </Button>
         <Button
           onClick={() => setIndexShownSection(2)}
@@ -59,7 +61,7 @@ const ProviderProfileSection: React.FC<Props> = ({ provider }) => {
               : 'bg-transparent text-black'
           }`}
         >
-          <CiStar className="text-lg" /> Recenzii
+          <CiStar className="text-lg" /> {t('providerProfileSection.reviews')}
         </Button>
         <Button
           onClick={() => setIndexShownSection(3)}
@@ -69,7 +71,7 @@ const ProviderProfileSection: React.FC<Props> = ({ provider }) => {
               : 'bg-transparent text-black'
           }`}
         >
-          <CiCalendar className="text-lg" /> Programare Ședință
+          <CiCalendar className="text-lg" /> {t('providerProfileSection.scheduleMeeting')}
         </Button>
       </div>
 

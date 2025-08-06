@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import React, { useEffect } from "react";
+import React, { useEffect, useMemo } from "react";
 import Button from "./atoms/button";
 import { FaUserAlt, FaChevronDown } from "react-icons/fa";
 import { useSession } from "next-auth/react";
@@ -9,16 +9,28 @@ import Image from "next/image";
 import { displayedServices } from "@/utils/constants";
 import handleLogout from "@/lib/api/logout/logout";
 import { useRouter } from "next/navigation";
+import { useTranslation } from "@/hooks/useTranslation";
+import LanguageSwitcher from "./LanguageSwitcher";
 
 const Navbar = () => {
   const { data: session } = useSession();
+  const { t, language } = useTranslation();
   const user = session?.user;
-  const specialities = displayedServices;
-  console.log("specialities", specialities);
+  // Use service keys for translation
+  const serviceKeys = displayedServices;
+  
+  console.log("🚀 Navbar render with language:", language);
   
   const rawName = session?.user?.name ?? "";
   const slug = encodeURIComponent(rawName.trim().split(/\s+/).join("-"));
   const router = useRouter();
+
+  // Definim elementele de navigare cu cheile de traducere - folosim useMemo pentru re-render
+  const navigationItems = useMemo(() => [
+    { key: "navigation.home", originalText: "ACASA" },
+    { key: "navigation.psychologists", originalText: "SERVICII EZOTERICE" },
+    { key: "navigation.about", originalText: "DESPRE NOI" }
+  ], []); // Gol pentru a evita warning-ul, dar language va triggera re-render oricum
 
   // 🔧 Effect pentru scroll după navigare
   useEffect(() => {
@@ -37,8 +49,8 @@ const Navbar = () => {
   }, [router]);
 
   // 🔧 Funcție pentru generarea URL-urilor
-  const getNavHref = (item: string): string => {
-    switch (item) {
+  const getNavHref = (originalText: string): string => {
+    switch (originalText) {
       case "ACASA":
         return "/";
       case "SERVICII EZOTERICE":
@@ -46,7 +58,7 @@ const Navbar = () => {
       case "DESPRE NOI":
         return "/#despre-noi"; // 🔧 Scroll către secțiunea About
       default:
-        return `/${item.toLowerCase().replace(/\s+/g, '-')}`;
+        return `/${originalText.toLowerCase().replace(/\s+/g, '-')}`;
     }
   };
 
@@ -78,46 +90,45 @@ const Navbar = () => {
 
       {/* Navigation Menu */}
       <ul className="flex space-x-12 font-semibold">
-        {["ACASA", "SERVICII EZOTERICE", "DESPRE NOI"].map((item, index) => (
+        {navigationItems.map((navItem, index) => (
           <li
             key={index}
             className="relative group cursor-pointer flex items-center justify-center"
           >
             {/* 🔧 Link special pentru DESPRE NOI cu scroll handler */}
-            {item === "DESPRE NOI" ? (
+            {navItem.originalText === "DESPRE NOI" ? (
               <a 
-                href={getNavHref(item)}
+                href={getNavHref(navItem.originalText)}
                 onClick={handleDespreNoiClick}
                 className="inline-block transition-colors duration-500 ease-in-out hover:underline hover:text-gray-200"
               >
-                {item}
+                {t(navItem.key)}
               </a>
             ) : (
-              <Link href={getNavHref(item)}>
+              <Link href={getNavHref(navItem.originalText)}>
                 <span className="inline-block transition-colors duration-500 ease-in-out hover:underline hover:text-gray-200">
-                  {item}
+                  {t(navItem.key)}
                 </span>
               </Link>
             )}
 
             {/* Dropdown pentru SERVICII EZOTERICE */}
-            {item === "SERVICII EZOTERICE" && (
+            {navItem.originalText === "SERVICII EZOTERICE" && (
               <>
                 <span className="ml-2 opacity-0 transform -translate-x-2 transition-all duration-500 ease-in-out group-hover:opacity-100 group-hover:translate-x-0">
                   <FaChevronDown />
                 </span>
                 <ul className="absolute z-50 top-10 left-0 bg-white text-primaryColor opacity-0 invisible transition-all duration-300 group-hover:opacity-100 group-hover:visible border-b-primaryColor border rounded-b-lg shadow-lg min-w-max">
-                  {specialities.map((speciality) => (
+                  {serviceKeys.map((serviceKey) => (
                     <li
-                      key={speciality}
+                      key={serviceKey}
                       className="hover:bg-primaryColor/10 w-full"
                     >
-                      {/* 🔧 Link-ul acoperă toată zona pentru click mai ușor */}
                       <Link
-                        href={`/astrologi?speciality=${encodeURIComponent(speciality)}`}
+                        href={`/astrologi?speciality=${encodeURIComponent(serviceKey)}`}
                         className="block p-3 font-light text-sm w-full h-full transition-colors duration-200"
                       >
-                        {speciality}
+                        {t('services.' + serviceKey)}
                       </Link>
                     </li>
                   ))}
@@ -129,7 +140,10 @@ const Navbar = () => {
       </ul>
 
       {/* User Menu */}
-      <div className="flex space-x-4 relative">
+      <div className="flex items-center space-x-4 relative">
+        {/* Language Switcher */}
+        <LanguageSwitcher />
+        
         {user?.name ? (
           <div className="relative group">
             {/* User Button */}
@@ -144,13 +158,13 @@ const Navbar = () => {
                 href="/profil"
                 className="block px-4 py-2 hover:bg-gray-50 transition-colors duration-200 cursor-pointer"
               >
-                Profil
+                {t('navigation.profile')}
               </Link>
               <button
                 onClick={() => handleLogout(slug)}
                 className="w-full text-left px-4 py-2 bg-red-600 text-white font-bold hover:bg-red-700 cursor-pointer transition-colors duration-200 rounded-b-md"
               >
-                Deconectare
+                {t('navigation.logout')}
               </button>
             </div>
           </div>
@@ -158,7 +172,7 @@ const Navbar = () => {
           <Link href="/autentificare">
             <Button className="px-4 py-2 gap-4 shadow-md shadow-primaryColor bg-gradient-to-tr from-10 from-buttonPrimaryColor to-buttonSecondaryColor to-80 text-md hover:text-white hover:bg-primaryColor font-semibold border-2 border-buttonSecondaryColor/30">
               <FaUserAlt />
-              Autentificare
+              {t('navigation.login')}
             </Button>
           </Link>
         )}

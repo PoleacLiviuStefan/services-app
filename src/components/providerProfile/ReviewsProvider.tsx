@@ -2,6 +2,7 @@
 'use client';
 
 import React, { FC } from 'react';
+import { useTranslation } from '@/hooks/useTranslation';
 import Review from '../Review';
 
 export interface ReviewsProviderProps {
@@ -19,13 +20,14 @@ export interface ReviewsProviderProps {
 }
 
 const ReviewsProvider: FC<ReviewsProviderProps> = ({ reviews }) => {
+  const { t } = useTranslation();
   if (reviews.length === 0) {
-    return <p className="text-gray-500">Nu există recenzii momentan.</p>;
+    return <p className="text-gray-500">{t('reviewsProvider.noReviews')}</p>;
   }
 
   return (
     <div className="space-y-6">
-      <h3 className='font-bold'>TOATE RECENZIILE</h3>
+      <h3 className='font-bold'>{t('reviewsProvider.allReviews')}</h3>
       {reviews.map((r) => (
         <Review
           key={r.id}
@@ -34,7 +36,6 @@ const ReviewsProvider: FC<ReviewsProviderProps> = ({ reviews }) => {
           date={r.date}
           rating={r.rating}
           comment={r.comment}
-
         />
       ))}
     </div>

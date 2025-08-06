@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { FaUserAlt, FaChevronDown } from 'react-icons/fa';
 import Button from './atoms/button';
 import { useSession  } from 'next-auth/react';
+import { useTranslation } from '@/hooks/useTranslation';
 import mysticLogo from '../../public/mysticnoblack.svg';
 import Image from 'next/image';
 // import { useCatalogStore } from '@/store/catalog';
@@ -13,6 +14,7 @@ import { useRouter } from 'next/navigation';
 
 const NavbarMobile = () => {
   const { data: session, status } = useSession();
+  const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const [isPsychologistsOpen, setIsPsychologistsOpen] = useState(false);
   const user = session?.user;
@@ -94,7 +96,7 @@ const NavbarMobile = () => {
                   onClick={() => handleLogout(slug)}
                   className="w-full bg-red-600 text-white font-bold text-left px-4 py-2 hover:bg-red-700 cursor-pointer"
                 >
-                  Deconectare
+                  {t('navigation.logout')}
                 </button>
               </div>
             </div>
@@ -111,7 +113,7 @@ const NavbarMobile = () => {
       <div className={`fixed top-[50px] left-0 w-full bg-primaryColor transform transition-transform duration-300 ease-in-out ${isOpen ? 'translate-y-0' : '-translate-y-full'}`}>
         <ul className="flex flex-col items-center justify-center h-screen space-y-8 text-white text-xl z-50">
           <li onClick={() => {setIsOpen(false); toggleMenu()}}>
-            <Link href="/">ACASA</Link>
+            <Link href="/">{t('navbar.home')}</Link>
           </li>
 
           {/* Buton PSIHOLOGI + Lista cu animatie */}
@@ -120,7 +122,7 @@ const NavbarMobile = () => {
               onClick={togglePsychologists}
               className="flex items-center justify-center w-full text-white font-bold px-4 py-2 focus:outline-none"
             >
-              <span>SERVICII EZOTERICE</span>
+              <span>{t('navbar.services')}</span>
               <FaChevronDown className={`ml-2 transition-transform duration-300 ${isPsychologistsOpen ? 'rotate-180' : ''}`} />
             </button>
 
@@ -132,7 +134,7 @@ const NavbarMobile = () => {
               <ul className="mt-2 bg-white text-primaryColor text-center rounded-lg shadow-lg ">
                  <Link href={`/astrologi`} onClick={() => {setIsOpen(false); setIsPsychologistsOpen(false)}}> 
                 <li className="py-2 px-4 hover:bg-primaryColor/10 cursor-pointer">
-                  General
+                  {t('navbar.general')}
                 </li>
                 </Link>
                 {specialities.map((speciality, index) => (
@@ -147,7 +149,7 @@ const NavbarMobile = () => {
           </li>
 
           <li onClick={() => setIsOpen(false)}>
-            <Button onClick={handleDespreNoiClick}>DESPRE NOI</Button>
+            <Button onClick={handleDespreNoiClick}>{t('navbar.about')}</Button>
           </li>
           {/* <li onClick={() => setIsOpen(false)}>
             <Link href="/">ARTICOLE</Link>
