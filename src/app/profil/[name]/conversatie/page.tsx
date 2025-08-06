@@ -475,13 +475,13 @@ export default function ConversatiePage() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="bg-white rounded-lg shadow-lg p-8 w-full max-w-md text-center">
           <div className="text-blue-500 text-6xl mb-4">🔒</div>
-          <h1 className="text-xl font-semibold text-gray-800 mb-2">Autentificare Necesară</h1>
-          <p className="text-gray-600 mb-4">Trebuie să te autentifici pentru a accesa conversația.</p>
+          <h1 className="text-xl font-semibold text-gray-800 mb-2">{t('auth.requiredTitle')}</h1>
+          <p className="text-gray-600 mb-4">{t('auth.requiredDescription')}</p>
           <button
             onClick={() => router.push('/api/auth/signin')}
             className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
           >
-            Autentifică-te
+            {t('auth.loginButton')}
           </button>
         </div>
       </div>
@@ -493,13 +493,13 @@ export default function ConversatiePage() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="bg-white rounded-lg shadow-lg p-8 w-full max-w-md text-center">
           <div className="text-red-500 text-6xl mb-4">⚠️</div>
-          <h1 className="text-xl font-semibold text-gray-800 mb-2">Eroare</h1>
+          <h1 className="text-xl font-semibold text-gray-800 mb-2">{t('common.error')}</h1>
           <p className="text-gray-600 mb-4">{error}</p>
           <button
             onClick={() => router.back()}
             className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
           >
-            Înapoi
+            {t('common.back')}
           </button>
         </div>
       </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from 'next/link';
+import { useTranslation } from '@/hooks/useTranslation';
 import React, { useRef, useState, useEffect } from 'react';
 import Button from './atoms/button';
 import { signIn, useSession } from 'next-auth/react';
@@ -10,6 +11,7 @@ import { useRouter } from 'next/navigation';
 import InputForm from './ui/inputForm';
 
 const SignInForm: React.FC = () => {
+  const { t } = useTranslation();
   const { data: session } = useSession();
   const user = session?.user;
   const router = useRouter();
@@ -36,7 +38,7 @@ const SignInForm: React.FC = () => {
       const password = passwordRef.current?.value;
 
       if (!email || !password) {
-        setError("Toate câmpurile sunt obligatorii.");
+        setError(t('signin.errorRequiredFields'));
         return;
       }
 
@@ -63,7 +65,8 @@ const SignInForm: React.FC = () => {
     >
       <Link href="/inregistrare">
         <p className="text-primaryColor">
-          Nu aveți un cont? <span className="font-semibold">Spre Înregistrare</span>
+          {t('signin.noAccount')}{' '}
+          <span className="font-semibold">{t('signin.toRegister')}</span>
         </p>
       </Link>
 
@@ -73,31 +76,31 @@ const SignInForm: React.FC = () => {
         onClick={() => signIn('google')}
         className="flex items-center justify-center border-2 border-primaryColor font-semibold py-2 transition duration-300 ease-in-out hover:bg-primaryColor hover:text-white"
       >
-        <Image src={google} className="w-8 lg:w-12 h-auto" alt="Google Auth Logo" /> CONTINUARE CU GOOGLE
+        <Image src={google} className="w-8 lg:w-12 h-auto" alt="Google Auth Logo" /> {t('signin.continueWithGoogle')}
       </button>
 
       {/* Email și parolă */}
       <div>
-        <label className="font-semibold text-gray-500">Email</label>
+        <label className="font-semibold text-gray-500">{t('signin.email')}</label>
         <InputForm
           ref={emailRef}
           type="email"
           name="email"
-          placeholder="Completați cu email-ul"
+          placeholder={t('signin.emailPlaceholder')}
         />
       </div>
       <div>
-        <label className="font-semibold text-gray-500">Parolă</label>
+        <label className="font-semibold text-gray-500">{t('signin.password')}</label>
         <InputForm
           ref={passwordRef}
           type="password"
           name="password"
-          placeholder="Parola (minim 6 caractere, inclusiv cifre și caractere speciale)"
+          placeholder={t('signin.passwordPlaceholder')}
         />
       </div>
 
       <Link href="/resetare-parola">
-        <p className="text-primaryColor">Ați uitat parola? Resetare Parolă</p>
+        <p className="text-primaryColor">{t('signin.forgotPassword')}</p>
       </Link>
 
       {/* Mesaj de eroare */}
@@ -108,7 +111,7 @@ const SignInForm: React.FC = () => {
         disabled={isLoading}
         className="border-2 border-primaryColor font-semibold py-2 transition duration-300 ease-in-out hover:bg-primaryColor hover:text-white"
       >
-        {isLoading ? 'Se procesează...' : 'AUTENTIFICARE'}
+        {isLoading ? t('signin.processing') : t('signin.login')}
       </Button>
     </form>
   );

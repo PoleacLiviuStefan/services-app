@@ -210,7 +210,7 @@ const NavbarMobile = () => {
             </Button>
           </li>
           <li onClick={() => setIsOpen(false)}>
-            <Link href="/">{t("navigation.articles")}</Link>
+            <Link href="/articole">{t("navigation.articles")}</Link>
           </li>
         </ul>
       </div>

@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { useTranslation } from '@/hooks/useTranslation';
 import React, { useRef, useState, useEffect } from "react";
 import Button from "./atoms/button";
 import { signIn, useSession } from "next-auth/react";
@@ -9,35 +10,45 @@ import { useRouter } from "next/navigation";
 import InputForm from "./ui/inputForm";
 import { z } from "zod";
 
-// 1) Define Zod schema
-const signUpSchema = z.object({
-  nume: z.string().min(1, "Numele este obligatoriu"),
-  prenume: z.string().min(1, "Prenumele este obligatoriu"),
-  email: z.string().email("Email invalid"),
-  parola: z.string()
-    .min(6, "Parola trebuie să aibă cel puțin 6 caractere")
-    .regex(/[A-Z]/, "Parola trebuie să conțină cel puțin o literă mare")
-    .regex(/[^A-Za-z0-9]/, "Parola trebuie să conțină cel puțin un caracter special"),
-  dataNasterii: z
-    .string()
-    .refine((str) => {
-      const dob = new Date(str);
-      const today = new Date();
-      today.setFullYear(today.getFullYear() - 18);
-      return dob <= today;
-    }, "Trebuie să ai cel puțin 18 ani"),
-  gen: z.enum(["masculin", "feminin", "altul"]),
-  terms: z.literal(true, {
-    errorMap: () => ({ message: "Trebuie să accepți termenii și condițiile" }),
-  }),
-});
 
-type SignUpData = z.infer<typeof signUpSchema>;
+type SignUpData = {
+  nume: string;
+  prenume: string;
+  email: string;
+  parola: string;
+  dataNasterii: string;
+  gen: "masculin" | "feminin" | "altul";
+  terms: boolean;
+};
 
 const SignUpForm: React.FC = () => {
   const router = useRouter();
+  const { t } = useTranslation();
   const { data: session } = useSession();
   const user = session?.user;
+
+  // Zod schema with translation
+  const signUpSchema = z.object({
+    nume: z.string().min(1, t('signup.errorNameRequired')),
+    prenume: z.string().min(1, t('signup.errorFirstNameRequired')),
+    email: z.string().email(t('signup.errorEmailInvalid')),
+    parola: z.string()
+      .min(6, t('signup.errorPasswordLength'))
+      .regex(/[A-Z]/, t('signup.errorPasswordUppercase'))
+      .regex(/[^A-Za-z0-9]/, t('signup.errorPasswordSpecial')),
+    dataNasterii: z
+      .string()
+      .refine((str) => {
+        const dob = new Date(str);
+        const today = new Date();
+        today.setFullYear(today.getFullYear() - 18);
+        return dob <= today;
+      }, t('signup.errorAge18')),
+    gen: z.enum(["masculin", "feminin", "altul"]),
+    terms: z.literal(true, {
+      errorMap: () => ({ message: t('signup.errorTerms') }),
+    }),
+  });
 
   const numeRef = useRef<HTMLInputElement>(null);
   const prenumeRef = useRef<HTMLInputElement>(null);
@@ -113,7 +124,7 @@ const SignUpForm: React.FC = () => {
         if (!signin?.error) {
           router.push("/profil");
         } else {
-          setError("Autentificare eșuată după înregistrare.");
+          setError(t('signup.errorAuthAfterRegister'));
         }
       } else {
         // display backend validation errors
@@ -122,11 +133,11 @@ const SignUpForm: React.FC = () => {
         } else if (json.error) {
           setError(json.error);
         } else {
-          setError("A apărut o eroare la înregistrare.");
+          setError(t('signup.errorRegister'));
         }
       }
     } catch (e: any) {
-      setError("Eroare de rețea. Încearcă din nou.");
+      setError(t('signup.errorNetwork'));
     } finally {
       setIsLoading(false);
     }
@@ -139,8 +150,8 @@ const SignUpForm: React.FC = () => {
     >
       <Link href="/autentificare">
         <p className="text-primaryColor">
-          Aveți deja un cont?{' '}
-          <span className="font-semibold">Spre Autentificare</span>
+          {t('signup.alreadyHaveAccount')}{' '}
+          <span className="font-semibold">{t('signup.toLogin')}</span>
         </p>
       </Link>
 
@@ -150,21 +161,21 @@ const SignUpForm: React.FC = () => {
         className="flex items-center justify-center border-2 border-primaryColor font-semibold py-2 transition duration-300 ease-in-out hover:bg-primaryColor hover:text-white"
       >
         <Image src={google} alt="Google logo" className="w-6 h-auto mr-2" />
-        CONTINUARE CU GOOGLE
+        {t('signup.continueWithGoogle')}
       </button>
 
       {/* Name */}
       <div className="grid grid-cols-2 gap-4">
         <div className="flex flex-col">
-          <label className="font-semibold text-gray-500">Nume</label>
-          <InputForm ref={numeRef} name="nume" placeholder="Numele de familie" />
+          <label className="font-semibold text-gray-500">{t('signup.lastName')}</label>
+          <InputForm ref={numeRef} name="nume" placeholder={t('signup.lastNamePlaceholder')} />
           {formErrors.nume && (
             <p className="text-red-500 text-sm">{formErrors.nume}</p>
           )}
         </div>
         <div className="flex flex-col">
-          <label className="font-semibold text-gray-500">Prenume</label>
-          <InputForm ref={prenumeRef} name="prenume" placeholder="Prenumele" />
+          <label className="font-semibold text-gray-500">{t('signup.firstName')}</label>
+          <InputForm ref={prenumeRef} name="prenume" placeholder={t('signup.firstNamePlaceholder')} />
           {formErrors.prenume && (
             <p className="text-red-500 text-sm">{formErrors.prenume}</p>
           )}
@@ -173,12 +184,12 @@ const SignUpForm: React.FC = () => {
 
       {/* Email */}
       <div className="flex flex-col">
-        <label className="font-semibold text-gray-500">Email</label>
+        <label className="font-semibold text-gray-500">{t('signup.email')}</label>
         <InputForm
           ref={emailRef}
           type="email"
           name="email"
-          placeholder="Completați cu email-ul"
+          placeholder={t('signup.emailPlaceholder')}
         />
         {formErrors.email && (
           <p className="text-red-500 text-sm">{formErrors.email}</p>
@@ -187,12 +198,12 @@ const SignUpForm: React.FC = () => {
 
       {/* Password */}
       <div className="flex flex-col">
-        <label className="font-semibold text-gray-500">Parolă</label>
+        <label className="font-semibold text-gray-500">{t('signup.password')}</label>
         <InputForm
           ref={parolaRef}
           type="password"
           name="parola"
-          placeholder="Parola (minim 6 chars, 1 uppercase, 1 special)"
+          placeholder={t('signup.passwordPlaceholder')}
         />
         {formErrors.parola && (
           <p className="text-red-500 text-sm">{formErrors.parola}</p>
@@ -201,7 +212,7 @@ const SignUpForm: React.FC = () => {
 
       {/* Birthdate */}
       <div className="flex flex-col">
-        <label className="font-semibold text-gray-500">Data Nașterii</label>
+        <label className="font-semibold text-gray-500">{t('signup.birthdate')}</label>
         <InputForm
           ref={dataNasteriiRef}
           type="date"
@@ -215,16 +226,16 @@ const SignUpForm: React.FC = () => {
 
       {/* Gender */}
       <div className="flex flex-col">
-        <label className="font-semibold text-gray-500">Gen</label>
+        <label className="font-semibold text-gray-500">{t('signup.gender')}</label>
         <select
           ref={genRef}
           name="gen"
           defaultValue="masculin"
           className="w-full h-9 lg:h-14 p-2 lg:p-4 border-2 border-primaryColor focus:outline-none rounded-lg bg-white"
         >
-          <option value="masculin">Masculin</option>
-          <option value="feminin">Feminin</option>
-          <option value="altul">Altul</option>
+          <option value="masculin">{t('signup.genderMale')}</option>
+          <option value="feminin">{t('signup.genderFemale')}</option>
+          <option value="altul">{t('signup.genderOther')}</option>
         </select>
         {formErrors.gen && (
           <p className="text-red-500 text-sm">{formErrors.gen}</p>
@@ -240,12 +251,12 @@ const SignUpForm: React.FC = () => {
           className="h-4 w-4"
         />
         <p className="font-thin text-gray-500">
-          Sunt de acord cu{' '}
+          {t('signup.agreeWith')}{' '}
           <Link
             href="/termeni-si-conditii"
             className="text-primaryColor font-semibold"
           >
-            Termenii și Condițiile
+            {t('signup.termsAndConditions')}
           </Link>
         </p>
       </div>
@@ -261,7 +272,7 @@ const SignUpForm: React.FC = () => {
         disabled={isLoading}
         className="border-2 border-primaryColor font-semibold py-2 transition duration-300 ease-in-out hover:bg-primaryColor hover:text-white"
       >
-        {isLoading ? 'Se procesează...' : 'CONTINUARE'}
+        {isLoading ? t('signup.processing') : t('signup.continue')}
       </Button>
     </form>
   );

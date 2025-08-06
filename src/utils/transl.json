@@ -1,5 +1,63 @@
 {
   "ro": {
+        "resetPassword": {
+      "email": "Email",
+      "emailPlaceholder": "Completați cu email-ul",
+      "errorEmailRequired": "Te rog introdu un email valid.",
+      "errorGeneric": "A apărut o eroare. Încearcă din nou.",
+      "errorNetwork": "Nu am putut contacta serverul. Încearcă mai târziu.",
+      "success": "Email-ul de resetare a fost trimis. Verifică-ți inbox-ul.",
+      "processing": "Se procesează...",
+      "sendButton": "Trimite link de resetare"
+    },
+
+    "signin": {
+      "noAccount": "Nu aveți un cont?",
+      "toRegister": "Spre Înregistrare",
+      "continueWithGoogle": "CONTINUARE CU GOOGLE",
+      "email": "Email",
+      "emailPlaceholder": "Completați cu email-ul",
+      "password": "Parolă",
+      "passwordPlaceholder": "Parola (minim 6 caractere, inclusiv cifre și caractere speciale)",
+      "forgotPassword": "Ați uitat parola? Resetare Parolă",
+      "processing": "Se procesează...",
+      "login": "AUTENTIFICARE",
+      "errorRequiredFields": "Toate câmpurile sunt obligatorii."
+    },
+    "signup": {
+      "errorNameRequired": "Numele este obligatoriu",
+      "errorFirstNameRequired": "Prenumele este obligatoriu",
+      "errorEmailInvalid": "Email invalid",
+      "errorPasswordLength": "Parola trebuie să aibă cel puțin 6 caractere",
+      "errorPasswordUppercase": "Parola trebuie să conțină cel puțin o literă mare",
+      "errorPasswordSpecial": "Parola trebuie să conțină cel puțin un caracter special",
+      "errorAge18": "Trebuie să ai cel puțin 18 ani",
+      "errorTerms": "Trebuie să accepți termenii și condițiile",
+      "alreadyHaveAccount": "Aveți deja un cont?",
+      "toLogin": "Spre Autentificare",
+      "continueWithGoogle": "CONTINUARE CU GOOGLE",
+      "lastName": "Nume",
+      "lastNamePlaceholder": "Numele de familie",
+      "firstName": "Prenume",
+      "firstNamePlaceholder": "Prenumele",
+      "email": "Email",
+      "emailPlaceholder": "Completați cu email-ul",
+      "password": "Parolă",
+      "passwordPlaceholder": "Parola (minim 6 caractere, 1 majusculă, 1 special)",
+      "birthdate": "Data Nașterii",
+      "gender": "Gen",
+      "genderMale": "Masculin",
+      "genderFemale": "Feminin",
+      "genderOther": "Altul",
+      "agreeWith": "Sunt de acord cu",
+      "termsAndConditions": "Termenii și Condițiile",
+      "processing": "Se procesează...",
+      "continue": "CONTINUARE"
+    },
+    "common": {
+      "error": "Eroare",
+      "back": "Înapoi"
+    },
         "userBillingDetails": {
       "title": "Detalii facturare",
       "persFizica": "Persoană fizică",
@@ -19,7 +77,21 @@
       "loadError": "Nu am putut încărca detaliile de facturare",
       "saveError": "Nu am putut salva detaliile"
     },
-       "userConversations": {
+  "userConversations": {
+  "auth": {
+    "requiredTitle": {
+      "ro": "Autentificare Necesară",
+      "en": "Authentication Required"
+    },
+    "requiredDescription": {
+      "ro": "Trebuie să te autentifici pentru a accesa conversația.",
+      "en": "You need to log in to access the conversation."
+    },
+    "loginButton": {
+      "ro": "Autentifică-te",
+      "en": "Log in"
+    }
+  },
       "title": "Conversațiile tale",
       "loading": "Se încarcă conversațiile...",
       "error": "Eroare la încărcarea conversațiilor",
@@ -434,6 +506,63 @@
     }
   },
   "en": {
+        "resetPassword": {
+      "email": "Email",
+      "emailPlaceholder": "Enter your email",
+      "errorEmailRequired": "Please enter a valid email.",
+      "errorGeneric": "An error occurred. Please try again.",
+      "errorNetwork": "Could not contact the server. Please try again later.",
+      "success": "Reset email sent. Check your inbox.",
+      "processing": "Processing...",
+      "sendButton": "Send reset link"
+    },
+    "signin": {
+      "noAccount": "Don't have an account?",
+      "toRegister": "Go to Register",
+      "continueWithGoogle": "CONTINUE WITH GOOGLE",
+      "email": "Email",
+      "emailPlaceholder": "Enter your email",
+      "password": "Password",
+      "passwordPlaceholder": "Password (min 6 characters, including numbers and special characters)",
+      "forgotPassword": "Forgot password? Reset Password",
+      "processing": "Processing...",
+      "login": "LOGIN",
+      "errorRequiredFields": "All fields are required."
+    },
+    "signup": {
+      "errorNameRequired": "Name is required",
+      "errorFirstNameRequired": "First name is required",
+      "errorEmailInvalid": "Invalid email",
+      "errorPasswordLength": "Password must be at least 6 characters",
+      "errorPasswordUppercase": "Password must contain at least one uppercase letter",
+      "errorPasswordSpecial": "Password must contain at least one special character",
+      "errorAge18": "You must be at least 18 years old",
+      "errorTerms": "You must accept the terms and conditions",
+      "alreadyHaveAccount": "Already have an account?",
+      "toLogin": "Go to Login",
+      "continueWithGoogle": "CONTINUE WITH GOOGLE",
+      "lastName": "Last Name",
+      "lastNamePlaceholder": "Your last name",
+      "firstName": "First Name",
+      "firstNamePlaceholder": "Your first name",
+      "email": "Email",
+      "emailPlaceholder": "Enter your email",
+      "password": "Password",
+      "passwordPlaceholder": "Password (min 6 chars, 1 uppercase, 1 special)",
+      "birthdate": "Birthdate",
+      "gender": "Gender",
+      "genderMale": "Male",
+      "genderFemale": "Female",
+      "genderOther": "Other",
+      "agreeWith": "I agree with",
+      "termsAndConditions": "Terms and Conditions",
+      "processing": "Processing...",
+      "continue": "CONTINUE"
+    },
+    "common": {
+      "error": "Error",
+      "back": "Back"
+    },
       "userBillingDetails": {
       "title": "Billing details",
       "persFizica": "Individual",

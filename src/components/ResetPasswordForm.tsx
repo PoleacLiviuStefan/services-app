@@ -1,10 +1,13 @@
 'use client'
 
 import React, { useRef, useState, FormEvent } from "react"
+import { useTranslation } from '@/hooks/useTranslation';
 import Button from "./atoms/button"
 import InputForm from "./ui/inputForm"
 
 const ResetPasswordForm: React.FC = () => {
+
+  const { t } = useTranslation();
   // 👇 ref pentru <input>
   const emailRef = useRef<HTMLInputElement>(null)
 
@@ -21,7 +24,7 @@ const ResetPasswordForm: React.FC = () => {
     const email = emailRef.current?.value.trim() ?? ""
 
     if (!email) {
-      setError("Te rog introdu un email valid.")
+      setError(t('resetPassword.errorEmailRequired'))
       return
     }
 
@@ -34,13 +37,13 @@ const ResetPasswordForm: React.FC = () => {
       })
 
       if (res.ok) {
-        setSuccess("Email-ul de resetare a fost trimis. Verifică-ți inbox-ul.")
+        setSuccess(t('resetPassword.success'))
       } else {
         const data = await res.json()
-        setError(data.error || "A apărut o eroare. Încearcă din nou.")
+        setError(data.error || t('resetPassword.errorGeneric'))
       }
     } catch {
-      setError("Nu am putut contacta serverul. Încearcă mai târziu.")
+      setError(t('resetPassword.errorNetwork'))
     } finally {
       setIsLoading(false)
     }
@@ -53,15 +56,14 @@ const ResetPasswordForm: React.FC = () => {
     >
       <div>
         <label className="font-semibold text-gray-500" htmlFor="email">
-          Email
+          {t('resetPassword.email')}
         </label>
-        {/* 👇 păstrăm InputForm așa cum e */}
         <InputForm
           ref={emailRef}
           id="email"
           type="email"
           name="email"
-          placeholder="Completați cu email-ul"
+          placeholder={t('resetPassword.emailPlaceholder')}
         />
       </div>
 
@@ -73,7 +75,7 @@ const ResetPasswordForm: React.FC = () => {
         disabled={isLoading}
         className="border-2 border-primaryColor font-semibold py-2 transition duration-300 ease-in-out hover:bg-primaryColor hover:text-white"
       >
-        {isLoading ? "Se procesează..." : "Trimite link de resetare"}
+        {isLoading ? t('resetPassword.processing') : t('resetPassword.sendButton')}
       </Button>
     </form>
   )
