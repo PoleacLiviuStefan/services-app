@@ -682,3 +682,41 @@ export async function sendTestEmail(to: string) {
     `,
   });
 }
+
+/**
+ * Trimite un email de notificare când un utilizator primește un mesaj nou și este offline.
+ * @param to Emailul destinatarului (cel care primește mesajul)
+ * @param fromName Numele expeditorului (cel care a trimis mesajul)
+ * @param messageText Textul mesajului trimis
+ * @param conversationUrl Link către conversație (opțional)
+ */
+export async function sendOfflineMessageNotificationEmail(
+  to: string,
+  fromName: string,
+  messageText: string,
+  conversationUrl?: string
+) {
+  await transporter.sendMail({
+    from: `"MysticGold" <${process.env.FROM_MAIL}>`,
+    to,
+    subject: `💬 Ai un mesaj nou de la ${fromName} pe MysticGold!`,
+    html: `
+      <div style="max-width:600px;margin:0 auto;font-family:Arial,sans-serif;line-height:1.6;color:#333;">
+        <div style="background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:white;padding:30px;text-align:center;border-radius:10px 10px 0 0;">
+          <h1 style="margin:0;font-size:24px;">💬 MysticGold</h1>
+          <p style="margin:10px 0 0 0;opacity:0.9;">Notificare Mesaj Nou</p>
+        </div>
+        <div style="padding:30px;background:#f8f9fa;border-radius:0 0 10px 10px;">
+          <h2 style="color:#764ba2;margin-top:0;">Ai primit un mesaj nou de la <strong>${fromName}</strong>!</h2>
+          <div style="background:white;padding:20px;border-radius:8px;border-left:4px solid #764ba2;margin:20px 0;">
+            <p style="margin:0 0 10px 0;"><strong>Mesaj:</strong></p>
+            <blockquote style="margin:0;padding:10px 15px;background:#f3f3f3;border-left:3px solid #764ba2;">${messageText}</blockquote>
+          </div>
+          ${conversationUrl ? `<div style="text-align:center;margin:30px 0;"><a href="${conversationUrl}" style="background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:white;padding:15px 30px;text-decoration:none;border-radius:5px;font-weight:bold;display:inline-block;">Răspunde la mesaj</a></div>` : ''}
+          <hr style="border:none;border-top:1px solid #e2e8f0;margin:30px 0;">
+          <p style="text-align:center;color:#718096;font-size:14px;">Nu răspunde la acest email. Pentru întrebări, contactează <a href="mailto:${process.env.FROM_MAIL}">${process.env.FROM_MAIL}</a></p>
+        </div>
+      </div>
+    `,
+  });
+}

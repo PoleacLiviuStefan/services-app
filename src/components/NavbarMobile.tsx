@@ -196,7 +196,7 @@ const NavbarMobile = () => {
                     className="block w-full"
                   >
                     <li className="py-2 px-4 hover:bg-primaryColor/10 cursor-pointer">
-                      {speciality}
+                      {t('services.' + speciality)}
                     </li>
                   </Link>
                 ))}

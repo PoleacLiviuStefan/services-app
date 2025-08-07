@@ -1,6 +1,6 @@
 {
   "ro": {
-        "resetPassword": {
+    "resetPassword": {
       "email": "Email",
       "emailPlaceholder": "Completați cu email-ul",
       "errorEmailRequired": "Te rog introdu un email valid.",
@@ -58,7 +58,7 @@
       "error": "Eroare",
       "back": "Înapoi"
     },
-        "userBillingDetails": {
+    "userBillingDetails": {
       "title": "Detalii facturare",
       "persFizica": "Persoană fizică",
       "persJuridica": "Persoană juridică",
@@ -77,21 +77,15 @@
       "loadError": "Nu am putut încărca detaliile de facturare",
       "saveError": "Nu am putut salva detaliile"
     },
-  "userConversations": {
-  "auth": {
-    "requiredTitle": {
-      "ro": "Autentificare Necesară",
-      "en": "Authentication Required"
+    "auth": {
+      "requiredTitle": "Autentificare Necesară",
+
+      "requiredDescription": "Trebuie să te autentifici pentru a accesa conversația.",
+
+      "loginButton": "Autentifică-te"
     },
-    "requiredDescription": {
-      "ro": "Trebuie să te autentifici pentru a accesa conversația.",
-      "en": "You need to log in to access the conversation."
-    },
-    "loginButton": {
-      "ro": "Autentifică-te",
-      "en": "Log in"
-    }
-  },
+    "userConversations": {
+      "loadOlderMessages": "Se incarca conversatiile mai vechi",
       "title": "Conversațiile tale",
       "loading": "Se încarcă conversațiile...",
       "error": "Eroare la încărcarea conversațiilor",
@@ -108,7 +102,7 @@
       "refresh": "Reîmprospătează",
       "refreshing": "Se reîmprospătează...",
       "loadingConversation": "Se încarcă conversația...",
-      "connected":"Conectat",
+      "connected": "Conectat",
       "messagesCount": "mesaje"
     },
     "scheduleMeeting": {
@@ -128,23 +122,23 @@
       "confirmed": "Programare confirmată!",
       "success": "Ședința ta a fost programată cu succes. Vei primi un email de confirmare.",
       "packageUsed": "Pachet folosit",
-      "scheduleAnother": "Programează altă ședință"
-    ,"processingBooking": "Se procesează programarea..."
-    ,"pleaseWaitForConfirmation": "Te rugăm să aștepți confirmarea"
-    ,"loadingCalendar": "Se încarcă calendarul..."
-    ,"tryNumber": "Încercare {current} din {max}"
-    ,"calendarLoadError": "Nu s-a putut încărca calendarul. Verifică conexiunea la internet."
-    ,"tryAgain": "Încearcă din nou"
-    ,"reloadOrTryLater": "Te rugăm să reîncarci pagina sau să încerci mai târziu."
-    ,"clickToBook": "Click pentru a programa"
-    ,"service": "Serviciu"
-    ,"selectedPackage": "Pachet selectat"
-    ,"change": "Schimbă"
-    ,"loading": "Se încarcă..."
-    ,"authRequired": "Autentificare necesară"
-    ,"mustLoginToBook": "Trebuie să te autentifici pentru a putea programa o ședință."
-    ,"login": "Autentificare"
-    ,"error": "Eroare"
+      "scheduleAnother": "Programează altă ședință",
+      "processingBooking": "Se procesează programarea...",
+      "pleaseWaitForConfirmation": "Te rugăm să aștepți confirmarea",
+      "loadingCalendar": "Se încarcă calendarul...",
+      "tryNumber": "Încercare {current} din {max}",
+      "calendarLoadError": "Nu s-a putut încărca calendarul. Verifică conexiunea la internet.",
+      "tryAgain": "Încearcă din nou",
+      "reloadOrTryLater": "Te rugăm să reîncarci pagina sau să încerci mai târziu.",
+      "clickToBook": "Click pentru a programa",
+      "service": "Serviciu",
+      "selectedPackage": "Pachet selectat",
+      "change": "Schimbă",
+      "loading": "Se încarcă...",
+      "authRequired": "Autentificare necesară",
+      "mustLoginToBook": "Trebuie să te autentifici pentru a putea programa o ședință.",
+      "login": "Autentificare",
+      "error": "Eroare"
     },
     "reviewsProvider": {
       "noReviews": "Nu există recenzii momentan.",
@@ -281,7 +275,7 @@
       "astrologers": "Furnizori",
       "aboutUs": "DESPRE NOI",
       "termsOfUse": "Termeni și Condiții",
-      "usagePolicy": "Politica de Utilizare", 
+      "usagePolicy": "Politica de Utilizare",
       "paymentPolicy": "Politica de Plată"
     },
     "search": {
@@ -374,7 +368,7 @@
       "saveChanges": "Salvează modificări",
       "savingChanges": "Se salvează modificările...",
       "existingPackages": "Pachete existente"
-          },
+    },
     "profile": {
       "editAvatar": "📸 Editează Avatar",
       "selectImage": "Selectează o imagine pentru avatar",
@@ -435,7 +429,7 @@
       "status": "Status",
       "actions": "Acțiuni",
       "join": "Intră în ședință",
-      
+
       "reschedule": "Reprogramează",
       "feedback": "Feedback",
       "loading": "Se încarcă ședințele...",
@@ -455,11 +449,10 @@
       "actionCancel": "Anulează",
       "actionReschedule": "Reprogramează",
       "actionFeedback": "Lasă feedback",
-      "actionSeeDetails": "Vezi detalii"
-      ,
+      "actionSeeDetails": "Vezi detalii",
       "noSessions": "Nu ai nicio sesiune.",
       "noSessionsAs": "Nu ai sesiuni ca {role}.",
-      
+
       "inProgress": "În desfășurare",
       "completed": "Finalizată",
       "cancelled": "Anulată",
@@ -491,13 +484,11 @@
       "updateReview": "Actualizează recenzia",
       "saving": "Se salvează...",
       "syncRecordings": "Sincronizează înregistrările",
-      "syncing": "Se sincronizează..."
-      ,
+      "syncing": "Se sincronizează...",
       "scheduled": "Programată",
       "package": "Pachet",
       "sessionsLeft": "ședințe rămase",
-      "outOf": "din"
-      ,
+      "outOf": "din",
       "scheduledFor": "Programată pentru",
       "noRecording": "Fără înregistrare",
       "sessionCancelled": "Sesiune anulată",
@@ -506,7 +497,7 @@
     }
   },
   "en": {
-        "resetPassword": {
+    "resetPassword": {
       "email": "Email",
       "emailPlaceholder": "Enter your email",
       "errorEmailRequired": "Please enter a valid email.",
@@ -563,7 +554,7 @@
       "error": "Error",
       "back": "Back"
     },
-      "userBillingDetails": {
+    "userBillingDetails": {
       "title": "Billing details",
       "persFizica": "Individual",
       "persJuridica": "Company",
@@ -582,7 +573,16 @@
       "loadError": "Could not load billing details",
       "saveError": "Could not save details"
     },
-      "userConversations": {
+    "auth": {
+      "requiredTitle": "Authentication Required",
+
+      "requiredDescription": "You need to log in to access the conversation.",
+
+      "loginButton": "Authenticate"
+    },
+
+    "userConversations": {
+      "loadOlderMessages": "Se incarca conversatiile mai vechi",
       "title": "Your conversations",
       "loading": "Loading conversations...",
       "error": "Error loading conversations",
@@ -601,7 +601,6 @@
       "loadingConversation": "Loading conversation...",
       "connected": "Connected",
       "messagesCount": "messages"
-
     },
     "scheduleMeeting": {
       "selectPackageTitle": "Select package for scheduling",
@@ -620,23 +619,23 @@
       "confirmed": "Booking confirmed!",
       "success": "Your session has been successfully scheduled. You will receive a confirmation email.",
       "packageUsed": "Package used",
-      "scheduleAnother": "Schedule another session"
-    ,"processingBooking": "Processing booking..."
-    ,"pleaseWaitForConfirmation": "Please wait for confirmation"
-    ,"loadingCalendar": "Loading calendar..."
-    ,"tryNumber": "Attempt {current} of {max}"
-    ,"calendarLoadError": "Could not load calendar. Check your internet connection."
-    ,"tryAgain": "Try again"
-    ,"reloadOrTryLater": "Please reload the page or try again later."
-    ,"clickToBook": "Click to book"
-    ,"service": "Service"
-    ,"selectedPackage": "Selected package"
-    ,"change": "Change"
-    ,"loading": "Loading..."
-    ,"authRequired": "Authentication required"
-    ,"mustLoginToBook": "You must log in to schedule a session."
-    ,"login": "Login"
-    ,"error": "Error"
+      "scheduleAnother": "Schedule another session",
+      "processingBooking": "Processing booking...",
+      "pleaseWaitForConfirmation": "Please wait for confirmation",
+      "loadingCalendar": "Loading calendar...",
+      "tryNumber": "Attempt {current} of {max}",
+      "calendarLoadError": "Could not load calendar. Check your internet connection.",
+      "tryAgain": "Try again",
+      "reloadOrTryLater": "Please reload the page or try again later.",
+      "clickToBook": "Click to book",
+      "service": "Service",
+      "selectedPackage": "Selected package",
+      "change": "Change",
+      "loading": "Loading...",
+      "authRequired": "Authentication required",
+      "mustLoginToBook": "You must log in to schedule a session.",
+      "login": "Login",
+      "error": "Error"
     },
     "reviewsProvider": {
       "noReviews": "No reviews yet.",
@@ -869,7 +868,7 @@
     },
     "adminPsychics": {
       "users": "Users",
-      "requests": "Requests", 
+      "requests": "Requests",
       "catalog": "Catalog",
       "searchUser": "Search user (name/email)...",
       "deleteUser": "Delete User",
@@ -887,16 +886,16 @@
     },
     "userBoughtPackages": {
       "clientMode": "Client",
-      "providerMode": "As Provider", 
+      "providerMode": "As Provider",
       "purchasedPackages": "Your purchased packages",
       "purchasedAsClient": "Packages purchased (as client)",
       "soldAsProvider": "Packages sold (as provider)",
       "total": "Total",
-      "active": "Active", 
+      "active": "Active",
       "consumed": "Consumed",
       "all": "All",
       "searchProvider": "Search by provider name...",
-      "searchClient": "Search by client name...", 
+      "searchClient": "Search by client name...",
       "sort": "Sort",
       "noPackagesPurchased": "You haven't purchased any packages.",
       "noPackagesPurchasedAsClient": "You haven't purchased any packages as a client.",
@@ -917,7 +916,7 @@
       "chooseFile": "Choose file",
       "zoom": "Zoom",
       "selectOtherImage": "Select another image",
-      
+
       "saveAvatar": "Save Avatar",
       "saving": "Saving...",
       "uploadError": "Upload error",
@@ -947,7 +946,7 @@
       "status": "Status",
       "actions": "Actions",
       "join": "Join session",
-      
+
       "reschedule": "Reschedule",
       "feedback": "Feedback",
       "loading": "Loading sessions...",
@@ -967,11 +966,10 @@
       "actionCancel": "Cancel",
       "actionReschedule": "Reschedule",
       "actionFeedback": "Leave feedback",
-      "actionSeeDetails": "See details"
-      ,
+      "actionSeeDetails": "See details",
       "noSessions": "You have no sessions.",
       "noSessionsAs": "You have no sessions as {role}.",
-      
+
       "inProgress": "In progress",
       "completed": "Completed",
       "cancelled": "Cancelled",
@@ -1007,8 +1005,7 @@
       "scheduled": "Scheduled",
       "package": "Package",
       "sessionsLeft": "sessions left",
-      "outOf": "out of"
-      ,
+      "outOf": "out of",
       "scheduledFor": "Scheduled for",
       "noRecording": "No recording",
       "sessionCancelled": "Session cancelled",
