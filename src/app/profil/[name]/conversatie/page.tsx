@@ -437,7 +437,7 @@ export default function ConversatiePage() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               to: recipientInfo.email,
-              fromName: session?.user?.name,
+              fromName: recipientInfo.name,
               messageText: newMessage.trim(),
               conversationUrl: window.location.href,
             }),

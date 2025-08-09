@@ -85,7 +85,8 @@
       "loginButton": "Autentifică-te"
     },
     "userConversations": {
-      "loadOlderMessages": "Se incarca conversatiile mai vechi",
+      "loadingMessages": "Se incarca mesajele",
+      "loadOlderMessages": "Se incarca mesajel mai vechi",
       "title": "Conversațiile tale",
       "loading": "Se încarcă conversațiile...",
       "error": "Eroare la încărcarea conversațiilor",
@@ -103,6 +104,8 @@
       "refreshing": "Se reîmprospătează...",
       "loadingConversation": "Se încarcă conversația...",
       "connected": "Conectat",
+      "disconnected": "Deconectat",
+      "offline" :"inactiv",
       "messagesCount": "mesaje"
     },
     "scheduleMeeting": {
@@ -281,7 +284,7 @@
     "search": {
       "searchByName": "Caută după nume",
       "resetFilters": "Resetează filtre",
-      "searchPlaceholder": "Caută psihologi...",
+      "searchPlaceholder": "Caută specialisti...",
       "sortBy": "Sortează după",
       "sortByReviews": "Număr recenzii",
       "sortByPriceDesc": "Preț - descrescător",
@@ -582,7 +585,8 @@
     },
 
     "userConversations": {
-      "loadOlderMessages": "Se incarca conversatiile mai vechi",
+      "loadingMessages":"Loading messages...",
+      "loadOlderMessages": "Loading older messages...",
       "title": "Your conversations",
       "loading": "Loading conversations...",
       "error": "Error loading conversations",
@@ -600,6 +604,8 @@
       "refreshing": "Refreshing...",
       "loadingConversation": "Loading conversation...",
       "connected": "Connected",
+      "offline":"Offline",
+      "disconnected": "Disconnected",
       "messagesCount": "messages"
     },
     "scheduleMeeting": {
@@ -778,7 +784,7 @@
     "search": {
       "searchByName": "Search by name",
       "resetFilters": "Reset filters",
-      "searchPlaceholder": "Search psychologists...",
+      "searchPlaceholder": "Search specialists...",
       "sortBy": "Sort by",
       "sortByReviews": "Number of reviews",
       "sortByPriceDesc": "Price - descending",
